@@ -139,6 +139,12 @@ if __name__ == "__main__":
     scan_dir = config.get("source_dir")
     request_json_path = "./request.json"
 
+    finished_cache_path = "./finished_cache"
+    # 检查 finished_cache 文件是否存在，不存在则创建一个空文件
+    if not os.path.exists(finished_cache_path):
+        with open(finished_cache_path, 'w', encoding='utf-8') as f:
+            pass  # 创建空文件
+
     if scan_dir is None:
         print("Error: 未配置扫描文件夹路径")
     else:
