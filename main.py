@@ -14,7 +14,6 @@ task_folder = {}
 def load_json(json_path):
     with open(json_path, 'r', encoding='utf-8') as f:
         jsonData = json.load(f)
-        print(jsonData)
         return jsonData
 
 # 替换文件夹路径到模板中
@@ -96,17 +95,16 @@ def current_task_finished():
     # 获取任务请求结果列表
     task_map = get_task_map(request_json)
     cur_task_status = task_map[cur_task_id]
-    return cur_task_status == "finished"
+    return cur_task_status == "FINISHED"
 
 def scheduling(scan_dir, request_json_path):
-    global cur_task_id
+    global cur_task_id, task_folder
     if not cur_task_id:
         # 如果是第一次执行，直接提交任务
         submit_task(scan_dir, request_json_path)
 
-    if current_task_finished():
+    elif current_task_finished():
         # 任务完成，将文件夹名称写入完成文件缓存中
-        global cur_task_id, task_folder
         folder = task_folder[cur_task_id]
         write_to_file("./finished_cache", folder)
         # 再次请求提交新任务
@@ -143,7 +141,7 @@ if __name__ == "__main__":
     # 检查 finished_cache 文件是否存在，不存在则创建一个空文件
     if not os.path.exists(finished_cache_path):
         with open(finished_cache_path, 'w', encoding='utf-8') as f:
-            pass  # 创建空文件
+            pass
 
     if scan_dir is None:
         print("Error: 未配置扫描文件夹路径")
