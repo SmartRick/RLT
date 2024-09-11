@@ -19,8 +19,8 @@ def load_json(json_path):
 # 替换文件夹路径到模板中
 def replace_folder_in_request(request_json, folder_path, folder_name):
     # fixme 后续取消写死的路径，换成注释掉的代码
-    # request_json['payload']['train_data_dir'] = folder_path
-    request_json['payload']['train_data_dir'] = "./train/zbmt/月兔姑娘"
+    request_json['payload']['train_data_dir'] = folder_path
+    # request_json['payload']['train_data_dir'] = "./train/zbmt/月兔姑娘"
     request_json['payload']['output_name'] = folder_name + "_v1"
     return request_json
 
