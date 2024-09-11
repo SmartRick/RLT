@@ -1,3 +1,4 @@
 {
-  "source_dir": "D:\\test-lora"
+  "source_dir": "D:\\test-lora",
+  "scheduling_minute": 5
 }

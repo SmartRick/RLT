@@ -1,5 +1,6 @@
 {
     "url": "https://ux0eykfcv3ok1u8h-dyo2rjdu-sdwebui.instance.onethingcenter.com/api/run",
+    "tasks_url": "https://ux0eykfcv3ok1u8h-dyo2rjdu-sdwebui.instance.onethingcenter.com/api/tasks",
     "headers": {
         "Accept": "*/*",
         "Accept-Encoding": "gzip, deflate, br, zstd",

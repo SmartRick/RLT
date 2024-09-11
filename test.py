@@ -1,31 +1,27 @@
-def read_log_file(file_path):
-    encodings = ['utf-8', 'gbk', 'iso-8859-1']  # 可能的编码列表
-    for encoding in encodings:
-        try:
-            with open(file_path, 'r', encoding=encoding) as file:
-                content = file.read()
-                # 检查是否能够正确解码
-                if content:
-                    print(f"成功使用 {encoding} 编码读取日志")
-                    return content
-        except UnicodeDecodeError:
-            continue
-    print("未能使用常见编码读取日志")
-    return None
+import os
+import json
+import requests
 
-def read_log_file(file_path):
+def submit_request(request_json):
     try:
-        with open(file_path, 'r', encoding='iso-8859-1') as file:
-            content = file.read()
-            print(content)  # 输出到控制台
-            return content
-    except UnicodeDecodeError:
-        print("解码错误，尝试其他编码方式")
-        return None
+        url = request_json['url']
+        headers = request_json['headers']
+        payload = request_json['payload']  # 修改 body 为 payload
+        response = requests.post(url, json=payload, headers=headers)
+
+        response_data = json.loads(response.text)
+        status = response_data['status']
+        # 输出状态码和返回内容，以便调试
+        print(f"Status: {status}")
+        print(f"Response message: {response_data['message']}")
+
+        return status == "success"
     except Exception as e:
-        print(f"读取文件时出错: {e}")
-        return None
+        # 输出异常信息，方便排查问题
+        print(f"Error occurred: {e}")
+        return False
+
 
 # 调用函数
 if __name__ == "__main__":
-    read_log_file('./events.out.tfevents.1725977962.instance.8097.0')
+    print()
