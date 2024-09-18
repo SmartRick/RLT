@@ -1,4 +1,6 @@
 {
-  "source_dir": "/app/sd-trainer/train/zbmt",
-  "scheduling_minute": 5
+  "source_dir": "/app/sd-trainer/train/",
+  "scheduling_minute": 5,
+  "url": "http://127.0.0.1:7860",
+  "cookie": "instance_token=46AXJHxd/5NNTv+84ds1YraxRvwfYvcfBGIgC9yrPJ+7gkdWdhXr1lkZqrkE2OvUO55pXvBsxToCco98eW7LP9V3HvKAhVcRtFuaBTOwZ/UPc2v61ecbiaaqWpm5BFQyl2qBd+0IOoTD528rg8zwaMnuTYbu011O1DeQbeKJhghaexsbQBHb/pEweLP2JUK73mCcx6AfillTaHxRZO2mVvxTJ6AgAuxH1/hMNrl+MtS0qdZoZ0mffVg45EFhDaHOw6HkzXSGc6y2tsfhGIkib3hWHyvDGkd7DhOZaBYI9ftTigNm5O2BbVFszZV3DJvqQgIxZGjqDSvxY1Z0tsZII2ccbUsAKhR5vKaO+vwJxQ6HmNbLjL/tGX1qa/6IEwHq9SBZHeu/Yx7ZfuwUQuvgmjiYbX3IAndLj6UOzU6oLSQXKxU+cr97On2fJs3Vpk/DZpOFjby5kuS8Ou0ip/MQQ+FWs4kz23s52506EYPsvjkc+n72MF5WQGNxNPb7q7eD5bq3ZxuXltrWPDlVqEE+/2jbJ61Qy81KeVaa9TdoG+FahWJUFYCZTiMVGTPDTaeAjKi7P2bk0MbrDRdgfIOc3lMFIlpKDtnDFFR3QLYTxErDDekTLVJgG1lo4FKKAowC2RGvmILsacAARmkjHgPXGCZt+bWu+uRmYUmhYct+A5cfZq7vBcCxNa9d2DKfoKP95nSAFhLJs7EhKQpWPRItf7AZ6XY8v94WKB7SxaXTpn2ni+EUv+4Cdjc7D+KR5DOwDb8nIMNtQuFlyAe0nRbW3jEjeKg3HTNztRCUvUW5Lny3FL4f6kjhyVpVACt2Zw/N8xzChs4HjEG+MFVmnQY0kX4P0UXwiBI4H+3i44s1kbLrcQJncmBaXtk+I3LXQzBnW4BKaoebXeCkLKcGBLyr/Q=="
 }

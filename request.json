@@ -1,6 +1,6 @@
 {
-    "url": "https://ux0eykfcv3ok1u8h-dyo2rjdu-sdwebui.instance.onethingcenter.com/api/run",
-    "tasks_url": "https://ux0eykfcv3ok1u8h-dyo2rjdu-sdwebui.instance.onethingcenter.com/api/tasks",
+    "url": "{url}/api/run",
+    "tasks_url": "{url}/api/tasks",
     "headers": {
         "Accept": "*/*",
         "Accept-Encoding": "gzip, deflate, br, zstd",
@@ -8,10 +8,10 @@
         "Connection": "keep-alive",
         "Content-Length": "1920",
         "Content-Type": "application/json",
-        "Cookie": "instance_token=A/W2nwL4w3RKPpu0wvaJatYICJWM27r2zSe820UvCb7hnfUSTW6F2S48mJx4rb3Pnf6CYVNQLC3IgYeibcWdV4kI0H8/Kg/UW0kD4KC3nvgzdTDh6t6ArwOANJK9Evi58K3AO8Qe0Xv8Yn+CLJQYedGgoEGuIKSFk6657+GTHXyXtmEcH8KmORXoJx1Vo1RkcVat0813avuLatWFEgQG9B8ntZvWuWsE/GGcdbNXN0RLUJ5ZaxOMDeuKxIQKwMhNRlmFFKoOhSZwE4ga7ruDY2o8GxsghhD5cxaNtCYmRhCfIJOOkOrbknkA1ViotZCypTz5xb8PVShNyzX4eeeQJoQigKX6sezp3hv+qsqtwKmqvuys6IsUuCDWH8qILw0xyeCNb86RwbIAXXaBGbSvIIlCLu/Y2RvbJXw7ebrrP2XQAK10hxLdAMIlJHMzt2G4sdrrgF5bk9WAOj4++M/B/LfRbCR43JO9TjUIOE31ipuc+R5WQX6Lr0XspFXnEcxaj+Q+EeHgrUSXRwOzsVEstpSpUNFidSk9ioHngr6n+/2jnjDeo6DS5tHzuShNHtutb1FtdP7YxL2runf1o3V7OhDSw0G34iiFTLtL/0EKbxhFi6qhp76I0mkATc9j8I8iTrg9o8JMh3qWubBxeO+/La6rXo+doRbtmQh/RfvRPKF9kk3UcVQbdDWa5sndEpAcjYcZzw6Mj12Cs4lpDA0/Wj48r/ieQVel4dDiDgsGJQoq7FARBZMWRj/Cc7yyRa4mDFyA07ZJzSG0byJqQZKm0RTDsH66mjG7/ZfCccZ2X2FF5EqCRcFBWbTFpkvGmQAW3nNMqE1QZ7EPKcfy5JI2woOi4KzykPgILeqq5gtgfQgIyPkOFyoANq4radaV8StyBt/i2P1HF2jh/ia1qPGCWA==",
-        "Host": "ux0eykfcv3ok1u8h-dyo2rjdu-sdwebui.instance.onethingcenter.com",
-        "Origin": "https://ux0eykfcv3ok1u8h-dyo2rjdu-sdwebui.instance.onethingcenter.com",
-        "Referer": "https://ux0eykfcv3ok1u8h-dyo2rjdu-sdwebui.instance.onethingcenter.com/lora/flux.html",
+        "Cookie": "{cookie}",
+        "Host": "127.0.0.1",
+        "Origin": "{url}",
+        "Referer": "{url}/lora/flux.html",
         "Sec-Fetch-Dest": "empty",
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "same-origin",
