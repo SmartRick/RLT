@@ -1,14 +1,20 @@
 import os
 import json
+import threading
+
 import requests
 import re
 import sched
 import time
 
+import pan_request
+
 # 当前任务id号
 cur_task_id = ""
 # 任务id-文件夹名称
 task_folder = {}
+# 任务id-lora名称
+task_lora = {}
 url = ""
 cookie = ""
 
@@ -93,6 +99,7 @@ def submit_task(scan_dir, request_json_path):
                 cur_task_id = task_id
                 # 设置全局的任务-文件夹
                 task_folder[task_id] = folder
+                task_lora[task_id] = config.get("lora_output_path") + updated_template.get("output_name") + "." + updated_template.get("save_model_as")
                 print(f"任务提交成功，任务名称：“{folder}”，任务ID： {task_id}")
                 return
             else:
@@ -129,7 +136,7 @@ def req_task_map():
     return task_map
 def current_task_finished():
     task_map = req_task_map()
-    print("任务队列：",task_map)
+    print("任务队列：", task_map)
     cur_task_status = task_map[cur_task_id]
     return cur_task_status == "FINISHED"
 
@@ -146,9 +153,14 @@ def scheduling(scan_dir, request_json_path):
         submit_task(scan_dir, request_json_path)
 
     elif current_task_finished():
-        # 任务完成，将文件夹名称写入完成文件缓存中
+        # 获取完成任务的文件夹名称
         folder = task_folder[cur_task_id]
+        # 获取完成任务的lora路径
+        lora_path = task_lora[cur_task_id]
+        # 任务完成，将文件夹名称写入完成文件缓存中
         write_to_file("./finished_cache", folder)
+        # 上传lora到百度云盘中
+        upload_lora(lora_path)
         # 再次请求提交新任务
         submit_task(scan_dir, request_json_path)
 
@@ -163,6 +175,13 @@ def read_from_file_to_list(file_path):
             content_list.append(line.strip())
     return content_list
 
+def upload_lora(lora_path):
+    config = load_json("./config.json")
+    pan_request_handler = pan_request.RequestHandler()
+    result = pan_request_handler.upload(False, config.get("lora_pan_dst_dir"), lora_path)
+    if not result:
+        print(f"lora:{lora_path}上传失败")
+
 def schedule_task(scan_dir, request_json_path, scheduler, config):
     try:
         scheduling(scan_dir, request_json_path)
@@ -173,18 +192,49 @@ def schedule_task(scan_dir, request_json_path, scheduler, config):
     # 再次计划任务，每 [scheduling_minute] 分钟后执行
     scheduler.enter(interval, 1, schedule_task, (scan_dir, request_json_path, scheduler, config))
 
+def schedule_download_task(scheduler, config, pan_request_json):
+    try:
+        download_job(config)
+    except Exception as e:
+        print(f"任务调度异常: {e}")
+
+    interval = 60
+    # 再次计划任务，每 60 s后执行
+    scheduler.enter(interval, 1, schedule_download_task, (scheduler, config, pan_request_json))
+
+def download_job(config):
+    mark_dst_dir = config.get("mark_dir")
+    mark_src_dir = config.get("mark_pan_dir")
+    download_mark_list = read_from_file_to_list("./mark_folder_download")
+    pan_request_handle = pan_request.RequestHandler()
+    # 扫描下载打标文件夹
+    dir_dict = pan_request_handle.dir_list("mark")
+    for dir_name, file_id in dir_dict:
+        if dir_name not in download_mark_list:
+            success = pan_request_handle.download(True, mark_dst_dir, mark_src_dir + dir_name, file_id)
+            # 下载的素材文件夹名称·记录到缓存文件中
+            write_to_file("./mark_folder_download", dir_name)
+            if not success:
+                print(f"{mark_src_dir + dir_name}下载失败")
+            break
+
 # 运行主程序
 if __name__ == "__main__":
     config = load_json("./config.json")
+    pan_request_json = load_json("./pan_request.json")
     scan_dir = config.get("source_dir")
-    url  = config.get("host")
-    cookie  = config.get("cookie")
+    url = config.get("host")
+    cookie = config.get("cookie")
     request_json_path = "./request.json"
 
     finished_cache_path = "./finished_cache"
+    mark_folder_download = "./mark_folder_download"
     # 检查 finished_cache 文件是否存在，不存在则创建一个空文件
     if not os.path.exists(finished_cache_path):
         with open(finished_cache_path, 'w', encoding='utf-8') as f:
+            pass
+    if not os.path.exists(mark_folder_download):
+        with open(mark_folder_download, 'w', encoding='utf-8') as f:
             pass
 
     if scan_dir is None:
@@ -194,6 +244,13 @@ if __name__ == "__main__":
         # 首次执行任务
         scheduler.enter(0, 1, schedule_task, (scan_dir, request_json_path, scheduler, config))
         print("启动完成")
-        # 启动调度器
-        scheduler.run()
+
+        scheduler2 = sched.scheduler(time.time, time.sleep)
+        # 首次执行任务
+        scheduler2.enter(0, 1, schedule_download_task, (scheduler2, config, pan_request_json))
+        print("下载调度器启动完成")
+
+        # 使用线程启动两个调度器
+        threading.Thread(target=scheduler.run).start()
+        threading.Thread(target=scheduler2.run).start()
 
