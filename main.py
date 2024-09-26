@@ -211,7 +211,7 @@ def download_job(config):
     dir_dict = pan_request_handle.dir_list("mark")
     for dir_name, file_id in dir_dict:
         if dir_name not in download_mark_list:
-            success = pan_request_handle.download(True, mark_dst_dir, mark_src_dir + dir_name, file_id)
+            success = pan_request_handle.download(True, mark_dst_dir, mark_src_dir + "/" + dir_name, file_id)
             # 下载的素材文件夹名称·记录到缓存文件中
             write_to_file("./mark_folder_download", dir_name)
             if not success:
