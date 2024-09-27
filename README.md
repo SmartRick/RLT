@@ -8,6 +8,8 @@ tail -500f output.log
 
 # finished_cache
 finished_cache里面存放的是已经训练完的资源文件夹，如果是第一次运行脚本清空里面的内容或者直接删除该文件
+# mark_folder_download
+mark_folder_download里面存放的是从百度云盘上下载的打标素材文件夹，如果是第一次运行脚本清空里面的内容或者直接删除该文件
 
 # config.json
 config.json存放的是配置文件，需要根据自己的需求进行修改配置

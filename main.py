@@ -252,7 +252,7 @@ if __name__ == "__main__":
         scheduler = sched.scheduler(time.time, time.sleep)
         # 首次执行任务
         scheduler.enter(0, 1, schedule_task, (scan_dir, request_json_path, scheduler, config))
-        print("启动完成")
+        print("lora训练调度器启动完成")
 
         scheduler2 = sched.scheduler(time.time, time.sleep)
         # 首次执行任务
