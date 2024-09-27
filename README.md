@@ -30,6 +30,8 @@ config.json存放的是配置文件，需要根据自己的需求进行修改配
 **url**: 训练lora任务的url，如果是onething上直接部署的话，填http://127.0.0.1:7860即可。如果是本地环境调试填类似https://csqvboagnhu5ok9l-zy0kisaq-sdwebui.instance.onethingbusiness.com
 **mark_pan_dir**: 百度云盘素材打标文件夹的源路径
 **lora_pan_upload_dir**: 训练好的lora，需要上传的百度云盘目的路径
-
-
+**cookie**: lora训练任务请求时的cookie，去页面请求一次复制
+**Authorization**: 百度云相关的接口需要，测试了好像是固定的，但可能也是有几天的日期，操作一次百度云相关接口比如刷新然后替换
+**panId**: 操作一次百度云相关接口比如刷新然后替换
+**instanceId**: 操作一次百度云相关接口比如刷新然后替换
 ![img_3.png](img_3.png)
