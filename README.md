@@ -1,3 +1,5 @@
+# 下载依赖
+pip install -r requirements.txt
 # 运行命令：
 nohup python main.py > output.log 2>&1 &
 
