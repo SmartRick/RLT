@@ -25,7 +25,7 @@ class RequestHandler:
 
         url = request_json.get("list_url") + dir
         headers = request_json['headers']
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=3)
         response_data = json.loads(response.text)
 
         if not response_data or response_data.get("code") != 0:
@@ -48,9 +48,9 @@ class RequestHandler:
         url = request_json.get("download_url")
         payload = request_json.get("download_payload")
         headers = request_json['headers']
-        payload["file_id"] = file_id
-        payload["is_dir"] = is_dir
-        payload["src_path"] = src_path
+        payload["fileId"] = file_id
+        payload["isDir"] = is_dir
+        payload["srcPath"] = src_path
         payload["dstPath"] = dst_path
         response = requests.post(url, json=payload, headers=headers)
         print("百度云盘下载响应：", response.__dict__)
@@ -62,8 +62,8 @@ class RequestHandler:
         url = request_json.get("upload_url")
         payload = request_json.get("upload_payload")
         headers = request_json['headers']
-        payload["is_dir"] = is_dir
-        payload["src_path"] = src_path
+        payload["isDir"] = is_dir
+        payload["srcPath"] = src_path
         payload["dstPath"] = dst_path
         response = requests.post(url, json=payload, headers=headers)
         print("百度云盘上传响应：", response.__dict__)

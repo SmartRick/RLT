@@ -21,3 +21,15 @@ config.json存放的是配置文件，需要根据自己的需求进行修改配
 
 **ps: 我未对比过json是否和toml完全一致，为了确定稳定性建议直接复制请求接口里的请求体内容**
 
+
+# 配置文件说明：
+**source_dir:** 打标素材的文件夹路径，也是百度云盘下载的目的文件夹路径。由于onethingAI的百度云下载链接对目的文件夹路径做了权限限制， 只能下载到/root/onethingai-tmp
+但应该是做了文件夹挂载映射的，/root/onethingai-tmp/train/能直接映射到/app/sd-trainer/train目录下，所以这个配置保持默认/root/onethingai-tmp/train/即可
+**lora_output_path**: 最终训练好的lora的目的路径，保持默认即可/app/sd-trainer/output/
+**scheduling_minute**: 每隔多少分钟触发一次训练任务
+**url**: 训练lora任务的url，如果是onething上直接部署的话，填http://127.0.0.1:7860即可。如果是本地环境调试填类似https://csqvboagnhu5ok9l-zy0kisaq-sdwebui.instance.onethingbusiness.com
+**mark_pan_dir**: 百度云盘素材打标文件夹的源路径
+**lora_pan_upload_dir**: 训练好的lora，需要上传的百度云盘目的路径
+
+
+![img_3.png](img_3.png)

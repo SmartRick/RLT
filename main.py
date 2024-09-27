@@ -1,6 +1,7 @@
 import os
 import json
 import threading
+import traceback
 
 import requests
 import re
@@ -55,8 +56,9 @@ def replace_folder_in_request(request_json, folder_path, folder_name):
     request_json['payload']['max_train_epochs'] = int(epoch)
 
     request_json['payload']['train_data_dir'] = folder_path
-    # request_json['payload']['train_data_dir'] = "./train/zbmt/月兔姑娘"
-    request_json['payload']['output_name'] = folder_name + "_v1"
+    # request_json['payload']['train_data_dir'] = "/root/onethingai-tmp/train/月兔姑娘"
+    # request_json['payload']['output_name'] = folder_name + "_v1"
+    request_json['payload']['output_name'] = folder_name
     return request_json
 
 # 提交请求
@@ -99,7 +101,7 @@ def submit_task(scan_dir, request_json_path):
                 cur_task_id = task_id
                 # 设置全局的任务-文件夹
                 task_folder[task_id] = folder
-                task_lora[task_id] = config.get("lora_output_path") + updated_template.get("output_name") + "." + updated_template.get("save_model_as")
+                task_lora[task_id] = config.get("lora_output_path") + updated_template.get("payload").get("output_name") + "." + updated_template.get("payload").get("save_model_as")
                 print(f"任务提交成功，任务名称：“{folder}”，任务ID： {task_id}")
                 return
             else:
@@ -128,12 +130,13 @@ def get_task_map(request_json):
         return False
 
 def req_task_map():
-    global cur_task_id
+
     config = load_json("./config.json")
     request_json = load_json("./request.json",config)
     # 获取任务请求结果列表
     task_map = get_task_map(request_json)
     return task_map
+
 def current_task_finished():
     task_map = req_task_map()
     print("任务队列：", task_map)
@@ -143,7 +146,7 @@ def current_task_finished():
 def scheduling(scan_dir, request_json_path):
     global cur_task_id, task_folder
     task_map = req_task_map()
-    for taskid,state in task_map.items():
+    for taskid, state in task_map.items():
         if state == "RUNNING":
             print(f"任务：{taskid}在执行中...")
             return
@@ -161,6 +164,8 @@ def scheduling(scan_dir, request_json_path):
         write_to_file("./finished_cache", folder)
         # 上传lora到百度云盘中
         upload_lora(lora_path)
+        # 全局当前任务id复原
+        cur_task_id = ""
         # 再次请求提交新任务
         submit_task(scan_dir, request_json_path)
 
@@ -178,7 +183,7 @@ def read_from_file_to_list(file_path):
 def upload_lora(lora_path):
     config = load_json("./config.json")
     pan_request_handler = pan_request.RequestHandler()
-    result = pan_request_handler.upload(False, config.get("lora_pan_dst_dir"), lora_path)
+    result = pan_request_handler.upload(False, config.get("lora_pan_upload_dir"), lora_path)
     if not result:
         print(f"lora:{lora_path}上传失败")
 
@@ -187,6 +192,8 @@ def schedule_task(scan_dir, request_json_path, scheduler, config):
         scheduling(scan_dir, request_json_path)
     except Exception as e:
         print(f"任务调度异常: {e}")
+        # 打印完整的堆栈跟踪
+        traceback.print_exc()
 
     interval = config["scheduling_minute"] * 60
     # 再次计划任务，每 [scheduling_minute] 分钟后执行
@@ -197,19 +204,21 @@ def schedule_download_task(scheduler, config, pan_request_json):
         download_job(config)
     except Exception as e:
         print(f"任务调度异常: {e}")
+        # 打印完整的堆栈跟踪
+        traceback.print_exc()
 
     interval = 60
     # 再次计划任务，每 60 s后执行
     scheduler.enter(interval, 1, schedule_download_task, (scheduler, config, pan_request_json))
 
 def download_job(config):
-    mark_dst_dir = config.get("mark_dir")
+    mark_dst_dir = config.get("source_dir")
     mark_src_dir = config.get("mark_pan_dir")
     download_mark_list = read_from_file_to_list("./mark_folder_download")
     pan_request_handle = pan_request.RequestHandler()
     # 扫描下载打标文件夹
     dir_dict = pan_request_handle.dir_list("mark")
-    for dir_name, file_id in dir_dict:
+    for dir_name, file_id in dir_dict.items():
         if dir_name not in download_mark_list:
             success = pan_request_handle.download(True, mark_dst_dir, mark_src_dir + "/" + dir_name, file_id)
             # 下载的素材文件夹名称·记录到缓存文件中
