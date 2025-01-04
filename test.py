@@ -1,6 +1,13 @@
 import os
 import json
+import subprocess
+
+import bypy.const
 import requests
+from bypy import ByPy
+
+import main
+
 
 def submit_request(request_json):
     try:
@@ -22,6 +29,21 @@ def submit_request(request_json):
         return False
 
 
-# 调用函数
+
+
 if __name__ == "__main__":
-    print()
+    # print()
+    # meta = bp.list("/ByPy-test",fmt="$f")
+    # 执行bypy list命令并捕获输出
+    # exec_bypy = execBypy(['bypy', 'meta', "/ByPy-test/config.jsoan"])
+    # ok = Pan.isExist("/ByPy-test/config.jsoan")
+    # print(ok)
+    lora = main.upload_lora('/root/lora-scripts/output/证件照')
+    # print(lora)
+    # prompt = main.get_first_prompt("G:/project/project/python/automatic-mark-comfyui/mark/证件照/15_证件照")
+    # print(prompt)
+    # mark_downloads = main.read_from_file_to_list("./mark_folder_download")
+    # if "熊猫花花" not in mark_downloads:
+    #     print("不在")
+    # else:
+    #     print("在")
