@@ -472,20 +472,15 @@ class LoraTrainingSystem:
         """
         self.scheduler = sched.scheduler(time.time, time.sleep)
         self.download_scheduler = sched.scheduler(time.time, time.sleep)
-        self.upload_scheduler = sched.scheduler(time.time, time.sleep)
 
         # 配置调度任务
         self.scheduler.enter(0, 1, self._schedule_training_task, ())
         self.download_scheduler.enter(0, 1, self._schedule_download_task, ())
-        self.upload_scheduler.enter(0, 1, self._schedule_upload_task, ())
         
         # 启动调度器线程
         self.scheduler_threads = []
-        for scheduler, name in [
-            (self.scheduler, "训练调度器"), 
-            (self.download_scheduler, "下载调度器"),
-            (self.upload_scheduler, "上传调度器")
-        ]:
+        for scheduler, name in [(self.scheduler, "训练调度器"), 
+                              (self.download_scheduler, "下载调度器")]:
             thread = threading.Thread(target=scheduler.run, name=name, daemon=True)
             thread.start()
             self.scheduler_threads.append(thread)
@@ -928,56 +923,6 @@ class LoraTrainingSystem:
             "lora_path": lora_path,
             "task_id": task_id
         })
-
-    def _process_uploads(self):
-        """
-        @description 处理上传队列中的任务
-        """
-        logging.info("=== 检查上传队列 ===")
-        
-        # 获取等待上传的任务
-        pending_uploads = self.task_queue.get_tasks_by_status(TaskStatus.PENDING_UPLOAD)
-        if not pending_uploads:
-            return
-        
-        for task in pending_uploads:
-            folder = task["folder_name"]
-            lora_path = task.get("lora_path")
-            
-            if not lora_path:
-                logging.error(f"任务缺少Lora路径信息 - {folder}")
-                self.task_queue.mark_upload_failed(folder, "缺少Lora路径信息")
-                continue
-            
-            try:
-                logging.info(f"开始上传Lora - {folder}")
-                self.task_queue.mark_uploading(folder)
-                self._upload_lora(lora_path)
-                
-                # 上传成功,标记任务完全完成
-                self.task_queue.mark_complete(folder)
-                logging.info(f"Lora上传完成 - {folder}")
-                
-            except Exception as e:
-                error_msg = f"Lora上传失败: {str(e)}"
-                self.task_queue.mark_upload_failed(folder, error_msg)
-                logging.error(f"{error_msg} - {folder}")
-            
-            # 每次只处理一个上传任务
-            break
-
-    def _schedule_upload_task(self):
-        """
-        @description 上传任务调度循环
-        """
-        try:
-            self._process_uploads()
-        except Exception as e:
-            logging.error(f"上传任务调度异常: {e}")
-            logging.exception(e)
-            
-        # 设置下一次执行(每60秒检查一次)
-        self.upload_scheduler.enter(60, 1, self._schedule_upload_task, ())
 
 # 运行主程序
 if __name__ == "__main__":

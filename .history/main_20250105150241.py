@@ -966,19 +966,6 @@ class LoraTrainingSystem:
             # 每次只处理一个上传任务
             break
 
-    def _schedule_upload_task(self):
-        """
-        @description 上传任务调度循环
-        """
-        try:
-            self._process_uploads()
-        except Exception as e:
-            logging.error(f"上传任务调度异常: {e}")
-            logging.exception(e)
-            
-        # 设置下一次执行(每60秒检查一次)
-        self.upload_scheduler.enter(60, 1, self._schedule_upload_task, ())
-
 # 运行主程序
 if __name__ == "__main__":
     try:

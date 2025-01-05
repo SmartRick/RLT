@@ -26,6 +26,8 @@ task_lora = {}
 url = ""
 cookie = ""
 pan = bypy_tools.Pan()
+finished_cache = None
+download_cache = None
 task_queue = None
 
 """
@@ -155,31 +157,20 @@ def submit_request(request_json):
 @param {str} request_json_path - 请求配置文件路径
 """
 def submit_task(scan_dir, request_json_path):
-    """
-    @description 主程序：扫描目录、替换占位符、提交请求
-    @param {str} scan_dir - 需要扫描的目录
-    @param {str} request_json_path - 请求配置文件路径
-    """
     logging.info("=== 开始扫描新任务 ===")
     config = load_json("./config.json")
     request_json = load_json(request_json_path, config)
-    
-    # 获取已完成和已下载的任务状态
-    completed_tasks = task_queue.get_tasks_by_status(TaskStatus.COMPLETED)
-    downloaded_tasks = task_queue.get_tasks_by_status(TaskStatus.PENDING)
-    
-    logging.info(f"当前已完成任务数: {len(completed_tasks)}")
-    logging.info(f"当前已下载素材数: {len(downloaded_tasks)}")
+    finished_items = finished_cache.get_all_items()
+    downloaded_items = download_cache.get_all_items()
+    logging.info(f"当前已完成任务数: {len(finished_items)}")
+    logging.info(f"当前已下载素材数: {len(downloaded_items)}")
     
     # 扫描并添加新任务到队列
     for folder in os.listdir(scan_dir):
-        # 检查是否已完成
-        if any(task["folder_name"] == folder for task in completed_tasks):
+        if finished_cache.has_item(folder):
             logging.debug(f"跳过已完成的任务: {folder}")
             continue
-            
-        # 检查是否已下载完成
-        if not any(task["folder_name"] == folder for task in downloaded_tasks):
+        if not download_cache.has_item(folder):
             logging.debug(f"跳过未下载完成的素材: {folder}")
             continue
             
@@ -189,7 +180,7 @@ def submit_task(scan_dir, request_json_path):
             task_info = {
                 "folder_name": folder,
                 "folder_path": folder_path,
-                "status": TaskStatus.PENDING
+                "status": "pending"
             }
             task_queue.add_task(task_info)
             logging.info(f"已将任务添加到队列 - {folder}")
@@ -314,25 +305,19 @@ def download_job(config):
     logging.info("=== 检查新素材下载 ===")
     mark_dst_dir = config.get("source_dir")
     mark_src_dir = config.get("mark_pan_dir")
-    
-    # 获取已下载的任务
-    downloaded_tasks = task_queue.get_tasks_by_status(TaskStatus.PENDING)
-    logging.info(f"当前已下载素材数: {len(downloaded_tasks)}")
+    downloaded_items = download_cache.get_all_items()
+    logging.info(f"当前已下载素材数: {len(downloaded_items)}")
     
     pan_list, code = pan.list(mark_src_dir)
     if code == 0:
         logging.info(f"云盘待处理素材数: {len(pan_list)}")
         for dir_name in pan_list:
-            # 检查是否已经在任务队列中
-            if not task_queue.has_task(dir_name):
+            if not download_cache.has_item(dir_name):
                 logging.info(f"开始下载新素材: {dir_name}")
-                success = pan.download(os.path.join(mark_src_dir, dir_name), 
-                                    os.path.join(mark_dst_dir, dir_name))
+                success = pan.download(os.path.join(mark_src_dir, dir_name), os.path.join(mark_dst_dir, dir_name))
                 if success == 0:
                     logging.info(f"素材下载成功 - {dir_name}")
-                    # 添加下载任务并标记为完成
-                    task_queue.add_download_task(dir_name, os.path.join(mark_dst_dir, dir_name))
-                    task_queue.mark_download_complete(dir_name, os.path.join(mark_dst_dir, dir_name))
+                    download_cache.add_item(dir_name)
                 else:
                     logging.error(f"素材下载失败 - {dir_name} - 错误码: {success}")
                 break
@@ -393,8 +378,7 @@ def scheduling(scan_dir, request_json_path):
             try:
                 logging.info("开始上传Lora到云盘...")
                 upload_lora(lora_path)
-                # 标记任务完成
-                task_queue.mark_complete(folder, {
+                finished_cache.add_item(folder, {
                     "lora_path": lora_path,
                     "task_id": cur_task_id
                 })
@@ -449,6 +433,8 @@ class LoraTrainingSystem:
         self.request_json_path = "./request.json"
         
         # 初始化组件
+        self.finished_cache = FileCache("./finished_cache.json")
+        self.download_cache = FileCache("./mark_folder_download.json")
         self.task_queue = TaskQueue()
         self.pan = bypy_tools.Pan()
         
@@ -456,11 +442,14 @@ class LoraTrainingSystem:
         self.cur_task_id = ""
         self.task_folder = {}
         self.task_lora = {}
-
+        
     def initialize(self):
         """
         @description 初始化系统
         """
+        setup_logging()
+        logging.info("=== Lora训练自动化系统启动 ===")
+        
         if not self.scan_dir:
             raise ValueError("错误: 未配置扫描文件夹路径")
             
@@ -472,20 +461,15 @@ class LoraTrainingSystem:
         """
         self.scheduler = sched.scheduler(time.time, time.sleep)
         self.download_scheduler = sched.scheduler(time.time, time.sleep)
-        self.upload_scheduler = sched.scheduler(time.time, time.sleep)
 
         # 配置调度任务
         self.scheduler.enter(0, 1, self._schedule_training_task, ())
         self.download_scheduler.enter(0, 1, self._schedule_download_task, ())
-        self.upload_scheduler.enter(0, 1, self._schedule_upload_task, ())
         
         # 启动调度器线程
         self.scheduler_threads = []
-        for scheduler, name in [
-            (self.scheduler, "训练调度器"), 
-            (self.download_scheduler, "下载调度器"),
-            (self.upload_scheduler, "上传调度器")
-        ]:
+        for scheduler, name in [(self.scheduler, "训练调度器"), 
+                              (self.download_scheduler, "下载调度器")]:
             thread = threading.Thread(target=scheduler.run, name=name, daemon=True)
             thread.start()
             self.scheduler_threads.append(thread)
@@ -521,152 +505,20 @@ class LoraTrainingSystem:
         """
         @description 处理训练任务
         """
-        logging.info("=== 训练任务调度检查 ===")
-        try:
-            # 获取当前任务状态
-            task_map = self._get_task_map()
-            if task_map is None:
-                logging.warning("获取任务状态失败，跳过本次检查") 
-                return
-            
-            # 检查上传失败的任务，尝试重新上传
-            failed_uploads = self.task_queue.get_tasks_by_status(TaskStatus.UPLOAD_FAILED)
-            for task in failed_uploads:
-                folder = task["folder_name"]
-                lora_path = task.get("lora_path")
-                if not lora_path:
-                    continue
-                    
-                try:
-                    logging.info(f"尝试重新上传失败的Lora - {folder}")
-                    self.task_queue.mark_uploading(folder)
-                    self._upload_lora(lora_path)
-                    self.task_queue.mark_complete(folder, task)
-                    logging.info(f"Lora重新上传成功 - {folder}")
-                except Exception as e:
-                    error_msg = f"Lora重新上传失败: {str(e)}"
-                    self.task_queue.mark_upload_failed(folder, error_msg)
-                    logging.error(error_msg)
-                break  # 每次只处理一个重新上传任务
-            
-            # 检查当前运行中的任务
-            running_tasks = self.task_queue.get_tasks_by_status(TaskStatus.TRAINING)
-            if running_tasks:
-                for task in running_tasks:
-                    task_id = task.get("task_id")
-                    if not task_id:
-                        continue
-                    
-                    if task_id not in task_map:
-                        logging.warning(f"任务不在远程列表中 - {task_id}")
-                        continue
-                    
-                    status = task_map[task_id]
-                    if status == "FINISHED":
-                        self._handle_finished_task(task)
-                    elif status == "FAILED":
-                        self._handle_failed_task(task)
-                    else:
-                        logging.info(f"任务正在执行 - ID: {task_id} - 状态: {status}")
-                return
-            
-            # 如果没有运行中的任务，尝试提交新任务
-            self._submit_next_available_task()
-            
-        except Exception as e:
-            logging.error("处理训练任务时发生错误")
-            logging.exception(e)
-
-    def _handle_finished_task(self, task):
-        """
-        @description 处理已完成的训练任务
-        @param {dict} task - 任务信息
-        """
-        folder = task["folder_name"]
-        task_id = task["task_id"]
+        logging.info("=== 任务调度检查 ===")
+        task_map = self._get_task_map()
         
-        try:
-            # 构建lora输出路径
-            lora_path = os.path.join(
-                self.config.get("lora_output_path", "./output"),
-                folder
-            )
-            
-            logging.info(f"训练任务完成:")
-            logging.info(f"- 文件夹: {folder}")
-            logging.info(f"- Lora路径: {lora_path}")
-            
-            # 标记训练完成,添加lora路径信息
-            self.task_queue.mark_training_complete(folder, {
-                "lora_path": lora_path,
-                "task_id": task_id
-            })
-            
-            # 将任务加入上传队列
-            self.task_queue.add_to_upload_queue(folder)
-            logging.info(f"任务已加入上传队列 - {folder}")
-            
-        except Exception as e:
-            error_msg = f"处理完成任务时发生错误: {str(e)}"
-            logging.error(error_msg)
-            self.task_queue.mark_training_failed(folder, error_msg)
-
-    def _handle_failed_task(self, task):
-        """
-        @description 处理失败的训练任务
-        @param {dict} task - 任务信息
-        """
-        folder = task["folder_name"]
-        task_id = task["task_id"]
-        error_msg = f"远程任务执行失败 - ID: {task_id}"
-        logging.error(error_msg)
-        self.task_queue.mark_training_failed(folder, error_msg)
-
-    def _submit_next_available_task(self):
-        """
-        @description 提交下一个可用的训练任务
-        """
-        # 获取待训练的任务
-        pending_tasks = self.task_queue.get_tasks_by_status(TaskStatus.PENDING)
-        if not pending_tasks:
-            logging.info("没有待训练的任务")
-            return
-        
-        # 获取第一个待训练任务
-        next_task = pending_tasks[0]
-        folder = next_task["folder_name"]
-        folder_path = next_task.get("folder_path")
-        
-        if not folder_path:
-            logging.error(f"任务缺少必要的路径信息 - {folder}")
-            self.task_queue.mark_training_failed(folder, "任务缺少必要的路径信息")
-            return
-        
-        try:
-            # 提交训练任务
-            request_json = load_json(self.request_json_path, self.config)
-            updated_template = replace_folder_in_request(request_json, folder_path, folder)
-            response_data = submit_request(updated_template)
-            
-            if not response_data or response_data['status'] != "success":
-                error_msg = response_data.get('message', '未知错误') if response_data else "API请求失败"
-                self.task_queue.mark_training_failed(folder, error_msg)
+        if task_map:
+            self._log_current_tasks(task_map)
+            if self._has_running_task(task_map):
                 return
-            
-            task_id = self._extract_task_id(response_data)
-            if not task_id:
-                self.task_queue.mark_training_failed(folder, "无法获取任务ID")
-                return
-            
-            # 更新任务状态
-            self.task_queue.mark_training_start(folder, task_id)
-            logging.info(f'任务提交成功 - 任务名称: "{folder}" - 任务ID: {task_id}')
-            
-        except Exception as e:
-            error_msg = f"任务提交失败: {str(e)}"
-            logging.error(f"{error_msg} - 文件夹: {folder_path}")
-            self.task_queue.mark_training_failed(folder, error_msg)
 
+        if not self.cur_task_id:
+            logging.info("没有进行中的任务，扫描新任务...")
+            self._scan_and_submit_tasks()
+        elif self._is_current_task_finished(task_map):
+            self._handle_finished_task()
+            
     def _process_downloads(self):
         """
         @description 处理下载任务
@@ -688,11 +540,10 @@ class LoraTrainingSystem:
             
         # 添加新的下载任务
         for dir_name in pan_list:
-            # 检查任务是否已存在
-            if not self.task_queue.has_task(dir_name):
+            # 检查是否已完成或已在队列中
+            if not self.finished_cache.has_item(dir_name) and not self.task_queue.get_task_by_folder(dir_name):
                 src_path = os.path.join(mark_src_dir, dir_name)
                 self.task_queue.add_download_task(dir_name, src_path)
-                logging.info(f"添加新下载任务: {dir_name}")
         
         # 处理下载任务
         downloading_tasks = self.task_queue.get_tasks_by_status(TaskStatus.DOWNLOADING)
@@ -710,6 +561,8 @@ class LoraTrainingSystem:
                 if success == 0:
                     logging.info(f"素材下载成功 - {folder_name}")
                     self.task_queue.mark_download_complete(folder_name, dst_path)
+                    # 下载完成后添加到下载缓存
+                    self.download_cache.add_item(folder_name)
                 else:
                     error_msg = f"下载失败 - 错误码: {success}"
                     self.task_queue.mark_download_failed(folder_name, error_msg)
@@ -770,6 +623,26 @@ class LoraTrainingSystem:
         self.task_lora[task_id] = os.path.join(self.config.get("lora_output_path"), folder)
         logging.info(f'任务注册成功 - 任务名称: "{folder}" - 任务ID: {task_id}')
         
+    def _handle_finished_task(self):
+        """
+        @description 处理已完成的任务
+        """
+        folder = self.task_folder[self.cur_task_id]
+        lora_path = self.task_lora[self.cur_task_id]
+        
+        try:
+            logging.info(f"任务完成: {folder}")
+            logging.info(f"开始上传Lora到云盘: {lora_path}")
+            
+            self._upload_lora(lora_path)
+            self._mark_task_finished(folder, self.cur_task_id, lora_path)
+            
+            self.cur_task_id = ""
+            self._scan_and_submit_tasks()
+            
+        except Exception as e:
+            logging.error(f"处理完成任务时发生错误: {str(e)}")
+
     def _process_download_list(self, pan_list, mark_src_dir, mark_dst_dir):
         """
         @description 处理下载列表
@@ -779,8 +652,7 @@ class LoraTrainingSystem:
         """
         logging.info(f"云盘待处理素材数: {len(pan_list)}")
         for dir_name in pan_list:
-            # 检查是否已经在任务队列中
-            if not task_queue.has_task(dir_name):
+            if not self.download_cache.has_item(dir_name):
                 logging.info(f"开始下载新素材: {dir_name}")
                 success = self.pan.download(
                     os.path.join(mark_src_dir, dir_name), 
@@ -788,35 +660,27 @@ class LoraTrainingSystem:
                 )
                 if success == 0:
                     logging.info(f"素材下载成功 - {dir_name}")
-                    # 添加下载任务并标记为完成
-                    task_queue.add_download_task(dir_name, os.path.join(mark_dst_dir, dir_name))
-                    task_queue.mark_download_complete(dir_name, os.path.join(mark_dst_dir, dir_name))
-                else:
-                    logging.error(f"素材下载失败 - {dir_name} - 错误码: {success}")
-                break
+                    self.download_cache.add_item(dir_name)
+            else:
+                logging.error(f"素材下载失败 - {dir_name} - 错误码: {success}")
+            break
 
     def _get_task_map(self):
         """
         @description 获取任务状态映射
         @return {dict} 任务ID到状态的映射
         """
-        # request_json = load_json(self.request_json_path, self.config)
+        request_json = load_json(self.request_json_path, self.config)
         try:
-            # 注释掉实际的API请求
-            # url = request_json['tasks_url']
-            # headers = request_json['headers']
-            # response = requests.get(url, headers=headers)
-            # response_data = json.loads(response.text)
-            # tasks = response_data['data']['tasks']
-            
-            # 直接返回模拟的成功状态
-            if self.cur_task_id:
-                return {self.cur_task_id: 'FINISHED'}
-            return {}
-            
+            url = request_json['tasks_url']
+            headers = request_json['headers']
+            response = requests.get(url, headers=headers)
+            response_data = json.loads(response.text)
+            tasks = response_data['data']['tasks']
+            return {item['id']: item['status'] for item in tasks}
         except Exception as e:
             logging.error(f"获取任务状态失败: {e}")
-            return None
+            return {}
 
     def _is_current_task_finished(self, task_map):
         """
@@ -833,12 +697,12 @@ class LoraTrainingSystem:
         @description 扫描并提交新任务
         """
         logging.info("=== 开始扫描新任务 ===")
+        finished_items = self.finished_cache.get_all_items()
         
         # 获取待训练的任务（下载完成的任务）
         pending_tasks = self.task_queue.get_tasks_by_status(TaskStatus.PENDING)
-        completed_tasks = self.task_queue.get_tasks_by_status(TaskStatus.COMPLETED)
         
-        logging.info(f"当前已完成任务数: {len(completed_tasks)}")
+        logging.info(f"当前已完成任务数: {len(finished_items)}")
         logging.info(f"当前待训练任务数: {len(pending_tasks)}")
         
         # 如果有待训练的任务，尝试提交训练
@@ -856,12 +720,7 @@ class LoraTrainingSystem:
             return False
 
         folder = next_task["folder_name"]
-        folder_path = next_task.get("folder_path")
-        
-        # if not folder_path:
-        #     logging.error(f"任务缺少必要的路径信息 - {folder}")
-        #     self.task_queue.mark_training_failed(folder, "任务缺少必要的路径信息")
-        #     return False
+        folder_path = next_task["folder_path"]
         
         try:
             request_json = load_json(self.request_json_path, self.config)
@@ -881,6 +740,7 @@ class LoraTrainingSystem:
             # 注册任务并更新状态
             self._register_task(task_id, folder)
             self.task_queue.mark_training_start(folder, task_id)
+            self.task_queue.get_next_task()  # 从队列中移除任务
             
             logging.info(f'任务提交成功 - 任务名称: "{folder}" - 任务ID: {task_id}')
             return True
@@ -924,80 +784,40 @@ class LoraTrainingSystem:
         @param {str} task_id - 任务ID
         @param {str} lora_path - Lora模型路径
         """
-        self.task_queue.mark_task_complete(folder, {
+        self.finished_cache.add_item(folder, {
             "lora_path": lora_path,
             "task_id": task_id
         })
 
-    def _process_uploads(self):
-        """
-        @description 处理上传队列中的任务
-        """
-        logging.info("=== 检查上传队列 ===")
-        
-        # 获取等待上传的任务
-        pending_uploads = self.task_queue.get_tasks_by_status(TaskStatus.PENDING_UPLOAD)
-        if not pending_uploads:
-            return
-        
-        for task in pending_uploads:
-            folder = task["folder_name"]
-            lora_path = task.get("lora_path")
-            
-            if not lora_path:
-                logging.error(f"任务缺少Lora路径信息 - {folder}")
-                self.task_queue.mark_upload_failed(folder, "缺少Lora路径信息")
-                continue
-            
-            try:
-                logging.info(f"开始上传Lora - {folder}")
-                self.task_queue.mark_uploading(folder)
-                self._upload_lora(lora_path)
-                
-                # 上传成功,标记任务完全完成
-                self.task_queue.mark_complete(folder)
-                logging.info(f"Lora上传完成 - {folder}")
-                
-            except Exception as e:
-                error_msg = f"Lora上传失败: {str(e)}"
-                self.task_queue.mark_upload_failed(folder, error_msg)
-                logging.error(f"{error_msg} - {folder}")
-            
-            # 每次只处理一个上传任务
-            break
-
-    def _schedule_upload_task(self):
-        """
-        @description 上传任务调度循环
-        """
-        try:
-            self._process_uploads()
-        except Exception as e:
-            logging.error(f"上传任务调度异常: {e}")
-            logging.exception(e)
-            
-        # 设置下一次执行(每60秒检查一次)
-        self.upload_scheduler.enter(60, 1, self._schedule_upload_task, ())
-
 # 运行主程序
 if __name__ == "__main__":
     try:
+        # 确保日志配置在最开始
         setup_logging()
-        logging.info("=== Lora训练自动化系统启动 ===")
+        logging.info("=== 系统启动 ===")
         
         system = LoraTrainingSystem()
         system.initialize()
         
-        logging.info("按 Ctrl+C 可以安全终止程序")
+        logging.info("=== 系统初始化完成 ===")
+        logging.info("按 Ctrl+C 可以安全终止程序...")
         
-        # 简化状态输出
+        # 添加简单的状态输出
         while True:
             time.sleep(60)  # 每分钟输出一次状态
+            task_count = len(system.task_queue.get_all_tasks())
+            download_count = len(system.download_cache.get_all_items())
+            finished_count = len(system.finished_cache.get_all_items())
+            
+            logging.info("\n=== 系统状态 ===")
+            logging.info(f"当前任务数: {task_count}")
+            logging.info(f"已下载数: {download_count}")
+            logging.info(f"已完成数: {finished_count}")
             if system.cur_task_id:
                 logging.info(f"当前执行任务: {system.cur_task_id}")
             
     except KeyboardInterrupt:
-        logging.info("程序已终止")
+        logging.info("\n程序已终止")
         exit(0)
     except Exception as e:
         logging.exception("程序启动失败")

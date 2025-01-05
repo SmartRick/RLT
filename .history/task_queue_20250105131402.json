@@ -1,0 +1,13 @@
+[
+  {
+    "folder_name": "熊猫花花",
+    "folder_path": "L:\\lora-scripts-1.10.0\\train\\熊猫花花",
+    "status": "training_failed",
+    "updated_at": "2025-01-05T13:14:03.966694",
+    "last_error": {
+      "message": "任务提交失败: [WinError 3] 系统找不到指定的路径。: 'L:\\\\lora-scripts-1.10.0\\\\train\\\\熊猫花花'",
+      "timestamp": "2025-01-05T13:14:03.966694"
+    },
+    "error": "任务提交失败: [WinError 3] 系统找不到指定的路径。: 'L:\\\\lora-scripts-1.10.0\\\\train\\\\熊猫花花'"
+  }
+]

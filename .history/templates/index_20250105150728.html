@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lora 训练任务管理器</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>Lora 训练任务管理器</h1>
+        </header>
+
+        <section class="stats">
+            <h2>任务统计</h2>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <h3>总任务数</h3>
+                    <p>${ stats.total }</p>
+                </div>
+                <div class="stat-item">
+                    <h3>下载中</h3>
+                    <p>${ stats.downloading }</p>
+                </div>
+                <div class="stat-item">
+                    <h3>等待训练</h3>
+                    <p>${ stats.pending }</p>
+                </div>
+                <div class="stat-item">
+                    <h3>训练中</h3>
+                    <p>${ stats.training }</p>
+                </div>
+                <div class="stat-item">
+                    <h3>等待上传</h3>
+                    <p>${ stats.pending_upload }</p>
+                </div>
+                <div class="stat-item">
+                    <h3>上传中</h3>
+                    <p>${ stats.uploading }</p>
+                </div>
+                <div class="stat-item">
+                    <h3>已完成</h3>
+                    <p>${ stats.completed }</p>
+                </div>
+                <div class="stat-item error">
+                    <h3>失败任务</h3>
+                    <p>下载: ${ stats.failed.download }</p>
+                    <p>训练: ${ stats.failed.training }</p>
+                    <p>上传: ${ stats.failed.upload }</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="tasks">
+            <h2>任务列表</h2>
+            <div class="task-filters">
+                <input v-model="searchQuery" placeholder="搜索任务..." @input="filterTasks">
+                <select v-model="statusFilter" @change="filterTasks">
+                    <option value="">全部状态</option>
+                    <option v-for="status in statusOptions" :value="status">${ status }</option>
+                </select>
+            </div>
+            <div class="task-list">
+                <div v-for="task in filteredTasks" :key="task.folder_name" 
+                     :class="['task-item', task.status.toLowerCase()]">
+                    <h3>${ task.folder_name }</h3>
+                    <div class="task-info">
+                        <p><strong>状态:</strong> ${ task.status }</p>
+                        <p><strong>创建时间:</strong> ${ formatDate(task.created_at) }</p>
+                        <p v-if="task.updated_at"><strong>更新时间:</strong> ${ formatDate(task.updated_at) }</p>
+                        <p v-if="task.task_id"><strong>任务ID:</strong> ${ task.task_id }</p>
+                        <p v-if="task.lora_path"><strong>Lora路径:</strong> ${ task.lora_path }</p>
+                        <p v-if="task.error" class="error-message">
+                            <strong>错误信息:</strong> ${ task.error }
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    <script>
+    // 获取服务器端传递的初始数据
+    window.initialData = {
+        stats: {{ stats|tojson|safe }},
+        tasks: {{ tasks|tojson|safe }}
+    };
+    </script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html> 
