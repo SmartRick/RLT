@@ -1,0 +1,139 @@
+@use 'variables' as *;
+
+.sidebar {
+  width: $sidebar-width;
+  height: 100vh;
+  background: $bg-primary;
+  color: $text-light;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
+  transition: all 0.3s ease;
+  box-shadow: $shadow-sm;
+
+  &-header {
+    height: 64px;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+    &-logo {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      text-decoration: none;
+      
+      &:hover {
+        color: #fff;
+      }
+    }
+  }
+
+  &-menu {
+    padding: 20px 0;
+
+    &-item {
+      padding: 12px 25px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      color: #a2a3b7;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+      }
+
+      &.active {
+        background: #0d6efd;
+        color: #fff;
+      }
+
+      i {
+        margin-right: 10px;
+        font-size: 18px;
+      }
+
+      span {
+        font-size: 14px;
+      }
+    }
+
+    &-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+      margin: 10px 0;
+    }
+  }
+
+  &-footer {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    padding: 15px 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    &-version {
+      font-size: 12px;
+    }
+
+    &-collapse {
+      cursor: pointer;
+      font-size: 18px;
+      transition: all 0.3s ease;
+
+      &:hover {
+        color: #fff;
+      }
+    }
+  }
+
+  // 折叠状态
+  &.collapsed {
+    width: 64px;
+
+    .sidebar-header-logo {
+      display: none;
+    }
+
+    .sidebar-menu-item {
+      padding: 12px 20px;
+      justify-content: center;
+
+      span {
+        display: none;
+      }
+
+      i {
+        margin: 0;
+      }
+    }
+
+    .sidebar-footer {
+      padding: 15px;
+      justify-content: center;
+
+      &-version {
+        display: none;
+      }
+    }
+  }
+}
+
+// 主内容区域适配
+.main-content {
+  margin-left: 240px;
+  padding: 20px;
+  transition: all 0.3s ease;
+
+  &.expanded {
+    margin-left: 64px;
+  }
+} 

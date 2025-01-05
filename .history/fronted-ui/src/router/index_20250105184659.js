@@ -1,0 +1,75 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import Assets from '../views/Assets.vue'
+import Tasks from '../views/Tasks.vue'
+import Settings from '../views/Settings.vue'
+
+/**
+ * @typedef {Object} RouteConfig
+ * @property {string} path - 路由路径
+ * @property {string} name - 路由名称
+ * @property {Object} meta - 路由元信息
+ * @property {string} meta.title - 页面标题
+ * @property {boolean} meta.requiresAuth - 是否需要认证
+ * @property {import('vue').Component} component - 路由组件
+ */
+
+/** @type {RouteConfig[]} */
+export const routes = [
+  {
+    path: '/',
+    redirect: '/assets'
+  },
+  {
+    path: '/assets',
+    name: 'Assets',
+    component: Assets,
+    meta: {
+      title: '资产管理',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/tasks',
+    name: 'Tasks',
+    component: Tasks,
+    meta: {
+      title: '任务管理',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: Settings,
+    meta: {
+      title: '系统设置',
+      requiresAuth: true
+    }
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+})
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  // 设置页面标题
+  if (to.meta.title) {
+    document.title = `${to.meta.title} - 管理系统`
+  }
+  
+  // TODO: 添加实际的权限验证逻辑
+  if (to.meta.requiresAuth) {
+    // const isAuthenticated = checkAuth()
+    // if (!isAuthenticated) {
+    //   next('/login')
+    //   return
+    // }
+  }
+  
+  next()
+})
+
+export default router 
