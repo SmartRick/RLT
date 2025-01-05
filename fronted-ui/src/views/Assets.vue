@@ -95,6 +95,10 @@
 
         <!-- 卡片操作栏 -->
         <div class="asset-card-actions">
+          <button class="mac-btn small terminal-btn" @click.stop="openTerminal(asset)">
+            <TerminalIcon class="btn-icon" />
+            <span>终端</span>
+          </button>
           <button class="mac-btn small verify-btn" @click.stop="verifyCapabilities(asset)">
             <CheckCircleIcon class="btn-icon" />
             <span>验证</span>
@@ -194,9 +198,63 @@
                 <span class="error-message" v-if="formErrors.ssh_username">{{ formErrors.ssh_username }}</span>
               </div>
               <div class="form-item">
-                <label>SSH密钥路径</label>
-                <input v-model="assetForm.ssh_key_path" class="mac-input">
+                <label>认证方式</label>
+                <select 
+                  v-model="assetForm.ssh_auth_type" 
+                  class="mac-input"
+                >
+                  <option value="KEY">SSH密钥</option>
+                  <option value="PASSWORD">密码</option>
+                </select>
               </div>
+            </div>
+            
+            <!-- 根据认证方式显示不同的输入框 -->
+            <div class="form-item ssh-auth-input">
+              <template v-if="assetForm.ssh_auth_type === 'PASSWORD'">
+                <label>SSH密码</label>
+                <div class="input-with-button">
+                  <input 
+                    v-model="assetForm.ssh_password"
+                    type="password"
+                    class="mac-input"
+                    :class="{ 'is-error': formErrors.ssh_password }"
+                    @blur="validateField('ssh_password', assetForm.ssh_password)"
+                  >
+                  <button 
+                    class="mac-btn verify-ssh-btn" 
+                    :disabled="isVerifyingSsh"
+                    @click="verifySshConnection"
+                  >
+                    <CheckCircleIcon class="btn-icon" v-if="!isVerifyingSsh" />
+                    <span class="loading-spinner" v-else></span>
+                    {{ isVerifyingSsh ? '验证中...' : '验证连接' }}
+                  </button>
+                </div>
+                <span class="error-message" v-if="formErrors.ssh_password">{{ formErrors.ssh_password }}</span>
+              </template>
+              
+              <template v-else>
+                <label>SSH密钥路径</label>
+                <div class="input-with-button">
+                  <input 
+                    v-model="assetForm.ssh_key_path"
+                    class="mac-input"
+                    :class="{ 'is-error': formErrors.ssh_key_path }"
+                    @blur="validateField('ssh_key_path', assetForm.ssh_key_path)"
+                  >
+                  <button 
+                    class="mac-btn verify-ssh-btn" 
+                    :disabled="isVerifyingSsh"
+                    @click="verifySshConnection"
+                  >
+                    <CheckCircleIcon class="btn-icon" v-if="!isVerifyingSsh" />
+                    <span class="loading-spinner" v-else></span>
+                    {{ isVerifyingSsh ? '验证中...' : '验证连接' }}
+                  </button>
+                </div>
+                <span class="error-message" v-if="formErrors.ssh_key_path">{{ formErrors.ssh_key_path }}</span>
+              </template>
             </div>
           </div>
 
@@ -282,9 +340,23 @@
       </template>
       <template #footer>
         <button class="mac-btn" @click="showAssetModal = false">取消</button>
-        <button class="mac-btn primary" @click="handleSubmit">确认</button>
+        <button 
+          type="submit" 
+          class="mac-btn primary" 
+          :disabled="isSubmitting"
+          @click="handleSubmit"
+        >
+          {{ isSubmitting ? '提交中...' : '确认' }}
+        </button>
       </template>
     </BaseModal>
+
+    <!-- 添加终端弹窗组件 -->
+    <WebTerminal
+      v-if="showTerminal"
+      v-model="showTerminal"
+      :asset="selectedTerminalAsset"
+    />
   </div>
 </template>
 
@@ -308,8 +380,10 @@ import {
   ClockIcon,
   CheckCircleIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  TerminalIcon
 } from '@heroicons/vue/24/outline'
+import WebTerminal from '@/components/terminal/WebTerminal.vue'
 
 defineComponent({
   name: 'AssetsManager'
@@ -326,6 +400,8 @@ const selectedAsset = ref(null)
 const showAssetModal = ref(false)
 const isEditing = ref(false)
 const formErrors = ref({})
+const showTerminal = ref(false)
+const selectedTerminalAsset = ref(null)
 
 const assetForm = ref({
   name: '',
@@ -344,15 +420,19 @@ const assetForm = ref({
     enabled: false,
     url: '',
     port: null
-  }
+  },
+  ssh_auth_type: 'KEY',
+  ssh_password: ''
 })
 
 const resetForm = () => {
   assetForm.value = {
-    name: '测试',
-    ip: '127.0.0.1',
+    name: '',
+    ip: '',
     ssh_port: 22,
-    ssh_username: 'root',
+    ssh_username: '',
+    ssh_auth_type: 'KEY',
+    ssh_password: '',
     ssh_key_path: '',
     lora_training: {
       enabled: false,
@@ -460,16 +540,26 @@ const fetchAssets = async () => {
   }
 }
 
-// 提交表单
+// 添加提交状态
+const isSubmitting = ref(false)
+
+// 修改提交处理函数
 const handleSubmit = async () => {
   if (!validateForm()) {
     return
   }
 
   try {
+    isSubmitting.value = true
+    
     // 处理表单数据
     const formData = {
       ...assetForm.value,
+      // 根据认证类型处理认证信息
+      ssh_password: assetForm.value.ssh_auth_type === 'PASSWORD' ? assetForm.value.ssh_password : undefined,
+      ssh_key_path: assetForm.value.ssh_auth_type === 'KEY' ? assetForm.value.ssh_key_path : undefined,
+      
+      // 处理能力配置
       lora_training: assetForm.value.lora_training.enabled 
         ? {
             ...assetForm.value.lora_training,
@@ -507,9 +597,11 @@ const handleSubmit = async () => {
           formErrors.value[field] = err.msg
         }
       })
-      return
+    } else {
+      message.error(error.message || '操作失败')
     }
-    message.error(error.message || '操作失败')
+  } finally {
+    isSubmitting.value = false
   }
 }
 
@@ -575,7 +667,14 @@ const getStatusText = (status) => {
 // 显示编辑模态框
 const showEditModal = (asset) => {
   isEditing.value = true
-  assetForm.value = { ...asset }
+  // 深拷贝资产数据并确保认证相关字段存在
+  const assetData = {
+    ...JSON.parse(JSON.stringify(asset)),
+    ssh_auth_type: asset.ssh_auth_type || (asset.ssh_password ? 'PASSWORD' : 'KEY'),
+    ssh_password: asset.ssh_password || '',
+    ssh_key_path: asset.ssh_key_path || ''
+  }
+  assetForm.value = assetData
   showAssetModal.value = true
 }
 
@@ -600,6 +699,12 @@ const formRules = {
   ],
   ssh_username: [
     { required: true, message: '请输入SSH用户名' }
+  ],
+  ssh_password: [
+    { required: true, message: '请输入SSH密码', when: (form) => form.ssh_auth_type === 'PASSWORD' }
+  ],
+  ssh_key_path: [
+    { required: true, message: '请输入SSH密钥路径', when: (form) => form.ssh_auth_type === 'KEY' }
   ]
 }
 
@@ -694,15 +799,26 @@ const validateCapabilityField = (capability, field) => {
   return true
 }
 
-// 修改验证表单方法
+// 修改表单验证方法
 const validateForm = () => {
   let isValid = true
   formErrors.value = {}
 
   // 验证基本字段
   Object.keys(formRules).forEach(field => {
-    if (!validateField(field, assetForm.value[field])) {
-      isValid = false
+    const rules = formRules[field]
+    if (!rules) return
+
+    for (const rule of rules) {
+      // 检查条件验证规则
+      if (rule.when && !rule.when(assetForm.value)) {
+        continue
+      }
+
+      if (!validateField(field, assetForm.value[field])) {
+        isValid = false
+        break
+      }
     }
   })
 
@@ -710,6 +826,7 @@ const validateForm = () => {
   if (assetForm.value.lora_training.enabled) {
     if (!validateCapabilityField('lora_training', 'url')) isValid = false
     if (!validateCapabilityField('lora_training', 'port')) isValid = false
+    if (!validateCapabilityField('lora_training', 'params')) isValid = false
   }
 
   // 验证 AI 引擎能力
@@ -732,6 +849,56 @@ const showCreateAsset = () => {
 onMounted(() => {
   fetchAssets()
 })
+
+const openTerminal = (asset) => {
+  selectedTerminalAsset.value = asset
+  showTerminal.value = true
+}
+
+// 添加SSH验证状态
+const isVerifyingSsh = ref(false)
+
+// SSH连接验证方法
+const verifySshConnection = async () => {
+  // 验证必要字段
+  if (!validateField('ip', assetForm.value.ip) || 
+      !validateField('ssh_port', assetForm.value.ssh_port) ||
+      !validateField('ssh_username', assetForm.value.ssh_username)) {
+    return
+  }
+
+  if (assetForm.value.ssh_auth_type === 'PASSWORD' && 
+      !validateField('ssh_password', assetForm.value.ssh_password)) {
+    return
+  }
+
+  if (assetForm.value.ssh_auth_type === 'KEY' && 
+      !validateField('ssh_key_path', assetForm.value.ssh_key_path)) {
+    return
+  }
+
+  try {
+    isVerifyingSsh.value = true
+    
+    // 构建验证数据
+    const verifyData = {
+      ip: assetForm.value.ip,
+      ssh_port: assetForm.value.ssh_port,
+      ssh_username: assetForm.value.ssh_username,
+      ssh_auth_type: assetForm.value.ssh_auth_type,
+      ssh_password: assetForm.value.ssh_password,
+      ssh_key_path: assetForm.value.ssh_key_path
+    }
+
+    // 调用API验证SSH连接
+    await assetApi.verifySshConnection(verifyData)
+    message.success('SSH连接验证成功')
+  } catch (error) {
+    message.error(error.message || 'SSH连接验证失败')
+  } finally {
+    isVerifyingSsh.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -1047,7 +1214,7 @@ onMounted(() => {
 
 .asset-card-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
@@ -1107,7 +1274,8 @@ onMounted(() => {
   }
   
   .asset-card-actions {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
   }
 }
 
@@ -1306,5 +1474,89 @@ onMounted(() => {
 .mac-textarea:disabled {
   background: #F3F4F6;
   cursor: not-allowed;
+}
+
+.terminal-btn {
+  background: #F0F9FF;
+  color: #0369A1;
+  border: none;
+}
+
+.terminal-btn:hover {
+  background: #E0F2FE;
+}
+
+.mac-input[type="password"] {
+  font-family: monospace;
+  letter-spacing: 0.2em;
+}
+
+select.mac-input {
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px;
+  appearance: none;
+  cursor: pointer;
+}
+
+select.mac-input:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23007AFF'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+}
+
+/* 添加过渡效果 */
+.form-item {
+  transition: all 0.3s ease;
+}
+
+.ssh-verify-section {
+  position: relative;
+}
+
+.input-with-button {
+  display: flex;
+  gap: 8px;
+}
+
+.input-with-button .mac-input {
+  flex: 1;
+}
+
+.verify-ssh-btn {
+  padding: 0 12px;
+  background: #F0F9FF;
+  color: #0369A1;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.verify-ssh-btn:hover:not(:disabled) {
+  background: #E0F2FE;
+}
+
+.verify-ssh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 加载动画 */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #0369A1;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 </style> 

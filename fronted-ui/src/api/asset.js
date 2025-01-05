@@ -46,5 +46,15 @@ export const assetApi = {
    */
   verifyCapabilities(id) {
     return request.post(`${BASE_URL}/${id}/verify`)
+  },
+
+  /**
+   * 验证SSH连接
+   * @param {Object} data - SSH连接参数
+   * @returns {Promise<Object>} 验证结果
+   */
+  async verifySshConnection(data) {
+    const response = await request.post(`${BASE_URL}/verify-ssh`, data)
+    return response.data
   }
 } 
