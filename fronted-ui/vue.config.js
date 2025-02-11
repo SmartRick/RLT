@@ -12,6 +12,10 @@ module.exports = defineConfig({
           '^/api': '/api'
         },
         ws: true
+      },
+      '/uploads': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
       }
     }
   },

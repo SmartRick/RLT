@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Assets from '../views/Assets.vue'
 import Tasks from '../views/Tasks.vue'
+import TaskDetail from '../views/TaskDetail.vue'
 import Settings from '../views/Settings.vue'
 
 /**
@@ -34,6 +35,15 @@ export const routes = [
     component: Tasks,
     meta: {
       title: '任务管理',
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/tasks/:id',
+    name: 'TaskDetail',
+    component: TaskDetail,
+    meta: {
+      title: '任务详情',
       requiresAuth: true
     }
   },

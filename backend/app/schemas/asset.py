@@ -8,6 +8,7 @@ class LoraTrainingConfig(BaseModel):
     port: Optional[int] = None
     config_path: Optional[str] = ''
     params: Optional[str] = '{}'
+    verified: bool = False
 
     @validator('url')
     def validate_url(cls, v, values):
@@ -29,6 +30,7 @@ class AIEngineConfig(BaseModel):
     enabled: bool = False
     url: Optional[str] = ''
     port: Optional[int] = None
+    verified: bool = False
 
     @validator('url')
     def validate_url(cls, v, values):

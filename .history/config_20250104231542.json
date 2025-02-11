@@ -1,8 +1,0 @@
-{
-  "source_dir": "L:\\lora-scripts-1.10.0\\train",
-  "lora_output_path": "L:\\lora-scripts-1.10.0\\output",
-  "scheduling_minute": 2,
-  "url": "http://127.0.0.1:28000",
-  "mark_pan_dir": "/loraFile/mark",
-  "lora_pan_upload_dir":"/loraFile/lora"
-}

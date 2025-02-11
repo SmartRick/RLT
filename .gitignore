@@ -12,6 +12,7 @@ dist/
 *.njsproj
 *.sln
 *.sw?
+.history
 
 # OS
 .DS_Store

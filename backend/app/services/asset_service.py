@@ -116,7 +116,7 @@ class AssetService:
             with get_db() as db:
                 asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
                 if not asset:
-                    raise ValueError("Asset not found")
+                    raise ValueError("资产不存在")
 
                 results = {
                     'lora_training': False,
@@ -126,25 +126,83 @@ class AssetService:
                 # 验证Lora训练能力
                 if asset.lora_training.get('enabled'):
                     try:
-                        # TODO: 实现具体的验证逻辑
-                        results['lora_training'] = True
-                        asset.lora_training['verified'] = True
+                        url = asset.lora_training.get('url', '')
+                        port = asset.lora_training.get('port')
+                        
+                        if url and port:
+                            import socket
+                            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            sock.settimeout(5)
+                            
+                            try:
+                                sock.connect((url, int(port)))
+                                results['lora_training'] = True
+                                asset.lora_training = {
+                                    **asset.lora_training,
+                                    'verified': True
+                                }
+                            except Exception as e:
+                                logger.error(f"Lora训练服务连接失败: {url}:{port}, 错误: {str(e)}")
+                                asset.lora_training = {
+                                    **asset.lora_training,
+                                    'verified': False
+                                }
+                            finally:
+                                sock.close()
+                        else:
+                            asset.lora_training = {
+                                **asset.lora_training,
+                                'verified': False
+                            }
                     except Exception as e:
-                        logger.error(f"Lora training verification failed: {str(e)}")
+                        logger.error(f"Lora训练验证失败: {str(e)}")
+                        asset.lora_training = {
+                            **asset.lora_training,
+                            'verified': False
+                        }
 
                 # 验证AI引擎能力
                 if asset.ai_engine.get('enabled'):
                     try:
-                        # TODO: 实现具体的验证逻辑
-                        results['ai_engine'] = True
-                        asset.ai_engine['verified'] = True
+                        url = asset.ai_engine.get('url', '')
+                        port = asset.ai_engine.get('port')
+                        
+                        if url and port:
+                            import socket
+                            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            sock.settimeout(5)
+                            
+                            try:
+                                sock.connect((url, int(port)))
+                                results['ai_engine'] = True
+                                asset.ai_engine = {
+                                    **asset.ai_engine,
+                                    'verified': True
+                                }
+                            except Exception as e:
+                                logger.error(f"AI引擎服务连接失败: {url}:{port}, 错误: {str(e)}")
+                                asset.ai_engine = {
+                                    **asset.ai_engine,
+                                    'verified': False
+                                }
+                            finally:
+                                sock.close()
+                        else:
+                            asset.ai_engine = {
+                                **asset.ai_engine,
+                                'verified': False
+                            }
                     except Exception as e:
-                        logger.error(f"AI engine verification failed: {str(e)}")
+                        logger.error(f"AI引擎验证失败: {str(e)}")
+                        asset.ai_engine = {
+                            **asset.ai_engine,
+                            'verified': False
+                        }
 
                 db.commit()
                 return results
         except Exception as e:
-            logger.error(f"Verify capabilities failed: {str(e)}")
+            logger.error(f"验证资产能力失败: {str(e)}")
             raise
 
     @staticmethod

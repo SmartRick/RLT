@@ -33,4 +33,26 @@ class Asset(Base):
     })
     
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) 
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # 添加任务计数字段
+    marking_tasks_count = Column(Integer, default=0, comment='当前标记任务数')
+    training_tasks_count = Column(Integer, default=0, comment='当前训练任务数')
+    max_concurrent_tasks = Column(Integer, default=2, comment='最大并发任务数')
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'ip': self.ip,
+            'ssh_port': self.ssh_port,
+            'ssh_username': self.ssh_username,
+            'ssh_auth_type': self.ssh_auth_type,
+            'status': self.status,
+            'lora_training': self.lora_training,
+            'ai_engine': self.ai_engine,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'marking_tasks_count': self.marking_tasks_count,
+            'training_tasks_count': self.training_tasks_count,
+            'max_concurrent_tasks': self.max_concurrent_tasks
+        }

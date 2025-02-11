@@ -1,0 +1,268 @@
+{
+  "31": {
+    "inputs": {
+      "tag_text": [
+        "171",
+        0
+      ],
+      "custom_path": [
+        "154",
+        0
+      ],
+      "filename_prefix": "flux",
+      "timestamp": "None",
+      "format": "png",
+      "quality": 100,
+      "preview": true,
+      "image": [
+        "35",
+        0
+      ]
+    },
+    "class_type": "LayerUtility: ImageTaggerSave",
+    "_meta": {
+      "title": "LayerUtility: Image Tagger Save"
+    }
+  },
+  "35": {
+    "inputs": {
+      "aspect_ratio": "1:1",
+      "proportional_width": 512,
+      "proportional_height": 512,
+      "method": "lanczos",
+      "scale_to_side": "longest",
+      "scale_to_length": 512,
+      "round_to_multiple": "8",
+      "image": [
+        "48",
+        0
+      ],
+      "mask": [
+        "152",
+        0
+      ]
+    },
+    "class_type": "LayerUtility: ImageAutoCrop V3",
+    "_meta": {
+      "title": "LayerUtility: ImageAutoCrop V3"
+    }
+  },
+  "48": {
+    "inputs": {
+      "directory": [
+        "57",
+        0
+      ],
+      "image_load_cap": 50,
+      "start_index": 0,
+      "load_always": false
+    },
+    "class_type": "LoadImageListFromDir //Inspire",
+    "_meta": {
+      "title": "加载图像列表(路径)"
+    }
+  },
+  "57": {
+    "inputs": {
+      "string": "J:\\代训练素材\\熊猫花花"
+    },
+    "class_type": "LayerUtility: String",
+    "_meta": {
+      "title": "LayerUtility: String"
+    }
+  },
+  "64": {
+    "inputs": {
+      "prompt": "One sentence descriptive description of this picture",
+      "max_new_tokens": 300,
+      "temperature": 0.5,
+      "cache": true,
+      "speak_and_recognation": true,
+      "joy_pipeline": [
+        "65",
+        0
+      ],
+      "image": [
+        "48",
+        0
+      ]
+    },
+    "class_type": "Joy_caption",
+    "_meta": {
+      "title": "JoyCaption"
+    }
+  },
+  "65": {
+    "inputs": {
+      "model": "unsloth/Meta-Llama-3.1-8B-bnb-4bit"
+    },
+    "class_type": "Joy_caption_load",
+    "_meta": {
+      "title": "加载JoyCaption"
+    }
+  },
+  "135": {
+    "inputs": {
+      "text": [
+        "136",
+        0
+      ],
+      "path": [
+        "172",
+        0
+      ],
+      "filename_prefix": "ComfyUI",
+      "filename_delimiter": "_",
+      "filename_number_padding": 4,
+      "file_extension": ".txt",
+      "encoding": "utf-8",
+      "filename_suffix": ""
+    },
+    "class_type": "Save Text File",
+    "_meta": {
+      "title": "保存文本"
+    }
+  },
+  "136": {
+    "inputs": {
+      "join_with": "\\n",
+      "string_list": [
+        "171",
+        0
+      ]
+    },
+    "class_type": "StringListToString",
+    "_meta": {
+      "title": "String List to String"
+    }
+  },
+  "150": {
+    "inputs": {
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 0,
+      "crop_factor": 3,
+      "drop_size": 10,
+      "sub_threshold": 0.5,
+      "sub_dilation": 0,
+      "sub_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7000000000000001,
+      "post_dilation": 0,
+      "bbox_detector": [
+        "151",
+        0
+      ],
+      "image": [
+        "48",
+        0
+      ]
+    },
+    "class_type": "ImpactSimpleDetectorSEGS",
+    "_meta": {
+      "title": "简易Seg检测"
+    }
+  },
+  "151": {
+    "inputs": {
+      "model_name": "bbox/face_yolov8m.pt"
+    },
+    "class_type": "UltralyticsDetectorProvider",
+    "_meta": {
+      "title": "检测加载器"
+    }
+  },
+  "152": {
+    "inputs": {
+      "segs": [
+        "150",
+        0
+      ]
+    },
+    "class_type": "ImpactSEGSToMaskBatch",
+    "_meta": {
+      "title": "Seg到遮罩组"
+    }
+  },
+  "154": {
+    "inputs": {
+      "delimiter": "\\",
+      "clean_whitespace": "true",
+      "text_a": [
+        "57",
+        0
+      ],
+      "text_b": [
+        "155",
+        0
+      ]
+    },
+    "class_type": "Text Concatenate",
+    "_meta": {
+      "title": "文本连锁"
+    }
+  },
+  "155": {
+    "inputs": {
+      "string": "15_熊猫花花"
+    },
+    "class_type": "Simple String",
+    "_meta": {
+      "title": "简易字符串"
+    }
+  },
+  "168": {
+    "inputs": {
+      "source": [
+        "64",
+        0
+      ],
+      "to_replace": ". This is ",
+      "replace_with": ""
+    },
+    "class_type": "JWStringReplace",
+    "_meta": {
+      "title": "String Replace"
+    }
+  },
+  "170": {
+    "inputs": {
+      "source": [
+        "168",
+        0
+      ],
+      "to_replace": ". The",
+      "replace_with": ""
+    },
+    "class_type": "JWStringReplace",
+    "_meta": {
+      "title": "String Replace"
+    }
+  },
+  "171": {
+    "inputs": {
+      "source": [
+        "170",
+        0
+      ],
+      "to_replace": ". ",
+      "replace_with": ""
+    },
+    "class_type": "JWStringReplace",
+    "_meta": {
+      "title": "String Replace"
+    }
+  },
+  "172": {
+    "inputs": {
+      "delimiter": "\\",
+      "clean_whitespace": "true",
+      "text_a": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "Text Concatenate",
+    "_meta": {
+      "title": "文本连锁"
+    }
+  }
+}

@@ -99,9 +99,19 @@
             <TerminalIcon class="btn-icon" />
             <span>终端</span>
           </button>
-          <button class="mac-btn small verify-btn" @click.stop="verifyCapabilities(asset)">
-            <CheckCircleIcon class="btn-icon" />
-            <span>验证</span>
+          <button 
+            class="mac-btn small verify-btn" 
+            :disabled="asset.isVerifying"
+            @click.stop="verifyCapabilities(asset)"
+          >
+            <template v-if="!asset.isVerifying">
+              <CheckCircleIcon class="btn-icon" />
+              <span>验证</span>
+            </template>
+            <template v-else>
+              <span class="loading-spinner"></span>
+              <span>验证中</span>
+            </template>
           </button>
           <button class="mac-btn small edit-btn" @click.stop="showEditModal(asset)">
             <PencilIcon class="btn-icon" />
@@ -439,12 +449,14 @@ const resetForm = () => {
       url: '',
       port: null,
       config_path: '',
+      verified: false,
       params: JSON.stringify({}, null, 2)
     },
     ai_engine: {
       enabled: false,
       url: '',
-      port: null
+      port: null,
+      verified: false
     }
   }
   formErrors.value = {}
@@ -534,9 +546,25 @@ const displayedPages = computed(() => {
 const fetchAssets = async () => {
   try {
     const data = await assetApi.getAssets()
-    assets.value = data
+    assets.value = data.map(asset => ({
+      ...asset,
+      isVerifying: false // 添加验证状态标记
+    }))
+    
+    // 对已启用能力的资产进行自动验证
+    const verifyPromises = assets.value
+      .filter(asset => asset.lora_training?.enabled || asset.ai_engine?.enabled)
+      .map(asset => {
+        asset.autoVerifying = true // 标记为自动验证
+        return verifyCapabilities(asset)
+      })
+    
+    // 并行执行所有验证
+    await Promise.all(verifyPromises)
+    
   } catch (error) {
     console.error('获取资产列表失败:', error)
+    message.error('获取资产列表失败')
   }
 }
 
@@ -563,25 +591,37 @@ const handleSubmit = async () => {
       lora_training: assetForm.value.lora_training.enabled 
         ? {
             ...assetForm.value.lora_training,
+            verified: false, // 新建或更新时重置验证状态
             params: typeof assetForm.value.lora_training.params === 'string' 
               ? assetForm.value.lora_training.params 
               : JSON.stringify(assetForm.value.lora_training.params)
           }
-        : { enabled: false, url: '', port: null, config_path: '', params: '{}' },
+        : { enabled: false, url: '', port: null, config_path: '', params: '{}', verified: false },
       ai_engine: assetForm.value.ai_engine.enabled
-        ? assetForm.value.ai_engine
-        : { enabled: false, url: '', port: null }
+        ? {
+            ...assetForm.value.ai_engine,
+            verified: false // 新建或更新时重置验证状态
+          }
+        : { enabled: false, url: '', port: null, verified: false }
     }
 
+    let newAsset
     if (isEditing.value) {
-      await assetApi.updateAsset(formData.id, formData)
+      newAsset = await assetApi.updateAsset(formData.id, formData)
       message.success('资产更新成功')
     } else {
-      await assetApi.createAsset(formData)
+      newAsset = await assetApi.createAsset(formData)
       message.success('资产创建成功')
     }
     
     showAssetModal.value = false
+    
+    // 如果有启用的能力，立即进行验证
+    if (newAsset && (newAsset.lora_training?.enabled || newAsset.ai_engine?.enabled)) {
+      newAsset.autoVerifying = true // 标记为自动验证
+      await verifyCapabilities(newAsset)
+    }
+    
     await fetchAssets()
     resetForm()
   } catch (error) {
@@ -620,26 +660,38 @@ const confirmDelete = async (asset) => {
 
 // 验证资产能力
 const verifyCapabilities = async (asset) => {
+  if (asset.isVerifying) return // 如果正在验证中，直接返回
+  
   try {
+    asset.isVerifying = true
     const results = await assetApi.verifyCapabilities(asset.id)
-    // 更新资产状态
-    const index = assets.value.findIndex(a => a.id === asset.id)
-    if (index !== -1) {
-      assets.value[index] = {
-        ...assets.value[index],
-        lora_training: {
-          ...assets.value[index].lora_training,
-          verified: results.lora_training
-        },
-        ai_engine: {
-          ...assets.value[index].ai_engine,
-          verified: results.ai_engine
-        }
+    
+    // 更新资产的验证状态
+    if (asset.lora_training?.enabled) {
+      asset.lora_training.verified = results.lora_training
+    }
+    if (asset.ai_engine?.enabled) {
+      asset.ai_engine.verified = results.ai_engine
+    }
+    
+    // 只在手动验证时显示提示
+    if (!asset.autoVerifying) {
+      if (results.lora_training || results.ai_engine) {
+        message.success('能力验证完成')
+      } else {
+        message.warning('能力验证未通过，请检查服务配置')
       }
-      message.success('验证完成')
     }
   } catch (error) {
-    message.error(error.message || '验证失败')
+    // 只在手动验证时显示错误提示
+    if (!asset.autoVerifying) {
+      message.error(error.message || '验证失败')
+    } else {
+      console.error('自动验证失败:', error)
+    }
+  } finally {
+    asset.isVerifying = false
+    delete asset.autoVerifying
   }
 }
 
