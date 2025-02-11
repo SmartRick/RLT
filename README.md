@@ -1,50 +1,134 @@
-# 下载依赖
+# AI Lora Training Platform
+
+一个用于管理和自动化 AI 绘图 Lora 模型训练的平台系统。支持训练资产管理、任务调度、进度监控等功能。
+
+## 功能特性
+
+### 1. 资产管理
+- 支持多训练节点管理
+- SSH 远程连接配置
+- 节点状态监控
+- 并发任务数控制
+
+### 2. 训练流程自动化
+- 素材自动下载 (支持百度网盘)
+- 数据标注处理
+- Lora 模型训练
+- 成品模型上传
+
+### 3. 任务管理
+- 可视化任务状态追踪
+- 实时训练进度展示
+- 训练日志实时查看
+- 失败任务自动重试
+
+### 4. 系统配置
+- 灵活的训练参数配置
+- 节点资源分配策略
+- 调度间隔设置
+- 并发限制控制
+
+## 技术架构
+
+### 后端
+- Flask + SQLAlchemy
+- WebSocket 实时通信
+- 多线程任务调度
+- 分布式任务处理
+
+### 前端
+- Vue 3 
+- Vue Router
+- 响应式界面设计
+- 实时数据更新
+
+## 快速开始
+
+### 环境要求
+- Python 3.8+
+- Node.js 14+
+- SQLite/MySQL
+- Redis (可选,用于任务队列)
+
+### 安装部署
+
+1. 克隆项目
+bash```
+git clone <repository_url>
+cd ai-lora-training
+```
+2. 安装后端依赖
+bash```
+cd backend
 pip install -r requirements.txt
-# 运行命令：
-nohup python main.py > output.log 2>&1 &
+```
+3. 安装前端依赖
+bash```
+cd frontend
+npm install
+```
+5. 启动服务
+启动后端
+python run.py
+启动前端
+npm run dev
 
-# 查看日志：
-tail -500f output.log
+## 系统架构
 
-# finished_cache
-finished_cache里面存放的是已经训练完的资源文件夹，如果是第一次运行脚本清空里面的内容或者直接删除该文件
-# mark_folder_download
-mark_folder_download里面存放的是从百度云盘上下载的打标素材文件夹，如果是第一次运行脚本清空里面的内容或者直接删除该文件
+### 核心模块
+- TaskQueue: 任务队列管理
+- TaskScheduler: 调度器
+- AssetManager: 资产管理
+- TrainingService: 训练服务
+- ConfigService: 配置管理
 
-# config.json
-config.json存放的是配置文件，需要根据自己的需求进行修改配置
-![img.png](img.png)
-如我这里放了两个需要训练的资源文件夹，就指定到它的上级就行了
-![img_1.png](img_1.png)
-![img_2.png](img_2.png)
+### 数据流
+```
+素材下载 -> 数据标注 -> 模型训练 -> 结果上传
+```
 
-# request.json
-请求参数，其他内容都不需要关注
-将**payload**部分通过配置文件toml译成json即可
-将**header**部分的Cookie部分建议换成实际请求里的，推测不同容器里面的token不一样，混入了容器id
-
-**ps: 我未对比过json是否和toml完全一致，为了确定稳定性建议直接复制请求接口里的请求体内容**
+### 状态流转
+NEW -> SUBMITTED -> MARKING -> MARKED -> TRAINING -> COMPLETED
 
 
-# 配置文件说明：
-**source_dir:** 打标素材的文件夹路径，也是百度云盘下载的目的文件夹路径。由于onethingAI的百度云下载链接对目的文件夹路径做了权限限制， 只能下载到/root/onethingai-tmp
-但应该是做了文件夹挂载映射的，/root/onethingai-tmp/train/能直接映射到/app/sd-trainer/train目录下，所以这个配置保持默认/root/onethingai-tmp/train/即可
+## 开发指南
 
-**lora_output_path**: 最终训练好的lora的目的路径，保持默认即可/app/sd-trainer/output/
+### 添加新训练节点
+1. 在资产管理中添加新节点
+2. 配置SSH连接信息
+3. 设置并发限制
+4. 验证节点连接
 
-**scheduling_minute**: 每隔多少分钟触发一次训练任务
+### 自定义训练流程
+1. 实现自定义TrainingHandler
+2. 注册到TrainingService
+3. 更新配置文件
+4. 重启调度服务
 
-**url**: 训练lora任务的url，如果是onething上直接部署的话，填http://127.0.0.1:7860即可。如果是本地环境调试填类似https://csqvboagnhu5ok9l-zy0kisaq-sdwebui.instance.onethingbusiness.com
+## 常见问题
 
-**mark_pan_dir**: 百度云盘素材打标文件夹的源路径
+1. **任务卡在PENDING状态**
+   - 检查节点连接状态
+   - 确认并发限制设置
+   - 查看错误日志
 
-**lora_pan_upload_dir**: 训练好的lora，需要上传的百度云盘目的路径
+2. **训练失败自动重试**
+   - 系统会自动重试失败任务
+   - 最大重试次数可配置
+   - 查看任务历史记录
 
-**cookie**: lora训练任务请求时的cookie，去页面请求一次复制
+## 维护说明
 
-**Authorization**: 百度云相关的接口需要，测试了好像是固定的，但可能也是有几天的日期，操作一次百度云相关接口比如刷新然后替换
+1. **日志管理**
+   - 日志位于 logs/ 目录
+   - 按日期自动轮转
+   - 支持日志级别配置
 
-**panId**: 操作一次百度云相关接口比如刷新然后替换
+2. **数据备份**
+   - 定期备份数据库
+   - 配置文件备份
+   - 训练成果备份
 
-**instanceId**: 操作一次百度云相关接口比如刷新然后替换
-![img_3.png](img_3.png)
+## License
+
+MIT License
