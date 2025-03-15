@@ -77,7 +77,7 @@ class Task(Base):
         
         # 初始化状态历史
         if not self.status_history:
-            self.status_history = {}
+            self.status_history = []
             
         # 如果是新状态，创建新的状态记录
         if new_status not in self.status_history:

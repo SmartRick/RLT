@@ -60,22 +60,47 @@
     </div>
 
     <!-- 任务状态日志 -->
-    <div v-for="(status, statusKey) in task.status_history" :key="statusKey" class="status-record">
-      <div class="status-header">
-        <div class="status-badge" :class="getStatusClass(statusKey)">
-          {{ getStatusText(statusKey) }}
+    <div v-if="task?.status_history && typeof task.status_history === 'object'">
+      <template v-if="Array.isArray(task.status_history)">
+        <!-- 当status_history是数组时 -->
+        <div v-for="(item, index) in task.status_history" :key="index" class="status-record">
+          <div class="status-header">
+            <div class="status-badge" :class="getStatusClass(item.status)">
+              {{ getStatusText(item.status) }}
+            </div>
+            <div class="status-time">
+              <span>{{ formatDate(item?.start_time) }}</span>
+              <span v-if="item?.end_time">- {{ formatDate(item?.end_time) }}</span>
+            </div>
+          </div>
+          <div class="status-logs">
+            <div v-for="(log, logIndex) in item?.logs" :key="logIndex" class="log-item">
+              <div class="log-time">{{ formatTime(log?.time) }}</div>
+              <div class="log-message">{{ log?.message }}</div>
+            </div>
+          </div>
         </div>
-        <div class="status-time">
-          <span>{{ formatDate(status.start_time) }}</span>
-          <span v-if="status.end_time">- {{ formatDate(status.end_time) }}</span>
+      </template>
+      <template v-else>
+        <!-- 当status_history是对象时 -->
+        <div v-for="(status, statusKey) in task.status_history" :key="statusKey" class="status-record">
+          <div class="status-header">
+            <div class="status-badge" :class="getStatusClass(statusKey)">
+              {{ getStatusText(statusKey) }}
+            </div>
+            <div class="status-time">
+              <span>{{ formatDate(status?.start_time) }}</span>
+              <span v-if="status?.end_time">- {{ formatDate(status?.end_time) }}</span>
+            </div>
+          </div>
+          <div class="status-logs">
+            <div v-for="(log, index) in status?.logs" :key="index" class="log-item">
+              <div class="log-time">{{ formatTime(log?.time) }}</div>
+              <div class="log-message">{{ log?.message }}</div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="status-logs">
-        <div v-for="(log, index) in status.logs" :key="index" class="log-item">
-          <div class="log-time">{{ formatTime(log.time) }}</div>
-          <div class="log-message">{{ log.message }}</div>
-        </div>
-      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -140,8 +165,18 @@ const isStateError = (status) => {
 
 // 获取状态时间和消息
 const getStateTime = (status) => {
-  const stateHistory = props.task?.status_history?.find(h => h.status === status)
-  return stateHistory ? formatDateTime(stateHistory.timestamp) : null
+  // 如果status_history不存在，直接返回null
+  if (!props.task?.status_history) return null;
+  
+  // 处理status_history是对象而不是数组的情况
+  if (Array.isArray(props.task.status_history)) {
+    const stateHistory = props.task.status_history.find(h => h.status === status)
+    return stateHistory ? formatDateTime(stateHistory.timestamp) : null
+  } else {
+    // 当status_history是对象时，直接按键查找
+    const stateHistory = props.task.status_history[status]
+    return stateHistory ? formatDateTime(stateHistory.timestamp) : null
+  }
 }
 
 

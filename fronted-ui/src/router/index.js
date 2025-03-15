@@ -36,16 +36,18 @@ export const routes = [
     meta: {
       title: '任务管理',
       requiresAuth: true
-    }
-  },
-  {
-    path: '/tasks/:id',
-    name: 'TaskDetail',
-    component: TaskDetail,
-    meta: {
-      title: '任务详情',
-      requiresAuth: true
-    }
+    },
+    children: [
+      {
+        path: ':id',
+        name: 'TaskDetail',
+        component: TaskDetail,
+        meta: {
+          title: '任务详情',
+          requiresAuth: true
+        }
+      }
+    ]
   },
   {
     path: '/settings',

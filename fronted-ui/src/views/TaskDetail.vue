@@ -3,10 +3,6 @@
     <!-- 顶部操作栏 -->
     <div class="action-bar mac-card">
       <div class="left-section">
-        <button class="mac-btn" @click="goBack">
-          <ArrowLeftIcon class="btn-icon" />
-          返回
-        </button>
         <h2 class="task-title">{{ task?.name }}</h2>
         <div class="task-status-badge" :class="getStatusClass(task?.status)">
           {{ getStatusText(task?.status) }}
@@ -153,14 +149,14 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { 
-  ArrowLeftIcon,
   TagIcon,
   PlayIcon,
   PlusIcon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowPathIcon
 } from '@heroicons/vue/24/outline'
 import { tasksApi } from '@/api/tasks'
-import { formatDate } from '@/utils/date'
+import { formatDate } from '@/utils/datetime'
 import message from '@/utils/message'
 import ImageGrid from '@/components/tasks/ImageGrid.vue'
 import ImageUploader from '@/components/tasks/ImageUploader.vue'
@@ -170,7 +166,7 @@ import TaskStatus from '@/components/tasks/TaskStatus.vue'
 
 const route = useRoute()
 const router = useRouter()
-const taskId = route.params.id
+const taskId = computed(() => route.params.id)
 
 // 状态
 const task = ref(null)
@@ -186,9 +182,11 @@ const REFRESH_INTERVAL = 5000 // 5秒刷新一次
 
 // 获取任务详情
 const fetchTask = async () => {
+  if (!taskId.value) return // 添加ID判断，防止无ID时请求
+  
   try {
     isLoading.value = true
-    const data = await tasksApi.getTaskById(taskId)
+    const data = await tasksApi.getTaskById(taskId.value)
     if (data) {
       task.value = data
       // 根据任务状态决定是否需要继续自动刷新
@@ -208,6 +206,14 @@ const fetchTask = async () => {
     isLoading.value = false
   }
 }
+
+// 监听任务ID变化，立即获取对应任务详情
+watch(taskId, (newId, oldId) => {
+  // 仅当ID真实变化且有效时执行
+  if (newId && newId !== oldId) {
+    fetchTask()
+  }
+})
 
 // 监听任务状态变化
 watch(() => task.value?.status, (newStatus, oldStatus) => {
@@ -302,7 +308,7 @@ const handleUploadConfirm = async () => {
       formData.append('images', file)
     })
 
-    await tasksApi.uploadImages(taskId, formData)
+    await tasksApi.uploadImages(taskId.value, formData)
     message.success('图片上传成功')
     showUploadModal.value = false
     files.value = []
@@ -317,7 +323,7 @@ const handleUploadConfirm = async () => {
 // 处理图片删除
 const handleDeleteImage = async (imageId) => {
   try {
-    await tasksApi.deleteImage(taskId, imageId)
+    await tasksApi.deleteImage(taskId.value, imageId)
     message.success('删除成功')
     fetchTask()
   } catch (error) {
@@ -335,7 +341,7 @@ const handlePreview = (image) => {
 const handleSubmitMarking = async () => {
   try {
     isLoading.value = true
-    const response = await tasksApi.startMarking(taskId)
+    const response = await tasksApi.startMarking(taskId.value)
     
     if (response.error) {
       if (response.error_type === 'VALIDATION_ERROR') {
@@ -359,7 +365,7 @@ const handleSubmitMarking = async () => {
 const handleStartTraining = async () => {
   try {
     isLoading.value = true
-    await tasksApi.startTraining(taskId)
+    await tasksApi.startTraining(taskId.value)
     message.success('开始训练')
     fetchTask()
   } catch (error) {
@@ -373,7 +379,7 @@ const handleStartTraining = async () => {
 const handleRestart = async () => {
   try {
     isLoading.value = true
-    const response = await tasksApi.restartTask(taskId)
+    const response = await tasksApi.restartTask(taskId.value)
     
     if (!response.success) {
       console.log('Restart task failed:', response.error)
@@ -400,7 +406,7 @@ const handleRestart = async () => {
 const handleCancel = async () => {
   try {
     isLoading.value = true
-    const response = await tasksApi.cancelTask(taskId)
+    const response = await tasksApi.cancelTask(taskId.value)
     
     if (!response.success) {
       console.log('Cancel task failed:', response.error)
@@ -420,11 +426,6 @@ const handleCancel = async () => {
   } finally {
     isLoading.value = false
   }
-}
-
-// 返回列表
-const goBack = () => {
-  router.push('/tasks')
 }
 
 // 是否需要自动刷新
@@ -455,8 +456,10 @@ const stopAutoRefresh = () => {
 
 // 初始化
 onMounted(() => {
-  fetchTask()
-  startAutoRefresh()
+  if (taskId.value) {
+    fetchTask()
+    startAutoRefresh()
+  }
 })
 
 // 清理
@@ -471,7 +474,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 20px;
 }
 
 .action-bar {
@@ -504,6 +506,7 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 20px;
+  overflow: hidden;
 }
 
 .images-section {
@@ -528,7 +531,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  min-width: 400px;
+  min-width: 300px;
+  overflow: auto;
 }
 
 .info-grid {

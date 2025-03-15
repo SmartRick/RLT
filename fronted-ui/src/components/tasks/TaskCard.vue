@@ -99,7 +99,7 @@ import {
   EyeIcon,
   TrashIcon
 } from '@heroicons/vue/24/outline'
-import { formatDate } from '@/utils/date'
+import { formatDate } from '@/utils/datetime'
 
 const props = defineProps({
   task: {

@@ -1,234 +1,233 @@
 <template>
-  <div class="tasks-container">
-    <!-- 顶部操作栏 -->
-    <div class="action-bar mac-card">
-      <div class="left-section">
-        <!-- 搜索框 -->
-        <div class="search-box">
-          <MagnifyingGlassIcon class="search-icon" />
-          <input 
-            v-model="searchQuery"
-            type="text" 
-            placeholder="搜索任务..." 
-            class="mac-search-input"
-            @input="handleSearch"
-          >
-        </div>
-        
-        <!-- 过滤器组 -->
-        <div class="filter-group">
-          <select 
-            v-model="statusFilter" 
-            class="mac-select"
-            @change="handleFilterChange"
-          >
-            <option value="">全部状态</option>
-            <option value="NEW">新建</option>
-            <option value="MARKING">标记中</option>
-            <option value="MARKED">已标记</option>
-            <option value="TRAINING">训练中</option>
-            <option value="COMPLETED">已完成</option>
-            <option value="ERROR">错误</option>
-          </select>
-
-          <select 
-            v-model="dateFilter" 
-            class="mac-select"
-            @change="handleFilterChange"
-          >
-            <option value="">全部时间</option>
-            <option value="today">今天</option>
-            <option value="week">本周</option>
-            <option value="month">本月</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- 右侧操作 -->
-      <div class="right-section">
-        <button 
-          class="mac-btn primary"
-          @click="showCreateTask"
-        >
-          <PlusIcon class="btn-icon" />
-          新建任务
-        </button>
-      </div>
-    </div>
-
-    <!-- 任务列表 -->
-    <div class="tasks-grid">
-      <TaskCard
-        v-for="task in filteredTasks"
-        :key="task.id"
-        :task="task"
-        @click="openTaskDetail(task)"
-        @delete="handleDeleteTask"
+  <div class="tasks-page">
+    <div class="tasks-container">
+      <!-- 使用TaskList组件 -->
+      <TaskList
+        ref="taskListRef"
+        :selectedTaskId="selectedTaskId"
+        @select="handleTaskSelect"
+        @create="showTaskModal = true"
+        @update:tasks="allTasks = $event"
       />
+      
+      <!-- 任务详情区域 -->
+      <div class="task-detail-container" v-if="selectedTaskId">
+        <router-view />
+      </div>
+      
+      <!-- 无选中任务时的空状态 -->
+      <div class="empty-state" v-else>
+        <div class="empty-content">
+          <DocumentIcon class="empty-icon" />
+          <h3>请选择任务</h3>
+          <p>在左侧列表中选择一个任务查看详情，或创建新任务</p>
+          <button class="mac-btn primary" @click="showTaskModal = true">
+            <PlusIcon class="btn-icon" />
+            新建任务
+          </button>
+        </div>
+      </div>
     </div>
 
-    <!-- 新建任务模态框 -->
+    <!-- 新建任务弹窗 -->
     <BaseModal
       v-model="showTaskModal"
       title="新建训练任务"
-      :loading="isSubmitting"
-      @close="closeTaskModal"
-      @confirm="handleConfirm"
+      :loading="isCreating"
+      @confirm="handleCreateTask"
     >
       <template #body>
-        <TaskForm
-          ref="taskFormRef"
-          :loading="isSubmitting"
-        />
+        <div class="form-group">
+          <label for="taskName">任务名称</label>
+          <input
+            id="taskName"
+            v-model="newTask.name"
+            type="text"
+            placeholder="输入任务名称"
+            class="form-input"
+          />
+        </div>
+        <div class="form-group">
+          <label for="taskDescription">任务描述 (可选)</label>
+          <textarea
+            id="taskDescription"
+            v-model="newTask.description"
+            placeholder="输入任务描述"
+            class="form-textarea"
+            rows="3"
+          ></textarea>
+        </div>
       </template>
     </BaseModal>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { MagnifyingGlassIcon, PlusIcon } from '@heroicons/vue/24/outline'
-import TaskCard from '@/components/tasks/TaskCard.vue'
-import TaskForm from '@/components/tasks/TaskForm.vue'
-import BaseModal from '@/components/common/Modal.vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { 
+  DocumentIcon,
+  PlusIcon
+} from '@heroicons/vue/24/outline'
 import { tasksApi } from '@/api/tasks'
+import BaseModal from '@/components/common/Modal.vue'
+import TaskList from '@/components/tasks/TaskList.vue'
 import message from '@/utils/message'
 
-// 状态
-const tasks = ref([])
-const searchQuery = ref('')
-const statusFilter = ref('')
-const dateFilter = ref('')
-const showTaskModal = ref(false)
-const isSubmitting = ref(false)
-
+const route = useRoute()
 const router = useRouter()
 
-const taskFormRef = ref(null)
-
-// 获取任务列表
-const fetchTasks = async () => {
-  try {
-    const data = await tasksApi.getTasks({
-      status: statusFilter.value,
-      search: searchQuery.value,
-      date: dateFilter.value
-    })
-    tasks.value = data
-  } catch (error) {
-    message.error('获取任务列表失败')
-  }
-}
-
-// 过滤后的任务列表
-const filteredTasks = computed(() => {
-  return tasks.value
+// 状态
+const allTasks = ref([])
+const taskListRef = ref(null)
+const showTaskModal = ref(false)
+const isCreating = ref(false)
+const newTask = ref({
+  name: '',
+  description: ''
 })
 
-// 显示新建任务模态框
-const showCreateTask = () => {
-  showTaskModal.value = true
-}
+// 当前选中的任务ID（从路由参数获取）
+const selectedTaskId = computed(() => route.params.id || '')
 
-// 关闭模态框
-const closeTaskModal = () => {
-  showTaskModal.value = false
-}
-
-// 处理模态框确认
-const handleConfirm = async () => {
-  if (!taskFormRef.value) return
-  
-  // 调用表单的提交方法，并传递处理函数
-  const formData = await taskFormRef.value.submit()
-  if (formData) {
-    handleCreateTask(formData)
+// 处理任务选择
+const handleTaskSelect = (task) => {
+  if (task) {
+    // 导航到任务详情页
+    router.push(`/tasks/${task.id}`)
+  } else if (allTasks.value.length > 0) {
+    // 如果没有选中任务但列表不为空，则默认选择第一个
+    router.push(`/tasks/${allTasks.value[0].id}`)
+  } else {
+    // 列表为空时，导航到任务列表页
+    router.push('/tasks')
   }
 }
 
-// 创建任务
-const handleCreateTask = async (formData) => {
+// 创建新任务
+const handleCreateTask = async () => {
+  if (!newTask.value.name) {
+    message.warning('请输入任务名称')
+    return
+  }
+
   try {
-    isSubmitting.value = true
-    const task = await tasksApi.createTask(formData)
+    isCreating.value = true
+    const task = await tasksApi.createTask(newTask.value)
     message.success('任务创建成功')
-    closeTaskModal()
+    
+    // 重置表单
+    newTask.value = { name: '', description: '' }
+    showTaskModal.value = false
+    
+    // 刷新任务列表
+    if (taskListRef.value) {
+      await taskListRef.value.fetchTasks()
+    }
+    
+    // 导航到新创建的任务详情页
     router.push(`/tasks/${task.id}`)
   } catch (error) {
     message.error('创建任务失败')
   } finally {
-    isSubmitting.value = false
+    isCreating.value = false
   }
 }
 
-// 打开任务详情
-const openTaskDetail = (task) => {
-  router.push(`/tasks/${task.id}`)
-}
-
-// 删除任务
-const handleDeleteTask = async (taskId) => {
-  try {
-    await tasksApi.deleteTask(taskId)
-    message.success('任务已删除')
-    fetchTasks() // 刷新列表
-  } catch (error) {
-    message.error('删除任务失败')
+// 在组件挂载后，如果没有选择任务且列表不为空，则选择第一个任务
+onMounted(async () => {
+  // 如果当前没有选中任务，且路由是/tasks
+  if (!selectedTaskId.value && route.path === '/tasks') {
+    // 等待任务列表加载完成
+    await nextTick()
+    
+    // 如果有任务，选择第一个
+    if (allTasks.value.length > 0) {
+      handleTaskSelect(allTasks.value[0])
+    }
   }
-}
-
-// 初始化
-onMounted(() => {
-  fetchTasks()
 })
+
+// 监听任务列表变化，在必要时自动选择任务
+watch(allTasks, (tasks) => {
+  // 如果有任务但没有选中任何任务，则选择第一个
+  if (tasks.length > 0 && !selectedTaskId.value && route.path === '/tasks') {
+    handleTaskSelect(tasks[0])
+  }
+}, { deep: true })
 </script>
 
 <style scoped>
-.tasks-container {
+.tasks-page {
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
   padding: 20px;
 }
 
-.action-bar {
+.tasks-container {
   display: flex;
-  justify-content: space-between;
+  height: 100%;
+  gap: 20px;
+}
+
+.task-detail-container {
+  flex: 1;
+  overflow: auto;
+  min-width: 0;
+}
+
+.empty-state {
+  flex: 1;
+  display: flex;
   align-items: center;
-  padding: 16px;
+  justify-content: center;
   background: var(--background-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
+  min-width: 0;
 }
 
-.left-section {
+.empty-content {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
-  flex: 1;
+  padding: 40px;
+  max-width: 400px;
+  text-align: center;
 }
 
-.search-box {
-  position: relative;
-  width: 280px;
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  color: var(--text-tertiary);
+  margin-bottom: 16px;
 }
 
-.search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
+.empty-content h3 {
+  font-size: 18px;
+  margin: 0 0 8px 0;
+}
+
+.empty-content p {
   color: var(--text-secondary);
+  margin: 0 0 24px 0;
+  line-height: 1.5;
 }
 
-.mac-search-input {
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.form-input,
+.form-textarea {
   width: 100%;
-  height: 36px;
-  padding: 0 12px 0 36px;
+  padding: 8px 12px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   font-size: 14px;
@@ -236,74 +235,21 @@ onMounted(() => {
   transition: all 0.3s ease;
 }
 
-.mac-search-input:focus {
+.form-input:focus,
+.form-textarea:focus {
   outline: none;
   border-color: var(--primary-color);
   background: var(--background-primary);
-  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.1);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
 }
 
-.filter-group {
-  display: flex;
-  gap: 12px;
-}
-
-.mac-select {
-  height: 36px;
-  padding: 0 32px 0 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 14px;
-  background: var(--background-secondary);
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 16px;
-}
-
-.mac-select:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  background-color: var(--background-primary);
-  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.1);
-}
-
-.right-section {
-  display: flex;
-  gap: 12px;
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
 }
 
 .btn-icon {
   width: 16px;
   height: 16px;
-}
-
-.tasks-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-  padding: 4px;
-  overflow-y: auto;
-}
-
-/* 滚动条样式 */
-.tasks-grid::-webkit-scrollbar {
-  width: 8px;
-}
-
-.tasks-grid::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tasks-grid::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 4px;
-}
-
-.tasks-grid::-webkit-scrollbar-thumb:hover {
-  background: var(--border-color-dark);
 }
 </style> 
