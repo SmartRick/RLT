@@ -1,0 +1,865 @@
+<template>
+  <BaseModal 
+    :modelValue="modelValue"
+    @update:modelValue="$emit('update:modelValue', $event)"
+    :title="isEditing ? '编辑资产' : '新建资产'"
+  >
+    <template #body>
+      <form @submit.prevent="handleSubmit" class="asset-form">
+        <div class="form-section">
+          <h3 class="section-title">基本信息</h3>
+          <div class="form-item">
+            <label>资产名称</label>
+            <input 
+              v-model="assetForm.name" 
+              class="mac-input"
+              :class="{ 'is-error': formErrors.name }"
+              @blur="validateField('name', assetForm.name)"
+              :disabled="isLocalResource || isEditing"
+            >
+            <span class="error-message" v-if="formErrors.name">{{ formErrors.name }}</span>
+          </div>
+          
+          <!-- 非本地资源才显示基本信息字段 -->
+          <template v-if="!isLocalResource">
+            <div class="form-row">
+              <div class="form-item">
+                <label>IP地址</label>
+                <input 
+                  v-model="assetForm.ip" 
+                  class="mac-input"
+                  :class="{ 'is-error': formErrors.ip }"
+                  @blur="validateField('ip', assetForm.ip)"
+                >
+                <span class="error-message" v-if="formErrors.ip">{{ formErrors.ip }}</span>
+              </div>
+              <div class="form-item">
+                <label>SSH端口</label>
+                <input 
+                  v-model="assetForm.ssh_port" 
+                  type="number" 
+                  class="mac-input"
+                  :class="{ 'is-error': formErrors.ssh_port }"
+                  @blur="validateField('ssh_port', assetForm.ssh_port)"
+                >
+                <span class="error-message" v-if="formErrors.ssh_port">{{ formErrors.ssh_port }}</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-item">
+                <label>SSH用户名</label>
+                <input 
+                  v-model="assetForm.ssh_username" 
+                  class="mac-input"
+                  :class="{ 'is-error': formErrors.ssh_username }"
+                  @blur="validateField('ssh_username', assetForm.ssh_username)"
+                >
+                <span class="error-message" v-if="formErrors.ssh_username">{{ formErrors.ssh_username }}</span>
+              </div>
+              <div class="form-item">
+                <label>认证方式</label>
+                <select 
+                  v-model="assetForm.ssh_auth_type" 
+                  class="mac-input"
+                >
+                  <option value="KEY">SSH密钥</option>
+                  <option value="PASSWORD">密码</option>
+                </select>
+              </div>
+            </div>
+            
+            <!-- 根据认证方式显示不同的输入框 -->
+            <div class="form-item ssh-auth-input">
+              <template v-if="assetForm.ssh_auth_type === 'PASSWORD'">
+                <label>SSH密码</label>
+                <div class="input-with-button">
+                  <input 
+                    v-model="assetForm.ssh_password"
+                    type="password"
+                    class="mac-input"
+                    :class="{ 'is-error': formErrors.ssh_password }"
+                    @blur="validateField('ssh_password', assetForm.ssh_password)"
+                  >
+                  <button 
+                    class="mac-btn verify-ssh-btn" 
+                    :disabled="isVerifyingSsh"
+                    @click="verifySshConnection"
+                  >
+                    <CheckCircleIcon class="btn-icon" v-if="!isVerifyingSsh" />
+                    <span class="loading-spinner" v-else></span>
+                    {{ isVerifyingSsh ? '验证中...' : '验证连接' }}
+                  </button>
+                </div>
+                <span class="error-message" v-if="formErrors.ssh_password">{{ formErrors.ssh_password }}</span>
+              </template>
+              
+              <template v-else>
+                <label>SSH密钥路径</label>
+                <div class="input-with-button">
+                  <input 
+                    v-model="assetForm.ssh_key_path"
+                    class="mac-input"
+                    :class="{ 'is-error': formErrors.ssh_key_path }"
+                    @blur="validateField('ssh_key_path', assetForm.ssh_key_path)"
+                  >
+                  <button 
+                    class="mac-btn verify-ssh-btn" 
+                    :disabled="isVerifyingSsh"
+                    @click="verifySshConnection"
+                  >
+                    <CheckCircleIcon class="btn-icon" v-if="!isVerifyingSsh" />
+                    <span class="loading-spinner" v-else></span>
+                    {{ isVerifyingSsh ? '验证中...' : '验证连接' }}
+                  </button>
+                </div>
+                <span class="error-message" v-if="formErrors.ssh_key_path">{{ formErrors.ssh_key_path }}</span>
+              </template>
+            </div>
+          </template>
+          
+          <div v-else class="local-resource-note">
+            本地系统资产无需配置连接信息，可直接配置服务能力
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-header">
+            <h3 class="section-title">Lora训练能力</h3>
+            <switch-button v-model="assetForm.lora_training.enabled" />
+          </div>
+          <div v-show="assetForm.lora_training.enabled" class="capability-form">
+            <div class="form-item">
+              <label>服务端口</label>
+              <input 
+                v-model="assetForm.lora_training.port" 
+                type="number" 
+                class="mac-input"
+                :class="{ 'is-error': formErrors.lora_port }"
+                @blur="validateCapabilityField('lora_training', 'port')"
+              >
+              <span class="error-message" v-if="formErrors.lora_port">{{ formErrors.lora_port }}</span>
+            </div>
+            <div class="form-item">
+              <label>配置文件路径</label>
+              <input v-model="assetForm.lora_training.config_path" class="mac-input">
+            </div>
+            <div class="form-item">
+              <label>训练参数配置</label>
+              <textarea 
+                v-model="assetForm.lora_training.params" 
+                class="mac-textarea"
+                placeholder="请输入JSON格式的训练参数配置"
+                :class="{ 'is-error': formErrors.lora_params }"
+                @blur="validateCapabilityField('lora_training', 'params')"
+              ></textarea>
+              <span class="error-message" v-if="formErrors.lora_params">{{ formErrors.lora_params }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-header">
+            <h3 class="section-title">AI引擎能力</h3>
+            <switch-button v-model="assetForm.ai_engine.enabled" />
+          </div>
+          <div v-show="assetForm.ai_engine.enabled" class="capability-form">
+            <div class="form-item">
+              <label>服务端口</label>
+              <input 
+                v-model="assetForm.ai_engine.port" 
+                type="number" 
+                class="mac-input"
+                :class="{ 'is-error': formErrors.ai_port }"
+                @blur="validateCapabilityField('ai_engine', 'port')"
+              >
+              <span class="error-message" v-if="formErrors.ai_port">{{ formErrors.ai_port }}</span>
+            </div>
+          </div>
+        </div>
+      </form>
+    </template>
+    <template #footer>
+      <button class="mac-btn" @click="close">取消</button>
+      <button 
+        type="submit" 
+        class="mac-btn primary" 
+        :disabled="isSubmitting"
+        @click="handleSubmit"
+      >
+        {{ isSubmitting ? '提交中...' : '确认' }}
+      </button>
+    </template>
+  </BaseModal>
+</template>
+
+<script setup>
+import { ref, defineEmits, defineProps, computed, watch } from 'vue'
+import BaseModal from '@/components/common/Modal.vue'
+import SwitchButton from '@/components/common/SwitchButton.vue'
+import { assetApi } from '@/api/asset'
+import message from '@/utils/message'
+import { CheckCircleIcon } from '@heroicons/vue/24/outline'
+
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    required: true
+  },
+  asset: {
+    type: Object,
+    default: () => null
+  },
+  isEditing: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits(['update:modelValue', 'submit-success'])
+
+// 弹窗显示控制
+const close = () => {
+  emit('update:modelValue', false)
+}
+
+// 表单状态
+const assetForm = ref({
+  name: '',
+  ip: '',
+  ssh_port: 22,
+  ssh_username: '',
+  ssh_key_path: '',
+  lora_training: {
+    enabled: false,
+    port: null,
+    config_path: '',
+    params: JSON.stringify({}, null, 2)
+  },
+  ai_engine: {
+    enabled: false,
+    port: null
+  },
+  ssh_auth_type: 'KEY',
+  ssh_password: ''
+})
+
+// 表单错误信息
+const formErrors = ref({})
+
+// 提交中状态
+const isSubmitting = ref(false)
+
+// SSH验证状态
+const isVerifyingSsh = ref(false)
+
+// 重置表单
+const resetForm = () => {
+  assetForm.value = {
+    name: '',
+    ip: '',
+    ssh_port: 22,
+    ssh_username: '',
+    ssh_auth_type: 'KEY',
+    ssh_password: '',
+    ssh_key_path: '',
+    lora_training: {
+      enabled: false,
+      port: null,
+      config_path: '',
+      params: JSON.stringify({}, null, 2)
+    },
+    ai_engine: {
+      enabled: false,
+      port: null
+    }
+  }
+  formErrors.value = {}
+}
+
+// 监听asset属性变化，初始化表单
+watch(() => props.asset, (newValue) => {
+  if (newValue) {
+    // 深拷贝资产数据并确保认证相关字段存在
+    const assetData = {
+      ...JSON.parse(JSON.stringify(newValue)),
+      ssh_auth_type: newValue.ssh_auth_type || (newValue.ssh_password ? 'PASSWORD' : 'KEY'),
+      ssh_password: newValue.ssh_password || '',
+      ssh_key_path: newValue.ssh_key_path || ''
+    }
+    assetForm.value = assetData
+  } else {
+    resetForm()
+  }
+}, { immediate: true })
+
+// 表单验证规则
+const formRules = {
+  name: [
+    { required: true, message: '请输入资产名称' },
+    { min: 2, max: 50, message: '长度在 2 到 50 个字符' }
+  ],
+  ip: [
+    { required: true, message: '请输入IP地址' },
+    { pattern: /^(\d{1,3}\.){3}\d{1,3}$/, message: 'IP地址格式不正确' }
+  ],
+  ssh_port: [
+    { required: true, message: '请输入SSH端口' },
+    { type: 'number', min: 1, max: 65535, message: '端口范围为 1-65535' }
+  ],
+  ssh_username: [
+    { required: true, message: '请输入SSH用户名' }
+  ],
+  ssh_password: [
+    { required: true, message: '请输入SSH密码', when: (form) => form.ssh_auth_type === 'PASSWORD' }
+  ],
+  ssh_key_path: [
+    { required: true, message: '请输入SSH密钥路径', when: (form) => form.ssh_auth_type === 'KEY' }
+  ]
+}
+
+// 判断是否为本地资源
+const isLocalResource = computed(() => {
+  return assetForm.value.name === "本地系统"
+})
+
+// 验证单个字段
+const validateField = (field, value) => {
+  const rules = formRules[field]
+  if (!rules) return true
+
+  for (const rule of rules) {
+    if (rule.when && !rule.when(assetForm.value)) {
+      continue
+    }
+    if (rule.required && !value) {
+      formErrors.value[field] = rule.message
+      return false
+    }
+    if (rule.min && value.length < rule.min) {
+      formErrors.value[field] = rule.message
+      return false
+    }
+    if (rule.max && value.length > rule.max) {
+      formErrors.value[field] = rule.message
+      return false
+    }
+    if (rule.pattern && !rule.pattern.test(value)) {
+      formErrors.value[field] = rule.message
+      return false
+    }
+    if (rule.type === 'number') {
+      const num = Number(value)
+      if (isNaN(num) || num < rule.min || num > rule.max) {
+        formErrors.value[field] = rule.message
+        return false
+      }
+    }
+  }
+  delete formErrors.value[field]
+  return true
+}
+
+// 验证并格式化JSON
+const validateJson = (jsonString) => {
+  try {
+    const parsed = JSON.parse(jsonString)
+    return JSON.stringify(parsed, null, 2)
+  } catch (e) {
+    return false
+  }
+}
+
+// 验证能力字段
+const validateCapabilityField = (capability, field) => {
+  const value = assetForm.value[capability][field]
+  const errorKey = `${capability.split('_')[0]}_${field}`
+  
+  // 如果能力被启用，验证字段
+  if (assetForm.value[capability].enabled) {
+    if (!value || (typeof value === 'string' && !value.trim())) {
+      formErrors.value[errorKey] = `请输入${field === 'port' ? '服务端口' : '必填项'}`
+      return false
+    }
+    
+    // 验证params字段
+    if (field === 'params') {
+      const validJson = validateJson(value)
+      if (validJson === false) {
+        formErrors.value[errorKey] = '请输入有效的JSON格式'
+        return false
+      }
+      // 更新为格式化后的JSON
+      assetForm.value[capability][field] = validJson
+    }
+    
+    if (field === 'port') {
+      const port = Number(value)
+      if (isNaN(port) || port < 1 || port > 65535) {
+        formErrors.value[errorKey] = '端口范围为 1-65535'
+        return false
+      }
+    }
+  }
+  
+  delete formErrors.value[errorKey]
+  return true
+}
+
+// 验证整个表单
+const validateForm = () => {
+  let isValid = true
+  formErrors.value = {}
+
+  // 验证基本字段
+  Object.keys(formRules).forEach(field => {
+    const rules = formRules[field]
+    if (!rules) return
+
+    // 如果是本地资源，只验证名称字段
+    if (isLocalResource.value && field !== 'name') {
+      return
+    }
+
+    for (const rule of rules) {
+      // 检查条件验证规则
+      if (rule.when && !rule.when(assetForm.value)) {
+        continue
+      }
+
+      if (!validateField(field, assetForm.value[field])) {
+        isValid = false
+        break
+      }
+    }
+  })
+
+  // 验证 Lora 训练能力
+  if (assetForm.value.lora_training.enabled) {
+    if (!validateCapabilityField('lora_training', 'port')) isValid = false
+    if (!validateCapabilityField('lora_training', 'params')) isValid = false
+  }
+
+  // 验证 AI 引擎能力
+  if (assetForm.value.ai_engine.enabled) {
+    if (!validateCapabilityField('ai_engine', 'port')) isValid = false
+  }
+
+  return isValid
+}
+
+// SSH连接验证方法
+const verifySshConnection = async () => {
+  // 验证必要字段
+  if (!validateField('ip', assetForm.value.ip) || 
+      !validateField('ssh_port', assetForm.value.ssh_port) ||
+      !validateField('ssh_username', assetForm.value.ssh_username)) {
+    return
+  }
+
+  if (assetForm.value.ssh_auth_type === 'PASSWORD' && 
+      !validateField('ssh_password', assetForm.value.ssh_password)) {
+    return
+  }
+
+  if (assetForm.value.ssh_auth_type === 'KEY' && 
+      !validateField('ssh_key_path', assetForm.value.ssh_key_path)) {
+    return
+  }
+
+  try {
+    isVerifyingSsh.value = true
+    
+    // 构建验证数据
+    const verifyData = {
+      ip: assetForm.value.ip,
+      ssh_port: assetForm.value.ssh_port,
+      ssh_username: assetForm.value.ssh_username,
+      ssh_auth_type: assetForm.value.ssh_auth_type,
+      ssh_password: assetForm.value.ssh_password,
+      ssh_key_path: assetForm.value.ssh_key_path
+    }
+
+    // 调用API验证SSH连接
+    await assetApi.verifySshConnection(verifyData)
+    message.success('SSH连接验证成功')
+  } catch (error) {
+    message.error(error.message || 'SSH连接验证失败')
+  } finally {
+    isVerifyingSsh.value = false
+  }
+}
+
+// 表单提交
+const handleSubmit = async () => {
+  if (!validateForm()) {
+    return
+  }
+
+  try {
+    isSubmitting.value = true
+    
+    // 处理表单数据
+    const formData = {
+      ...assetForm.value,
+      // 对本地资源特殊处理
+      ...(isLocalResource.value ? {
+        // 本地资源固定这些字段
+        ip: '127.0.0.1',
+        ssh_port: 22,
+        ssh_username: 'local',
+        ssh_auth_type: 'KEY',
+        ssh_key_path: '',
+        ssh_password: ''
+      } : {
+        // 根据认证类型处理认证信息
+        ssh_password: assetForm.value.ssh_auth_type === 'PASSWORD' ? assetForm.value.ssh_password : undefined,
+        ssh_key_path: assetForm.value.ssh_auth_type === 'KEY' ? assetForm.value.ssh_key_path : undefined,
+      }),
+      
+      // 处理能力配置
+      lora_training: assetForm.value.lora_training.enabled 
+        ? {
+            ...assetForm.value.lora_training,
+            params: typeof assetForm.value.lora_training.params === 'string' 
+              ? assetForm.value.lora_training.params 
+              : JSON.stringify(assetForm.value.lora_training.params)
+          }
+        : { enabled: false, port: null, config_path: '', params: '{}' },
+      ai_engine: assetForm.value.ai_engine.enabled
+        ? {
+            ...assetForm.value.ai_engine,
+          }
+        : { enabled: false, port: null }
+    }
+
+    let result
+    if (props.isEditing) {
+      result = await assetApi.updateAsset(formData.id, formData)
+      message.success('资产更新成功')
+    } else {
+      result = await assetApi.createAsset(formData)
+      message.success('资产创建成功')
+    }
+    
+    close()
+    emit('submit-success', result)
+  } catch (error) {
+    // 处理验证错误
+    if (error.response?.data?.detail) {
+      const errors = error.response.data.detail
+      errors.forEach(err => {
+        const field = err.loc[err.loc.length - 1]
+        const capability = err.loc[err.loc.length - 2]
+        if (capability === 'lora_training' || capability === 'ai_engine') {
+          formErrors.value[`${capability.split('_')[0]}_${field}`] = err.msg
+        } else {
+          formErrors.value[field] = err.msg
+        }
+      })
+    } else {
+      message.error(error.message || '操作失败')
+    }
+  } finally {
+    isSubmitting.value = false
+  }
+}
+</script>
+
+<style scoped>
+/* 表单样式 */
+.asset-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 4px;
+}
+
+/* 本地资源提示样式 */
+.local-resource-note {
+  padding: 12px;
+  background-color: #F0F9FF;
+  border-radius: 6px;
+  color: #0369A1;
+  font-size: 14px;
+  margin-top: 8px;
+  border-left: 3px solid #0EA5E9;
+  line-height: 1.5;
+}
+
+/* 表单区块 */
+.form-section {
+  background: #F9F9F9;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1C1C1E;
+  margin-bottom: 16px;
+}
+
+/* 表单项 */
+.form-item {
+  margin-bottom: 16px;
+}
+
+.form-item:last-child {
+  margin-bottom: 0;
+}
+
+.form-item label {
+  display: block;
+  font-size: 13px;
+  color: #6B7280;
+  margin-bottom: 6px;
+}
+
+/* 输入框样式 */
+.mac-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  color: #1C1C1E;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.mac-input:focus {
+  outline: none;
+  border-color: #007AFF;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
+}
+
+/* 错误状态 */
+.mac-input.is-error {
+  border-color: #DC2626;
+  background: #FEF2F2;
+}
+
+.mac-input.is-error:focus {
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1);
+}
+
+/* 错误提示文字 */
+.error-message {
+  display: block;
+  color: #DC2626;
+  font-size: 12px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* 表单行布局 */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* 文本域样式 */
+.mac-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  color: #1C1C1E;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  transition: all 0.2s ease;
+}
+
+.mac-textarea:focus {
+  outline: none;
+  border-color: #007AFF;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
+}
+
+.mac-textarea.is-error {
+  border-color: #DC2626;
+  background: #FEF2F2;
+}
+
+/* 能力区块头部 */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+/* 能力表单区域 */
+.capability-form {
+  background: #FFFFFF;
+  border-radius: 6px;
+  padding: 16px;
+  margin-top: 12px;
+}
+
+/* 响应式调整 */
+@media (max-width: 640px) {
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .form-section {
+    padding: 16px;
+  }
+}
+
+/* 表单验证提示动画 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.is-error {
+  animation: shake 0.3s ease-in-out;
+}
+
+/* 占位符文本样式 */
+.mac-input::placeholder,
+.mac-textarea::placeholder {
+  color: #A1A1AA;
+}
+
+/* 禁用状态样式 */
+.mac-input:disabled,
+.mac-textarea:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+.mac-input[type="password"] {
+  font-family: monospace;
+  letter-spacing: 0.2em;
+}
+
+select.mac-input {
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px;
+  appearance: none;
+  cursor: pointer;
+}
+
+select.mac-input:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23007AFF'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+}
+
+.input-with-button {
+  display: flex;
+  gap: 8px;
+}
+
+.input-with-button .mac-input {
+  flex: 1;
+}
+
+.verify-ssh-btn {
+  padding: 0 12px;
+  background: #F0F9FF;
+  color: #0369A1;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.verify-ssh-btn:hover:not(:disabled) {
+  background: #E0F2FE;
+}
+
+.verify-ssh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 按钮样式 */
+.mac-btn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  color: #1C1C1E;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mac-btn:hover {
+  background: #F9FAFB;
+}
+
+.mac-btn.primary {
+  background: #007AFF;
+  color: #FFFFFF;
+  border: none;
+}
+
+.mac-btn.primary:hover {
+  background: #0066D6;
+}
+
+.mac-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* 加载动画 */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #0369A1;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.note-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background-color: #FFFBEB;
+  border-radius: 6px;
+  color: #92400E;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.info-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #D97706;
+}
+</style> 

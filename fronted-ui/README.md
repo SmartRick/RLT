@@ -1,24 +1,86 @@
-# fronted-ui
+# LoRA 自动训练系统 - 前端界面
 
-## Project setup
-```
+这是一个用于管理LoRA（Low-Rank Adaptation）模型训练的前端Web应用，提供了直观的用户界面来简化AI模型训练流程。该系统采用现代化的Mac风格UI设计，为用户提供流畅的操作体验。
+
+![UI预览图（请添加实际截图）](./public/preview.png)
+
+## 📚 主要功能
+
+- **资产管理**：管理训练数据集、模型和其他资源
+- **任务管理**：创建、监控和管理训练任务
+- **实时监控**：通过终端界面实时查看训练日志和进度
+- **系统设置**：自定义训练参数和系统配置
+
+## 🚀 快速开始
+
+### 环境要求
+
+- Node.js 14.0+
+- npm 6.0+
+
+### 安装依赖
+
+```bash
 npm install
 ```
 
-### Compiles and hot-reloads for development
-```
+### 开发环境运行
+
+```bash
 npm run serve
 ```
 
-### Compiles and minifies for production
-```
+### 生产环境构建
+
+```bash
 npm run build
 ```
 
-### Lints and fixes files
+## 🔧 配置说明
+
+项目使用环境变量进行配置，您可以在项目根目录创建`.env.local`文件：
+
 ```
-npm run lint
+VITE_API_BASE_URL=/api/v1  # 后端API基础路径
 ```
 
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+## 📁 项目结构
+
+```
+src/
+├── api/          # API接口封装
+├── assets/       # 静态资源
+├── components/   # 可复用组件
+├── router/       # 路由配置
+├── utils/        # 工具函数
+├── views/        # 页面视图
+├── App.vue       # 根组件
+└── main.js       # 入口文件
+```
+
+## 🖥️ 使用指南
+
+1. **资产管理**：上传和管理训练所需的图片、标签等资源
+2. **创建任务**：配置训练参数，选择数据集，创建新的训练任务
+3. **监控训练**：查看实时训练日志，监控训练进度
+4. **导出模型**：训练完成后导出模型用于推理
+
+## 🔄 与后端集成
+
+本项目需要配合后端API使用，确保后端服务已正确配置并运行。API基础路径可通过环境变量配置。
+
+## 🛠️ 技术栈
+
+- Vue 3
+- Vue Router
+- Axios
+- XTerm (终端模拟)
+
+## 📄 许可证
+
+[MIT](LICENSE)
+
+## 🤝 贡献指南
+
+欢迎提交Issues和Pull Requests来改进项目！
+

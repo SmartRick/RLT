@@ -1,0 +1,436 @@
+<template>
+  <div 
+    class="asset-card mac-card"
+    :class="{ 'is-selected': isSelected }"
+    @click="$emit('select', asset)"
+  >
+    <!-- 卡片头部 -->
+    <div class="asset-card-header">
+      <div class="asset-title">
+        <ServerIcon class="asset-icon" />
+        <span class="asset-name text-ellipsis">{{ asset.name }}</span>
+      </div>
+      <div class="asset-status-badge" :class="getStatusClass(asset.status)">
+        {{ getStatusText(asset.status) }}
+      </div>
+    </div>
+
+    <!-- 卡片内容 -->
+    <div class="asset-card-content">
+      <!-- 基础信息区 -->
+      <div class="info-section">
+        <h4 class="section-label">基础信息</h4>
+        <div class="info-grid">
+          <div class="info-item">
+            <ComputerDesktopIcon class="info-icon" />
+            <span class="info-label">IP地址:</span>
+            <span class="info-text text-ellipsis">{{ asset.ip }}:{{ asset.ssh_port }}</span>
+          </div>
+          <div class="info-item">
+            <UserIcon class="info-icon" />
+            <span class="info-label">用户名:</span>
+            <span class="info-text text-ellipsis">{{ asset.ssh_username }}</span>
+          </div>
+          <div class="info-item">
+            <ClockIcon class="info-icon" />
+            <span class="info-label">更新时间:</span>
+            <span class="info-text text-ellipsis">{{ formatDate(asset.updated_at) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 能力信息区 -->
+      <div class="capability-section">
+        <h4 class="section-label">服务能力</h4>
+        <div class="capability-tags">
+          <div class="capability-tag" 
+                v-if="asset.lora_training?.enabled"
+                :class="{ 'is-verified': asset.lora_training?.verified }">
+            <BeakerIcon class="tag-icon" />
+            <span>Lora训练</span>
+            <span class="verify-status">{{ asset.lora_training?.verified ? '(已验证)' : '(未验证)' }}</span>
+          </div>
+          <div class="capability-tag" 
+                v-if="asset.ai_engine?.enabled"
+                :class="{ 'is-verified': asset.ai_engine?.verified }">
+            <CpuChipIcon class="tag-icon" />
+            <span>AI引擎</span>
+            <span class="verify-status">{{ asset.ai_engine?.verified ? '(已验证)' : '(未验证)' }}</span>
+          </div>
+          <div class="no-capability" v-if="!asset.lora_training?.enabled && !asset.ai_engine?.enabled">
+            暂无配置服务能力
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 卡片操作栏 -->
+    <div class="asset-card-actions">
+      <button class="mac-btn small terminal-btn" @click.stop="$emit('open-terminal', asset)">
+        <TerminalIcon class="btn-icon" />
+        <span>终端</span>
+      </button>
+      <button 
+        class="mac-btn small verify-btn" 
+        :disabled="asset.isVerifying"
+        @click.stop="$emit('verify', asset)"
+      >
+        <template v-if="!asset.isVerifying">
+          <CheckCircleIcon class="btn-icon" />
+          <span>验证</span>
+        </template>
+        <template v-else>
+          <span class="loading-spinner"></span>
+          <span>验证中</span>
+        </template>
+      </button>
+      <button class="mac-btn small edit-btn" @click.stop="$emit('edit', asset)">
+        <PencilIcon class="btn-icon" />
+        <span>编辑</span>
+      </button>
+      <button class="mac-btn small delete-btn" @click.stop="$emit('delete', asset)">
+        <TrashIcon class="btn-icon" />
+        <span>删除</span>
+      </button>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { format } from 'date-fns'
+import {
+  ServerIcon,
+  ComputerDesktopIcon,
+  UserIcon,
+  BeakerIcon,
+  CpuChipIcon,
+  PencilIcon,
+  TrashIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  TerminalIcon
+} from '@heroicons/vue/24/outline'
+
+defineProps({
+  asset: {
+    type: Object,
+    required: true
+  },
+  isSelected: {
+    type: Boolean,
+    default: false
+  }
+})
+
+defineEmits(['select', 'edit', 'delete', 'verify', 'open-terminal'])
+
+// 获取状态文本
+const getStatusText = (status) => {
+  const statusMap = {
+    'CONNECTED': '已连接',
+    'PENDING': '待连接',
+    'CONNECTION_ERROR': '连接错误'
+  }
+  return statusMap[status] || status
+}
+
+// 添加状态样式类名映射
+const getStatusClass = (status) => {
+  const statusClassMap = {
+    'CONNECTED': 'connected',
+    'PENDING': 'pending',
+    'CONNECTION_ERROR': 'connection-error'
+  }
+  return statusClassMap[status] || ''
+}
+
+// 格式化日期
+const formatDate = (date) => {
+  if (!date) return ''
+  try {
+    return format(new Date(date), 'yyyy-MM-dd HH:mm')
+  } catch (error) {
+    console.error('日期格式化错误:', error)
+    return date
+  }
+}
+</script>
+
+<style scoped>
+.asset-card {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  transition: all 0.3s ease;
+  gap: 16px;
+  cursor: pointer;
+  position: relative;
+}
+
+.asset-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+.asset-card.is-selected {
+  border: 2px solid var(--primary-color, #007AFF);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+}
+
+.asset-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.asset-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 70%;
+}
+
+.asset-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary, #8E8E93);
+}
+
+.asset-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-primary, #1C1C1E);
+}
+
+.asset-status-badge {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 已连接状态 */
+.asset-status-badge.connected {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+/* 待连接状态 */
+.asset-status-badge.pending {
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+/* 连接错误状态 */
+.asset-status-badge.connection-error {
+  background: #FFEBEE;
+  color: #C62828;
+}
+
+.asset-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+/* 新增分区样式 */
+.info-section, .capability-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #F9FAFB;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.section-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4B5563;
+  margin: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.06);
+}
+
+.info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.info-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary, #8E8E93);
+  flex-shrink: 0;
+}
+
+.info-label {
+  font-size: 13px;
+  color: #6B7280;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.info-text {
+  font-size: 13px;
+  color: var(--text-primary, #1C1C1E);
+  font-weight: 500;
+}
+
+.capability-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.capability-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--background-secondary, #F2F2F7);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #8E8E93);
+}
+
+.capability-tag.is-verified {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+.verify-status {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.no-capability {
+  padding: 10px;
+  text-align: center;
+  color: #9CA3AF;
+  font-size: 13px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 6px;
+}
+
+.tag-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.asset-card-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color-light, rgba(0, 0, 0, 0.06));
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.mac-btn.small {
+  padding: 6px;
+  font-size: 12px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.verify-btn {
+  background: #E3F2FD;
+  color: #1565C0;
+  border: none;
+}
+
+.verify-btn:hover:not(:disabled) {
+  background: #BBDEFB;
+}
+
+.verify-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.edit-btn {
+  background: #F5F5F5;
+  color: #424242;
+  border: none;
+}
+
+.edit-btn:hover {
+  background: #E0E0E0;
+}
+
+.delete-btn {
+  background: #FFEBEE;
+  color: #C62828;
+  border: none;
+}
+
+.delete-btn:hover {
+  background: #FFCDD2;
+}
+
+.terminal-btn {
+  background: #F0F9FF;
+  color: #0369A1;
+  border: none;
+}
+
+.terminal-btn:hover {
+  background: #E0F2FE;
+}
+
+.btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.text-ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 加载动画 */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #0369A1;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@media (max-width: 768px) {
+  .asset-card {
+    padding: 12px;
+  }
+  
+  .asset-card-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style> 

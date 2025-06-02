@@ -161,7 +161,15 @@ const addFiles = (files) => {
   }).filter(Boolean) // 过滤掉创建预览失败的文件
   
   fileList.value.push(...newFiles)
-  emit('update:files', fileList.value)
+  updateParentFiles()
+}
+
+// 更新父组件的文件
+const updateParentFiles = () => {
+  // 提取实际的文件对象，确保数据格式正确
+  const fileObjects = fileList.value.map(item => item.file)
+  // 发送文件数组给父组件
+  emit('update:files', fileObjects)
 }
 
 // 移除文件
@@ -175,7 +183,7 @@ const removeFile = (index) => {
     console.error('清理预览失败:', error)
   }
   fileList.value.splice(index, 1)
-  emit('update:files', fileList.value)
+  updateParentFiles()
 }
 
 // 格式化文件大小

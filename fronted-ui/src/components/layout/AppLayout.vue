@@ -8,19 +8,14 @@
           <span class="control maximize"></span>
         </div>
         <nav class="main-nav">
-          <router-link 
-            v-for="route in mainRoutes" 
-            :key="route.path"
-            :to="route.path"
-            class="nav-item"
-            :class="{ active: route.path === currentPath }"
-          >
+          <router-link v-for="route in mainRoutes" :key="route.path" :to="route.path" class="nav-item"
+            :class="{ active: isRouteActive(route.path) }">
             <component :is="route.icon" class="nav-icon" />
             {{ route.name }}
           </router-link>
         </nav>
       </div>
-      
+
       <div class="right-section">
         <button class="user-menu mac-btn">
           <UserCircleIcon class="user-icon" />
@@ -31,11 +26,9 @@
 
     <main class="main-content">
       <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <keep-alive>
-            <component :is="Component" />
-          </keep-alive>
-        </transition>
+        <keep-alive>
+          <component :is="Component" />
+        </keep-alive>
       </router-view>
     </main>
   </div>
@@ -45,11 +38,11 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { routes } from '@/router'
-import { 
+import {
   UserCircleIcon,
   ServerIcon,
   Cog6ToothIcon,
-  ChartBarIcon 
+  ChartBarIcon
 } from '@heroicons/vue/24/outline'
 
 const route = useRoute()
@@ -80,6 +73,24 @@ const mainRoutes = computed(() => {
  * 当前激活的路由路径
  */
 const currentPath = computed(() => route.path)
+
+/**
+ * 判断路由是否激活
+ * @param {string} path - 路由路径
+ * @returns {boolean} - 是否激活
+ */
+const isRouteActive = (path) => {
+  // 根路由特殊处理
+  if (path === '/') {
+    return currentPath.value === '/'
+  }
+
+  // 检查当前路径是否以指定路径开头
+  // 确保它是一个完整的路径段（例如：/tasks 匹配 /tasks 和 /tasks/123，但不匹配 /tasks-other）
+  return currentPath.value === path ||
+    (currentPath.value.startsWith(path) &&
+      (currentPath.value[path.length] === '/' || currentPath.value.length === path.length))
+}
 </script>
 
 <style scoped>
@@ -216,7 +227,7 @@ const currentPath = computed(() => route.path)
   background: transparent;
 }
 
-.main-content > * {
+.main-content>* {
   height: 100%;
   width: 100%;
 }
@@ -226,31 +237,17 @@ const currentPath = computed(() => route.path)
   .window-controls {
     display: none;
   }
-  
+
   .main-nav {
     gap: 12px;
   }
-  
+
   .nav-item {
     padding: 6px 8px;
   }
-  
+
   .nav-item span {
     display: none;
   }
 }
-
-/* 添加过渡动画 */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-  position: absolute;
-  width: 100%;
-  height: 100%;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style> 
+</style>

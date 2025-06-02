@@ -4,32 +4,32 @@ const BASE_URL = '/tasks'
 
 export const tasksApi = {
   // 获取任务列表
-  getTasks(params) {
+  async getTasks(params) {
     return request.get(BASE_URL, { params })
   },
   
   // 创建任务
-  createTask(data) {
+  async createTask(data) {
     return request.post(BASE_URL, data)
   },
   
   // 获取任务详情
-  getTaskById(id) {
+  async getTaskById(id) {
     return request.get(`${BASE_URL}/${id}`)
   },
   
   // 更新任务
-  updateTask(id, data) {
+  async updateTask(id, data) {
     return request.put(`${BASE_URL}/${id}`, data)
   },
   
   // 删除任务
-  deleteTask(id) {
+  async deleteTask(id) {
     return request.delete(`${BASE_URL}/${id}`)
   },
   
   // 上传图片
-  uploadImages(taskId, formData) {
+  async uploadImages(taskId, formData) {
     return request.post(`${BASE_URL}/${taskId}/images`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
@@ -38,17 +38,17 @@ export const tasksApi = {
   },
   
   // 删除图片
-  deleteImage(taskId, imageId) {
+  async deleteImage(taskId, imageId) {
     return request.delete(`${BASE_URL}/${taskId}/images/${imageId}`)
   },
   
   // 开始标记
-  startMarking(taskId) {
+  async startMarking(taskId) {
     return request.post(`${BASE_URL}/${taskId}/mark`)
   },
   
   // 开始训练
-  startTraining(taskId) {
+  async startTraining(taskId) {
     return request.post(`${BASE_URL}/${taskId}/train`)
   },
   
@@ -58,8 +58,7 @@ export const tasksApi = {
    * @returns {Promise<Object>} 任务信息
    */
   async restartTask(taskId) {
-    const response = await request.post(`/tasks/${taskId}/restart`)
-    return response.data
+    return request.post(`${BASE_URL}/${taskId}/restart`)
   },
   
   /**
@@ -68,7 +67,15 @@ export const tasksApi = {
    * @returns {Promise<Object>} 任务信息
    */
   async cancelTask(taskId) {
-    const response = await request.post(`/tasks/${taskId}/cancel`)
-    return response
+    return request.post(`${BASE_URL}/${taskId}/cancel`)
+  },
+  
+  /**
+   * 获取任务状态
+   * @param {number|string} taskId - 任务ID
+   * @returns {Promise<Object>} 任务状态信息
+   */
+  async getTaskStatus(taskId) {
+    return request.get(`${BASE_URL}/${taskId}/status`)
   }
 } 

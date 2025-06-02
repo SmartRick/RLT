@@ -7,7 +7,7 @@ export const assetApi = {
    * 获取资产列表
    * @returns {Promise<Array>} 资产列表
    */
-  getAssets() {
+  async getAssets() {
     return request.get(BASE_URL)
   },
 
@@ -16,7 +16,7 @@ export const assetApi = {
    * @param {Object} data - 资产数据
    * @returns {Promise<Object>} 创建的资产
    */
-  createAsset(data) {
+  async createAsset(data) {
     return request.post(BASE_URL, data)
   },
 
@@ -26,7 +26,7 @@ export const assetApi = {
    * @param {Object} data - 更新数据
    * @returns {Promise<Object>} 更新后的资产
    */
-  updateAsset(id, data) {
+  async updateAsset(id, data) {
     return request.put(`${BASE_URL}/${id}`, data)
   },
 
@@ -35,7 +35,7 @@ export const assetApi = {
    * @param {number|string} id - 资产ID
    * @returns {Promise<void>}
    */
-  deleteAsset(id) {
+  async deleteAsset(id) {
     return request.delete(`${BASE_URL}/${id}`)
   },
 
@@ -44,7 +44,7 @@ export const assetApi = {
    * @param {number|string} id - 资产ID
    * @returns {Promise<Object>} 验证结果
    */
-  verifyCapabilities(id) {
+  async verifyCapabilities(id) {
     return request.post(`${BASE_URL}/${id}/verify`)
   },
 
@@ -54,7 +54,6 @@ export const assetApi = {
    * @returns {Promise<Object>} 验证结果
    */
   async verifySshConnection(data) {
-    const response = await request.post(`${BASE_URL}/verify-ssh`, data)
-    return response.data
+    return request.post(`${BASE_URL}/verify-ssh`, data)
   }
 } 

@@ -82,31 +82,37 @@
         <div class="mac-card">
           <h3>基本信息</h3>
           <div class="info-grid">
-            <div class="info-item">
-              <span class="label">创建时间</span>
-              <span>{{ formatDate(task?.created_at) }}</span>
+            <div class="info-row">
+              <div class="info-item">
+                <span class="label">创建时间</span>
+                <span>{{ formatDate(task?.created_at) }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">图片数量</span>
+                <span>{{ task?.images?.length || 0 }} 张</span>
+              </div>
             </div>
-            <div class="info-item">
-              <span class="label">图片数量</span>
-              <span>{{ task?.images?.length || 0 }} 张</span>
+            <div class="info-row">
+              <div class="info-item">
+                <span class="label">标记资产</span>
+                <div class="asset-info" v-if="task?.marking_asset">
+                  <span class="asset-name">{{ task.marking_asset.name }}</span>
+                  <span class="asset-ip">({{ task.marking_asset.ip }})</span>
+                </div>
+                <span v-else class="no-asset">暂无</span>
+              </div>
+              <div class="info-item">
+                <span class="label">训练资产</span>
+                <div class="asset-info" v-if="task?.training_asset">
+                  <span class="asset-name">{{ task.training_asset.name }}</span>
+                  <span class="asset-ip">({{ task.training_asset.ip }})</span>
+                </div>
+                <span v-else class="no-asset">暂无</span>
+              </div>
             </div>
-            <div class="info-item">
+            <div class="info-item full-width">
               <span class="label">描述</span>
               <p class="description">{{ task?.description || '暂无描述' }}</p>
-            </div>
-            <div v-if="task?.marking_asset" class="info-item">
-              <span class="label">标记资产</span>
-              <div class="asset-info">
-                <span class="asset-name">{{ task.marking_asset.name }}</span>
-                <span class="asset-ip">{{ task.marking_asset.ip }}</span>
-              </div>
-            </div>
-            <div v-if="task?.training_asset" class="info-item">
-              <span class="label">训练资产</span>
-              <div class="asset-info">
-                <span class="asset-name">{{ task.training_asset.name }}</span>
-                <span class="asset-ip">{{ task.training_asset.ip }}</span>
-              </div>
             </div>
           </div>
         </div>
@@ -163,6 +169,12 @@ import ImageUploader from '@/components/tasks/ImageUploader.vue'
 import ImageViewer from '@/components/tasks/ImageViewer.vue'
 import BaseModal from '@/components/common/Modal.vue'
 import TaskStatus from '@/components/tasks/TaskStatus.vue'
+import { 
+  getStatusText, 
+  getStatusClass, 
+  isTaskActive as checkTaskActive,
+  statusDetailColorMap
+} from '@/utils/taskStatus'
 
 const route = useRoute()
 const router = useRouter()
@@ -179,6 +191,7 @@ const files = ref([])
 const uploaderRef = ref(null)
 const refreshTimer = ref(null)
 const REFRESH_INTERVAL = 5000 // 5秒刷新一次
+const statusUpdating = ref(false) // 添加状态更新标志
 
 // 获取任务详情
 const fetchTask = async () => {
@@ -204,6 +217,38 @@ const fetchTask = async () => {
     router.push('/tasks')
   } finally {
     isLoading.value = false
+  }
+}
+
+// 只更新任务状态
+const updateTaskStatus = async () => {
+  if (!taskId.value || !task.value) return
+  
+  try {
+    statusUpdating.value = true
+    const statusData = await tasksApi.getTaskStatus(taskId.value)
+    
+    if (statusData) {
+      // 只更新状态相关字段，而不替换整个task对象
+      if (task.value.status !== statusData.status) {
+        task.value.status = statusData.status
+        task.value.status_history = statusData.status_history
+        
+        // 如果状态变为完成或错误，获取完整任务信息
+        if (['COMPLETED', 'ERROR'].includes(statusData.status)) {
+          await fetchTask()
+        }
+      }
+      
+      // 根据任务状态决定是否需要继续自动刷新
+      if (!needsAutoRefresh.value) {
+        stopAutoRefresh()
+      }
+    }
+  } catch (error) {
+    console.error('更新任务状态失败', error)
+  } finally {
+    statusUpdating.value = false
   }
 }
 
@@ -249,34 +294,6 @@ const canCancel = computed(() => {
   return ['SUBMITTED', 'MARKED'].includes(task.value?.status)
 })
 
-// 获取状态文本
-const getStatusText = (status) => {
-  const statusMap = {
-    'NEW': '新建',
-    'SUBMITTED': '已提交',
-    'MARKING': '标记中',
-    'MARKED': '已标记',
-    'TRAINING': '训练中',
-    'COMPLETED': '已完成',
-    'ERROR': '错误'
-  }
-  return statusMap[status] || status
-}
-
-// 获取状态样式类
-const getStatusClass = (status) => {
-  const classMap = {
-    'NEW': 'new',
-    'SUBMITTED': 'submitted',
-    'MARKING': 'marking',
-    'MARKED': 'marked',
-    'TRAINING': 'training',
-    'COMPLETED': 'completed',
-    'ERROR': 'error'
-  }
-  return classMap[status] || ''
-}
-
 // 上传按钮提示文本
 const uploadButtonTitle = computed(() => {
   if (canUploadImages.value) {
@@ -305,7 +322,7 @@ const handleUploadConfirm = async () => {
     isUploading.value = true
     const formData = new FormData()
     files.value.forEach(file => {
-      formData.append('images', file)
+      formData.append('files', file)
     })
 
     await tasksApi.uploadImages(taskId.value, formData)
@@ -343,19 +360,10 @@ const handleSubmitMarking = async () => {
     isLoading.value = true
     const response = await tasksApi.startMarking(taskId.value)
     
-    if (response.error) {
-      if (response.error_type === 'VALIDATION_ERROR') {
-        message.warning(response.error)
-      } else {
-        message.error(response.error)
-      }
-      return
-    }
-    
     message.success('标记任务已提交')
     task.value = response
   } catch (error) {
-    message.error('提交标记任务失败')
+    message.error(error)
   } finally {
     isLoading.value = false
   }
@@ -365,11 +373,11 @@ const handleSubmitMarking = async () => {
 const handleStartTraining = async () => {
   try {
     isLoading.value = true
-    await tasksApi.startTraining(taskId.value)
+    const response = await tasksApi.startTraining(taskId.value)
     message.success('开始训练')
-    fetchTask()
+    task.value = response
   } catch (error) {
-    message.error('开始训练失败')
+    message.error(error)
   } finally {
     isLoading.value = false
   }
@@ -380,23 +388,10 @@ const handleRestart = async () => {
   try {
     isLoading.value = true
     const response = await tasksApi.restartTask(taskId.value)
-    
-    if (!response.success) {
-      console.log('Restart task failed:', response.error)
-      // 处理业务错误
-      if (response.error_type === 'VALIDATION_ERROR') {
-        message.warning(response.error)
-      } else {
-        message.error(response.error)
-      }
-      return
-    }
-    
     message.success('任务已重启')
-    task.value = response.task
+    task.value = response
   } catch (error) {
-    console.error('Restart task error:', error)
-    message.error('重启任务失败')
+    message.error(error)
   } finally {
     isLoading.value = false
   }
@@ -407,22 +402,10 @@ const handleCancel = async () => {
   try {
     isLoading.value = true
     const response = await tasksApi.cancelTask(taskId.value)
-    
-    if (!response.success) {
-      console.log('Cancel task failed:', response.error)
-      if (response.error_type === 'VALIDATION_ERROR') {
-        message.warning(response.error)
-      } else {
-        message.error(response.error)
-      }
-      return
-    }
-    
     message.success('任务已取消')
-    task.value = response.task
+    task.value = response
   } catch (error) {
-    console.error('Cancel task error:', error)
-    message.error('取消任务失败')
+    message.error(error)
   } finally {
     isLoading.value = false
   }
@@ -430,8 +413,7 @@ const handleCancel = async () => {
 
 // 是否需要自动刷新
 const needsAutoRefresh = computed(() => {
-  const activeStates = ['SUBMITTED', 'MARKING', 'TRAINING']
-  return activeStates.includes(task.value?.status)
+  return checkTaskActive(task.value?.status)
 })
 
 // 开始自动刷新
@@ -439,8 +421,8 @@ const startAutoRefresh = () => {
   stopAutoRefresh() // 先清除可能存在的定时器
   if (needsAutoRefresh.value) {
     refreshTimer.value = setInterval(async () => {
-      if (!isLoading.value) { // 避免重复请求
-        await fetchTask()
+      if (!isLoading.value && !statusUpdating.value) { // 避免重复请求
+        await updateTaskStatus() // 使用轻量级更新函数代替完整获取
       }
     }, REFRESH_INTERVAL)
   }
@@ -542,10 +524,20 @@ onUnmounted(() => {
   margin-top: 12px;
 }
 
+.info-row {
+  display: flex;
+  gap: 20px;
+}
+
 .info-item {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;
+}
+
+.info-item.full-width {
+  flex-basis: 100%;
 }
 
 .info-item .label {
@@ -582,39 +574,45 @@ onUnmounted(() => {
 }
 
 .task-status-badge.new {
-  background: #F0F9FF;
-  color: #0369A1;
+  background: v-bind('statusDetailColorMap.NEW.background');
+  color: v-bind('statusDetailColorMap.NEW.color');
+}
+
+.task-status-badge.submitted {
+  background: v-bind('statusDetailColorMap.SUBMITTED.background');
+  color: v-bind('statusDetailColorMap.SUBMITTED.color');
 }
 
 .task-status-badge.marking {
-  background: #FFF7ED;
-  color: #C2410C;
+  background: v-bind('statusDetailColorMap.MARKING.background');
+  color: v-bind('statusDetailColorMap.MARKING.color');
 }
 
 .task-status-badge.marked {
-  background: #F0FDF4;
-  color: #166534;
+  background: v-bind('statusDetailColorMap.MARKED.background');
+  color: v-bind('statusDetailColorMap.MARKED.color');
 }
 
 .task-status-badge.training {
-  background: #EEF2FF;
-  color: #4338CA;
+  background: v-bind('statusDetailColorMap.TRAINING.background');
+  color: v-bind('statusDetailColorMap.TRAINING.color');
 }
 
 .task-status-badge.completed {
-  background: #ECFDF5;
-  color: #047857;
+  background: v-bind('statusDetailColorMap.COMPLETED.background');
+  color: v-bind('statusDetailColorMap.COMPLETED.color');
 }
 
 .task-status-badge.error {
-  background: #FEF2F2;
-  color: #B91C1C;
+  background: v-bind('statusDetailColorMap.ERROR.background');
+  color: v-bind('statusDetailColorMap.ERROR.color');
 }
 
 .asset-info {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 
 .asset-name {
@@ -624,6 +622,12 @@ onUnmounted(() => {
 .asset-ip {
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+.no-asset {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 .mac-btn.warning {

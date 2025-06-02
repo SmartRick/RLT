@@ -17,6 +17,12 @@ module.exports = {
     'vue/multi-word-component-names': 'off',
     'no-undef': ['error', {
       'typeof': true
+    }],
+    'no-unused-vars': ['warn', {
+      'vars': 'all',
+      'args': 'after-used',
+      'ignoreRestSiblings': true,
+      'varsIgnorePattern': '^(watch|ref|computed|reactive|onMounted|onBeforeUnmount)$'
     }]
   }
 } 

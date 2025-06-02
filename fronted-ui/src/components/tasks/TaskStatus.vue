@@ -1,23 +1,15 @@
 <template>
   <div class="task-status">
     <!-- 任务阶段进度条 -->
-    <div class="task-phases" ref="phasesContainer" @mousedown="startDrag" @mousemove="onDrag" @mouseup="stopDrag" @mouseleave="stopDrag">
-      <div 
-        v-for="(state, index) in taskStates" 
-        :key="state.status"
-        ref="phaseItems"
-        class="phase-item"
-        :class="{
-          'active': isStateActive(state.status),
-          'completed': isStateCompleted(state.status),
-          'error': isStateError(state.status)
-        }"
-      >
+    <div class="task-phases" ref="phasesContainer" @mousedown="startDrag" @mousemove="onDrag" @mouseup="stopDrag"
+      @mouseleave="stopDrag">
+      <div v-for="(state, index) in taskStates" :key="state.status" ref="phaseItems" class="phase-item" :class="{
+        'active': isStateActive(state.status),
+        'completed': isStateCompleted(state.status),
+        'error': isStateError(state.status)
+      }">
         <div class="phase-icon">
-          <component 
-            :is="getPhaseIcon(state.status)" 
-            class="icon"
-          />
+          <component :is="getPhaseIcon(state.status)" class="icon" />
         </div>
         <div class="phase-info">
           <div class="phase-name">{{ state.label }}</div>
@@ -39,10 +31,7 @@
         <div class="progress-time">{{ getRunningTime() }}</div>
       </div>
       <div class="progress-bar">
-        <div 
-          class="progress-value" 
-          :style="{ width: `${task.progress}%` }"
-        />
+        <div class="progress-value" :style="{ width: `${task.progress}%` }" />
       </div>
       <div class="progress-text">{{ task.progress }}%</div>
     </div>
@@ -50,66 +39,53 @@
     <!-- 错误信息面板 -->
     <div v-if="task?.status === 'ERROR'" class="error-section">
       <div class="error-header">
-        <ExclamationTriangleIcon class="error-icon"/>
+        <ExclamationTriangleIcon class="error-icon" />
         <span>错误信息</span>
       </div>
       <div class="error-content">
-        <pre v-if="errorDetails">{{ errorDetails }}</pre>
+        <div v-if="parsedError" class="parsed-error">
+          <div class="error-type">{{ parsedError.type }}</div>
+          <div class="error-message">{{ parsedError.message }}</div>
+          
+          <div class="traceback-section">
+            <button class="traceback-toggle" @click="toggleTraceback">
+              {{ showTraceback ? '收起' : '展开' }}异常栈
+              <ChevronDownIcon v-if="!showTraceback" class="toggle-icon" />
+              <ChevronUpIcon v-else class="toggle-icon" />
+            </button>
+            <pre v-if="showTraceback" class="traceback">{{ parsedError.traceback }}</pre>
+          </div>
+        </div>
         <div v-else class="error-message">{{ task.error_message }}</div>
       </div>
     </div>
 
     <!-- 任务状态日志 -->
-    <div v-if="task?.status_history && typeof task.status_history === 'object'">
-      <template v-if="Array.isArray(task.status_history)">
-        <!-- 当status_history是数组时 -->
-        <div v-for="(item, index) in task.status_history" :key="index" class="status-record">
-          <div class="status-header">
-            <div class="status-badge" :class="getStatusClass(item.status)">
-              {{ getStatusText(item.status) }}
-            </div>
-            <div class="status-time">
-              <span>{{ formatDate(item?.start_time) }}</span>
-              <span v-if="item?.end_time">- {{ formatDate(item?.end_time) }}</span>
-            </div>
-          </div>
-          <div class="status-logs">
-            <div v-for="(log, logIndex) in item?.logs" :key="logIndex" class="log-item">
-              <div class="log-time">{{ formatTime(log?.time) }}</div>
-              <div class="log-message">{{ log?.message }}</div>
-            </div>
-          </div>
+    <div v-for="(status, statusKey) in task?.status_history" :key="statusKey" class="status-record">
+      <div class="status-header">
+        <div class="status-badge" :class="getStatusClass(statusKey)">
+          {{ getStatusText(statusKey) }}
         </div>
-      </template>
-      <template v-else>
-        <!-- 当status_history是对象时 -->
-        <div v-for="(status, statusKey) in task.status_history" :key="statusKey" class="status-record">
-          <div class="status-header">
-            <div class="status-badge" :class="getStatusClass(statusKey)">
-              {{ getStatusText(statusKey) }}
-            </div>
-            <div class="status-time">
-              <span>{{ formatDate(status?.start_time) }}</span>
-              <span v-if="status?.end_time">- {{ formatDate(status?.end_time) }}</span>
-            </div>
-          </div>
-          <div class="status-logs">
-            <div v-for="(log, index) in status?.logs" :key="index" class="log-item">
-              <div class="log-time">{{ formatTime(log?.time) }}</div>
-              <div class="log-message">{{ log?.message }}</div>
-            </div>
-          </div>
+        <div class="status-time">
+          <span>{{ formatDate(status?.start_time) }}</span>
+          <span v-if="status?.end_time">- {{ formatDate(status?.end_time) }}</span>
         </div>
-      </template>
+      </div>
+      <div class="status-logs">
+        <div v-for="(log, index) in status?.logs" :key="index" class="log-item">
+          <div class="log-time">{{ formatTime(log?.time) }}</div>
+          <div class="log-message">{{ log?.message }}</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { 
-  CheckCircleIcon, 
-  ClockIcon, 
+import {
+  CheckCircleIcon,
+  ClockIcon,
   XCircleIcon,
   CircleIcon,
   ExclamationTriangleIcon,
@@ -117,20 +93,17 @@ import {
   DocumentIcon,
   ArrowPathIcon,
   TagIcon,
-  CommandLineIcon
+  CommandLineIcon,
+  ArrowUpCircleIcon,
+  ChevronDownIcon,
+  ChevronUpIcon
 } from '@heroicons/vue/24/outline'
 import { formatDateTime, formatDuration, formatDate, formatTime } from '@/utils/datetime'
-
-// // 状态文本映射
-// const statusTextMap = {
-//   'NEW': '新建',
-//   'SUBMITTED': '已提交',
-//   'MARKING': '标记中',
-//   'MARKED': '已标记',
-//   'TRAINING': '训练中',
-//   'COMPLETED': '已完成',
-//   'ERROR': '错误'
-// }
+import { 
+  getStatusText, 
+  getStatusClass, 
+  statusTextMap 
+} from '@/utils/taskStatus'
 
 const props = defineProps({
   task: {
@@ -142,12 +115,12 @@ const props = defineProps({
 
 // 定义任务状态流程
 const taskStates = [
-  { status: 'NEW', label: '新建' },
-  { status: 'SUBMITTED', label: '已提交' },
-  { status: 'MARKING', label: '标记中' },
-  { status: 'MARKED', label: '已标记' },
-  { status: 'TRAINING', label: '训练中' },
-  { status: 'COMPLETED', label: '已完成' }
+  { status: 'NEW', label: statusTextMap.NEW },
+  { status: 'SUBMITTED', label: statusTextMap.SUBMITTED },
+  { status: 'MARKING', label: statusTextMap.MARKING },
+  { status: 'MARKED', label: statusTextMap.MARKED },
+  { status: 'TRAINING', label: statusTextMap.TRAINING },
+  { status: 'COMPLETED', label: statusTextMap.COMPLETED }
 ]
 
 // 状态判断方法
@@ -167,7 +140,7 @@ const isStateError = (status) => {
 const getStateTime = (status) => {
   // 如果status_history不存在，直接返回null
   if (!props.task?.status_history) return null;
-  
+
   // 处理status_history是对象而不是数组的情况
   if (Array.isArray(props.task.status_history)) {
     const stateHistory = props.task.status_history.find(h => h.status === status)
@@ -179,14 +152,16 @@ const getStateTime = (status) => {
   }
 }
 
-
-
 // 解析错误详情
-const errorDetails = computed(() => {
+const parsedError = computed(() => {
   try {
     if (props.task?.error_message) {
       const error = JSON.parse(props.task.error_message)
-      return JSON.stringify(error, null, 2)
+      return {
+        type: error.type || 'Unknown',
+        message: error.message || 'No additional message',
+        traceback: error.traceback || 'No traceback available'
+      }
     }
     return null
   } catch {
@@ -226,44 +201,39 @@ const startDrag = (e) => {
   const container = phasesContainer.value
   startX.value = e.pageX - container.offsetLeft
   scrollLeft.value = container.scrollLeft
-  container.style.cursor = 'grabbing'
-  // 防止文本选择
-  e.preventDefault()
 }
 
 // 拖动中
 const onDrag = (e) => {
   if (!isDragging.value) return
-  
+
   const container = phasesContainer.value
   const x = e.pageX - container.offsetLeft
-  const walk = (x - startX.value) * 1.5 // 增加滚动速度
+  const walk = (x - startX.value) // 增加滚动速度
   container.scrollLeft = scrollLeft.value - walk
 }
 
 // 停止拖动
 const stopDrag = () => {
   if (!isDragging.value) return
-  
+
   isDragging.value = false
-  const container = phasesContainer.value
-  container.style.cursor = 'grab'
 }
 
 // 滚动到当前活动状态
 const scrollToActivePhase = async () => {
   await nextTick()
   if (!phasesContainer.value) return
-  
+
   const activeIndex = taskStates.findIndex(s => isStateActive(s.status))
   if (activeIndex === -1) return
-  
+
   const activeElement = phaseItems.value[activeIndex]
   if (!activeElement) return
-  
+
   const container = phasesContainer.value
   const scrollLeft = activeElement.offsetLeft - (container.clientWidth / 2) + (activeElement.clientWidth / 2)
-  
+
   container.scrollTo({
     left: Math.max(0, scrollLeft),
     behavior: 'smooth'
@@ -296,48 +266,26 @@ const getPhaseIcon = (status) => {
   if (isStateCompleted(status)) return CheckCircleIcon
   if (isStateActive(status)) return ClockIcon
   if (isStateError(status)) return XCircleIcon
-  
+
   // 为每个状态设置特定图标
   const iconMap = {
     'NEW': DocumentIcon,
-    'SUBMITTED': ArrowPathIcon,
+    'SUBMITTED': ArrowUpCircleIcon,
     'MARKING': TagIcon,
     'MARKED': CheckCircleIcon,
     'TRAINING': CommandLineIcon,
     'COMPLETED': FlagIcon
   }
-  
+
   return iconMap[status] || CircleIcon
 }
 
-// 获取状态文本和类
-const getStatusText = (status) => {
-  // 状态文本映射
-  const statusTextMap = {
-    'NEW': '新建',
-    'SUBMITTED': '已提交',
-    'MARKING': '标记中',
-    'MARKED': '已标记',
-    'TRAINING': '训练中',
-    'COMPLETED': '已完成',
-    'ERROR': '错误'
-  }
-  return statusTextMap[status] || status
+const showTraceback = ref(false)
+
+const toggleTraceback = () => {
+  showTraceback.value = !showTraceback.value
 }
 
-const getStatusClass = (status) => {
-  // 状态类映射
-  const statusClassMap = {
-    'NEW': 'status-new',
-    'SUBMITTED': 'status-submitted',
-    'MARKING': 'status-marking',
-    'MARKED': 'status-marked',
-    'TRAINING': 'status-training',
-    'COMPLETED': 'status-completed',
-    'ERROR': 'status-error'
-  }
-  return statusClassMap[status] || 'status-unknown'
-}
 </script>
 
 <style scoped>
@@ -360,13 +308,21 @@ const getStatusClass = (status) => {
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   /* 隐藏滚动条但保持功能 */
-  scrollbar-width: none;  /* Firefox */
-  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
   cursor: grab;
-  user-select: none; /* 防止文本选择 */
+  user-select: none;
+  /* 防止文本选择 */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  cursor: grabbing !important;
 }
+
 
 /* 隐藏 Webkit 滚动条 */
 .task-phases::-webkit-scrollbar {
@@ -476,9 +432,11 @@ const getStatusClass = (status) => {
   0% {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary-color) 40%, transparent);
   }
+
   70% {
     box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary-color) 0%, transparent);
   }
+
   100% {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary-color) 0%, transparent);
   }
@@ -569,7 +527,58 @@ const getStatusClass = (status) => {
   border-radius: var(--radius-md);
 }
 
-.error-content pre {
+.parsed-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.error-type {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--danger-color);
+}
+
+.error-message {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.traceback-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-2);
+}
+
+.traceback-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  background: transparent;
+  border: none;
+  color: var(--primary-color);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+}
+
+.traceback-toggle:hover {
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+}
+
+.toggle-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.traceback {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   line-height: 1.5;
@@ -577,17 +586,10 @@ const getStatusClass = (status) => {
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.error-message {
-  color: var(--danger-color);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-/* 拖动时的光标样式 */
-.task-phases:active {
-  cursor: grabbing;
+  background: color-mix(in srgb, var(--danger-color) 5%, transparent);
+  padding: var(--spacing-3);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--danger-color);
 }
 
 .status-record {
@@ -637,4 +639,4 @@ const getStatusClass = (status) => {
 .log-message {
   color: var(--text-secondary);
 }
-</style> 
+</style>

@@ -88,19 +88,14 @@ const newTask = ref({
 })
 
 // 当前选中的任务ID（从路由参数获取）
-const selectedTaskId = computed(() => route.params.id || '')
+const selectedTaskId = computed(() => route.params.id || 0)
+
 
 // 处理任务选择
 const handleTaskSelect = (task) => {
   if (task) {
     // 导航到任务详情页
     router.push(`/tasks/${task.id}`)
-  } else if (allTasks.value.length > 0) {
-    // 如果没有选中任务但列表不为空，则默认选择第一个
-    router.push(`/tasks/${allTasks.value[0].id}`)
-  } else {
-    // 列表为空时，导航到任务列表页
-    router.push('/tasks')
   }
 }
 
@@ -134,27 +129,6 @@ const handleCreateTask = async () => {
   }
 }
 
-// 在组件挂载后，如果没有选择任务且列表不为空，则选择第一个任务
-onMounted(async () => {
-  // 如果当前没有选中任务，且路由是/tasks
-  if (!selectedTaskId.value && route.path === '/tasks') {
-    // 等待任务列表加载完成
-    await nextTick()
-    
-    // 如果有任务，选择第一个
-    if (allTasks.value.length > 0) {
-      handleTaskSelect(allTasks.value[0])
-    }
-  }
-})
-
-// 监听任务列表变化，在必要时自动选择任务
-watch(allTasks, (tasks) => {
-  // 如果有任务但没有选中任何任务，则选择第一个
-  if (tasks.length > 0 && !selectedTaskId.value && route.path === '/tasks') {
-    handleTaskSelect(tasks[0])
-  }
-}, { deep: true })
 </script>
 
 <style scoped>

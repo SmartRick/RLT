@@ -1,5 +1,5 @@
 import { createVNode, render } from 'vue'
-import Message from '@/components/common/Message.vue'
+import Message from '../components/common/Message.vue'
 
 /**
  * @typedef {'success' | 'warning' | 'error' | 'info'} MessageType
@@ -47,39 +47,69 @@ const createMessage = (options) => {
  */
 const message = {
   /**
-   * 显示成功消息
-   * @param {string} content 消息内容
-   * @param {number} [duration=3000] 显示时长
+   * 成功提示
+   * @param {string} content 提示内容
+   * @param {number} duration 提示持续时间
    */
   success(content, duration = 3000) {
-    return createMessage({ content, type: 'success', duration })
+    return createMessage({
+      type: 'success',
+      content,
+      duration
+    })
   },
-
+  
   /**
-   * 显示警告消息
-   * @param {string} content 消息内容
-   * @param {number} [duration=3000] 显示时长
+   * 错误提示
+   * @param {string|Error|Object} error 错误信息或错误对象
+   * @param {number} duration 提示持续时间
+   */
+  error(error, duration = 3000) {
+    // 处理各种错误类型
+    let content = '操作失败'
+    
+    if (typeof error === 'string') {
+      content = error
+    } else if (error instanceof Error) {
+      content = error.message || '操作失败'
+    } else if (error && error.msg) {
+      // 处理统一格式的错误对象
+      content = error.msg
+    } else if (error && error.message) {
+      content = error.message
+    }
+    
+    return createMessage({
+      type: 'error',
+      content,
+      duration
+    })
+  },
+  
+  /**
+   * 警告提示
+   * @param {string} content 提示内容
+   * @param {number} duration 提示持续时间
    */
   warning(content, duration = 3000) {
-    return createMessage({ content, type: 'warning', duration })
+    return createMessage({
+      type: 'warning',
+      content,
+      duration
+    })
   },
-
+  
   /**
-   * 显示错误消息
-   * @param {string} content 消息内容
-   * @param {number} [duration=3000] 显示时长
-   */
-  error(content, duration = 3000) {
-    return createMessage({ content, type: 'error', duration })
-  },
-
-  /**
-   * 显示信息消息
-   * @param {string} content 消息内容
-   * @param {number} [duration=3000] 显示时长
+   * 信息提示
+   * @param {string} content 提示内容
+   * @param {number} duration 提示持续时间
    */
   info(content, duration = 3000) {
-    return createMessage({ content, type: 'info', duration })
+    return createMessage({
+      type: 'info',
+      content,
+      duration
+    })
   }
 }
 

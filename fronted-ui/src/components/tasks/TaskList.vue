@@ -32,6 +32,7 @@
         >
           <option value="">全部状态</option>
           <option value="NEW">新建</option>
+          <option value="SUBMITTED">已提交</option>
           <option value="MARKING">标记中</option>
           <option value="MARKED">已标记</option>
           <option value="TRAINING">训练中</option>
@@ -60,7 +61,7 @@
         v-for="task in tasks" 
         :key="task.id"
         class="task-list-item"
-        :class="{ 'selected': selectedTaskId === task.id }"
+        :class="{ 'selected': selectedTaskId == task.id }"
         @click="selectTask(task)"
       >
         <div class="task-icon">
@@ -94,7 +95,8 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { 
   MagnifyingGlassIcon, 
   PlusIcon,
@@ -104,16 +106,25 @@ import {
   ArrowPathIcon,
   TagIcon,
   XCircleIcon,
-  TrashIcon
+  TrashIcon,
+  ArrowUpCircleIcon
 } from '@heroicons/vue/24/outline'
 import { tasksApi } from '@/api/tasks'
 import { formatDate } from '@/utils/datetime'
 import message from '@/utils/message'
+import { 
+  getStatusText as getStatusTextUtil, 
+  getStatusClass as getStatusClassUtil, 
+  canDeleteTask as canDelete,
+  statusDetailColorMap
+} from '@/utils/taskStatus'
+
+const route = useRoute()
 
 const props = defineProps({
   selectedTaskId: {
-    type: String,
-    default: ''
+    type: Number,
+    default: 0
   }
 })
 
@@ -124,9 +135,14 @@ const tasks = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
 const dateFilter = ref('')
-
+// 判断当前是否在任务相关页面
+const isTasksRoute = computed(() => {
+  return route.path === '/tasks' || route.path.startsWith('/tasks/')
+})
 // 获取任务列表
 const fetchTasks = async () => {
+  // 只有在任务相关路由下才获取任务列表
+  if (!isTasksRoute.value) return
   try {
     const data = await tasksApi.getTasks({
       status: statusFilter.value,
@@ -138,7 +154,7 @@ const fetchTasks = async () => {
     emit('update:tasks', data)
     
     // 如果有任务但没有选中的任务，默认选择第一个
-    if (tasks.value.length > 0 && !props.selectedTaskId) {
+    if (tasks.value.length > 0 && !props.selectedTaskId && isTasksRoute.value) {
       selectTask(tasks.value[0])
     }
   } catch (error) {
@@ -157,7 +173,10 @@ const handleFilterChange = () => {
 
 // 选择任务
 const selectTask = (task) => {
-  emit('select', task)
+  // 只有在任务相关页面才触发选择事件
+  if (isTasksRoute.value) {
+    emit('select', task)
+  }
 }
 
 // 删除任务
@@ -180,6 +199,7 @@ const handleDeleteTask = async (taskId) => {
 const getStatusIcon = (status) => {
   const iconMap = {
     'NEW': DocumentIcon,
+    'SUBMITTED': ArrowUpCircleIcon,
     'MARKING': TagIcon,
     'MARKED': CheckCircleIcon,
     'TRAINING': ArrowPathIcon,
@@ -189,35 +209,19 @@ const getStatusIcon = (status) => {
   return iconMap[status] || ExclamationCircleIcon
 }
 
-// 获取状态文本
+// 使用统一的状态文本方法
 const getStatusText = (status) => {
-  const statusMap = {
-    'NEW': '新建',
-    'MARKING': '标记中',
-    'MARKED': '已标记',
-    'TRAINING': '训练中',
-    'COMPLETED': '已完成',
-    'ERROR': '错误'
-  }
-  return statusMap[status] || status
+  return getStatusTextUtil(status)
 }
 
-// 获取状态样式类
+// 使用统一的状态样式类方法
 const getStatusClass = (status) => {
-  const statusClassMap = {
-    'NEW': 'new',
-    'MARKING': 'marking',
-    'MARKED': 'marked',
-    'TRAINING': 'training',
-    'COMPLETED': 'completed',
-    'ERROR': 'error'
-  }
-  return statusClassMap[status] || ''
+  return getStatusClassUtil(status)
 }
 
 // 判断任务是否可以删除
 const canDeleteTask = (task) => {
-  return ['NEW', 'ERROR'].includes(task.status)
+  return canDelete(task)
 }
 
 // 确认删除任务
@@ -230,13 +234,18 @@ const confirmDelete = (task) => {
 // 监听selectedTaskId变化
 watch(() => props.selectedTaskId, (newId) => {
   // 如果selectedTaskId被清空且有任务，则选择第一个
-  if (!newId && tasks.value.length > 0) {
+  if (!newId && tasks.value.length > 0 && isTasksRoute.value) {
     selectTask(tasks.value[0])
   }
 })
 
-// 初始化
-fetchTasks()
+// 监听路由变化
+watch(() => route.path, (newPath) => {
+  // 如果进入任务页面，则获取任务列表
+  if (newPath === '/tasks' || newPath.startsWith('/tasks/')) {
+    fetchTasks()
+  }
+}, { immediate: true })
 
 // 暴露方法给父组件
 defineExpose({
@@ -377,7 +386,8 @@ defineExpose({
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-color-light);
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
 .task-list-item:hover {
@@ -385,24 +395,26 @@ defineExpose({
 }
 
 .task-list-item.selected {
-  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  background: color-mix(in srgb, var(--primary-color) 15%, transparent);
   border-left: 3px solid var(--primary-color);
   padding-left: 9px; /* 补偿边框宽度 */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .task-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--background-secondary);
 }
 
 .status-icon {
   width: 16px;
   height: 16px;
-  color: var(--text-secondary);
 }
 
 .task-item-content {
@@ -424,9 +436,47 @@ defineExpose({
 }
 
 .task-status {
-  padding: 1px 5px;
-  border-radius: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
   font-weight: 500;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.task-status.new {
+  background-color: v-bind('statusDetailColorMap.NEW.background');
+  color: v-bind('statusDetailColorMap.NEW.color');
+}
+
+.task-status.submitted {
+  background-color: v-bind('statusDetailColorMap.SUBMITTED.background');
+  color: v-bind('statusDetailColorMap.SUBMITTED.color');
+}
+
+.task-status.marking {
+  background-color: v-bind('statusDetailColorMap.MARKING.background');
+  color: v-bind('statusDetailColorMap.MARKING.color');
+}
+
+.task-status.marked {
+  background-color: v-bind('statusDetailColorMap.MARKED.background');
+  color: v-bind('statusDetailColorMap.MARKED.color');
+}
+
+.task-status.training {
+  background-color: v-bind('statusDetailColorMap.TRAINING.background');
+  color: v-bind('statusDetailColorMap.TRAINING.color');
+}
+
+.task-status.completed {
+  background-color: v-bind('statusDetailColorMap.COMPLETED.background');
+  color: v-bind('statusDetailColorMap.COMPLETED.color');
+}
+
+.task-status.error {
+  background-color: v-bind('statusDetailColorMap.ERROR.background');
+  color: v-bind('statusDetailColorMap.ERROR.color');
 }
 
 .task-date {
@@ -442,8 +492,8 @@ defineExpose({
 }
 
 .delete-btn {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -451,20 +501,20 @@ defineExpose({
   background: transparent;
   border: none;
   cursor: pointer;
-  color: var(--text-tertiary);
-  opacity: 0.5;
+  color: #EF4444;
+  opacity: 0.6;
   transition: all 0.2s ease;
 }
 
 .delete-btn:hover {
-  background: #FEF2F2;
-  color: #B91C1C;
+  background: #FEE2E2;
+  color: #DC2626;
   opacity: 1;
 }
 
 .delete-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 /* 滚动条样式 */
