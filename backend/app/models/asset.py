@@ -14,11 +14,11 @@ class Asset(Base):
     ssh_key_path = Column(String(255))
     ssh_auth_type = Column(String(20), default='KEY')
     status = Column(String(20), default='PENDING')
+    is_local = Column(Boolean, default=False, comment='是否为本地系统资产')
     
     # 存储为JSON字段
     lora_training = Column(JSON, default={
         'enabled': False,
-        'url': '',
         'port': None,
         'config_path': '',
         'params': '{}',
@@ -27,7 +27,6 @@ class Asset(Base):
     
     ai_engine = Column(JSON, default={
         'enabled': False,
-        'url': '',
         'port': None,
         'verified': False
     })
@@ -54,5 +53,6 @@ class Asset(Base):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'marking_tasks_count': self.marking_tasks_count,
             'training_tasks_count': self.training_tasks_count,
-            'max_concurrent_tasks': self.max_concurrent_tasks
+            'max_concurrent_tasks': self.max_concurrent_tasks,
+            'is_local': self.is_local
         }

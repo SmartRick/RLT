@@ -16,6 +16,8 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 import json
 from ..config import Config
+from ..services.local_asset_service import LocalAssetService
+import traceback
 
 logger = setup_logger('task_service')
 
@@ -51,10 +53,11 @@ class TaskService:
         # 只保留模型中定义的字段
         valid_fields = ['name', 'description']
         filtered_data = {k: v for k, v in task_data.items() if k in valid_fields}
-        
         task = Task(**filtered_data)
         try:
             db.add(task)
+            # 初始化状态为NEW并添加日志记录
+            task.update_status('NEW', '任务已创建', db=None)  # 不自动提交
             db.commit()
             db.refresh(task)
             return task.to_dict()
@@ -89,8 +92,25 @@ class TaskService:
             return False
             
         try:
+            # 1. 获取并删除关联的图片文件
+            images = db.query(TaskImage).filter(TaskImage.task_id == task_id).all()
+            for image in images:
+                # 删除单个图片文件
+                if image.file_path and os.path.exists(image.file_path):
+                    os.remove(image.file_path)
+                    logger.info(f"已删除图片文件: {image.file_path}")
+                
+            # 2. 删除任务目录
+            task_upload_dir = os.path.join(config.UPLOAD_DIR, str(task_id))
+            if os.path.exists(task_upload_dir):
+                import shutil
+                shutil.rmtree(task_upload_dir)
+                logger.info(f"已删除任务目录: {task_upload_dir}")
+            
+            # 3. 删除数据库中的任务记录（会级联删除关联的图片记录）
             db.delete(task)
             db.commit()
+            logger.info(f"已删除任务记录: {task_id}")
             return True
         except Exception as e:
             logger.error(f"删除任务失败: {e}")
@@ -194,42 +214,36 @@ class TaskService:
 
     @staticmethod
     def get_available_marking_assets(db: Session) -> List[Asset]:
-        """获取可用的标记资产"""
+        """获取可用于标记的资产"""
         try:
-            # 查询所有已连接且未达到最大任务数的资产
-            available_assets = db.query(Asset).filter(
-                # Asset.status == 'CONNECTED',  # 已连接
-                Asset.marking_tasks_count < Asset.max_concurrent_tasks,  # 未达到最大任务数
+            # 查询具有标记能力且当前连接状态的资产
+            assets = db.query(Asset).filter(
+                Asset.status == 'CONNECTED',
+                Asset.ai_engine.op('->')('enabled').in_(['true', 'True', '1']),
+                Asset.marking_tasks_count < Asset.max_concurrent_tasks
             ).all()
-
-            # 过滤出AI引擎能力已验证的资产
-            verified_assets = [
-                asset for asset in available_assets
-                if (asset.ai_engine.get('enabled') and 
-                    asset.ai_engine.get('verified', False))
-            ]
-
-            if not verified_assets:
-                logger.warning("没有找到已验证的可用标记资产")
-                return []
-
-            return verified_assets
-
+        
+            return assets
         except Exception as e:
             logger.error(f"获取可用标记资产失败: {str(e)}")
             return []
 
     @staticmethod
     def get_available_training_assets(db: Session) -> List[Asset]:
-        """获取可用的训练资产"""
-        return db.query(Asset).filter(
-            Asset.status == 'ONLINE',
-            Asset.lora_training.op('->>')('enabled') == 'true',
-            Asset.lora_training.op('->>')('verified') == 'true',
-            Asset.training_tasks_count < Asset.max_concurrent_tasks
-        ).order_by(
-            Asset.training_tasks_count  # 按任务数排序
-        ).all()
+        """获取可用于训练的资产"""
+        try:
+            # 查询具有训练能力且当前连接状态的资产
+            assets = db.query(Asset).filter(
+                Asset.status == 'CONNECTED',
+                Asset.lora_training.op('->')('enabled').in_(['true', 'True', '1']),
+                Asset.training_tasks_count < Asset.max_concurrent_tasks
+            ).all()
+            
+                
+            return assets
+        except Exception as e:
+            logger.error(f"获取可用训练资产失败: {str(e)}")
+            return []
 
     @staticmethod
     def start_marking(db: Session, task_id: int) -> Optional[Dict]:
@@ -249,17 +263,15 @@ class TaskService:
             if not task.images:
                 raise ValueError("任务没有上传任何图片")
 
-            # 更新任务状态为已提交
-            task.update_status('SUBMITTED', '任务已提交')
-            db.commit()
+            # 更新任务状态为已提交，并传递数据库会话
+            task.update_status('SUBMITTED', '任务已提交', db=db)
 
             return task.to_dict()
             
         except ValueError as e:
             logger.warning(f"提交标记任务失败: {str(e)}")
             if task:
-                task.update_status('ERROR', str(e))
-                db.commit()
+                task.update_status('ERROR', str(e), db=db)
             return {
                 'error': str(e),
                 'error_type': 'VALIDATION_ERROR',
@@ -269,8 +281,7 @@ class TaskService:
         except Exception as e:
             logger.error(f"开始标记失败: {str(e)}", exc_info=True)
             if task:
-                task.update_status('ERROR', f"系统错误: {str(e)}")
-                db.commit()
+                task.update_status('ERROR', f"系统错误: {str(e)}", db=db)
             return {
                 'error': f"系统错误: {str(e)}",
                 'error_type': 'SYSTEM_ERROR',
@@ -289,29 +300,58 @@ class TaskService:
                     raise ValueError("任务或资产不存在")
 
                 logger.info(f"开始处理标记任务 {task_id}")
+                
+                # 更新任务状态，记录开始处理标记
+                task.update_status('MARKING', f'开始处理标记任务，使用资产: {asset.name}', db=db)
 
                 # 准备输入输出目录
                 input_dir = os.path.join(Config.DATA_DIR, 'uploads', str(task_id))
-                output_dir = os.path.join(Config.DATA_DIR, 'uploads', str(task_id), 'marked')
-                os.makedirs(output_dir, exist_ok=True)
+                output_dir = os.path.join(Config.DATA_DIR, 'marked', str(task_id))
+
+                # 记录目录信息
+                task.add_log(f'输入目录: {input_dir}', log_type=task.LOG_TYPE_INFO, db=db)
+                task.add_log(f'输出目录: {output_dir}', log_type=task.LOG_TYPE_INFO, db=db)
 
                 # 创建标记处理器
-                handler = MarkRequestHandler(asset.ai_engine)
+                handler = MarkRequestHandler(asset.ai_engine, asset.ip)
                 
-                # 发送标记请求
-                logger.info(f"发送标记请求: task_id={task_id}, asset_id={asset_id}")
-                logger.info(f"输入目录: {input_dir}")
-                logger.info(f"输出目录: {output_dir}")
-                prompt_id = handler.mark_request(
-                    input_folder=input_dir,
-                    output_folder=output_dir,
-                    resolution=1024,
-                    ratio=1.0
-                )
+                # 记录请求准备信息
+                task.add_log(f'准备发送标记请求: task_id={task_id}, asset_id={asset_id}, asset_ip={asset.ip}', log_type=task.LOG_TYPE_INFO, db=db)
+                
+                
+                try:
+                    # 发送标记请求
+                    logger.info(f"发送标记请求: task_id={task_id}, asset_id={asset_id}")
+                    logger.info(f"输入目录: {input_dir}")
+                    logger.info(f"输出目录: {output_dir}")
+                    prompt_id = handler.mark_request(
+                        input_folder=input_dir,
+                        output_folder=output_dir,
+                        resolution=1024,
+                        ratio="1:1"
+                    )
+                except Exception as req_error:
+                    # 捕获请求异常，记录详细错误信息
+                    error_detail = {
+                        "message": str(req_error),
+                        "type": type(req_error).__name__,
+                        "traceback": str(traceback.format_exc())
+                    }
+                    error_json = json.dumps(error_detail, indent=2)
+                    task.update_status('ERROR', f'标记请求失败: {str(req_error)}', db=db)
+                    task.add_error_log(error_json, db=db)
+                    if task.marking_asset:
+                        task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
+                        db.commit()
+                    # 重新抛出异常，让上层处理
+                    raise ValueError(f"标记请求失败: {str(req_error)}")
 
                 if not prompt_id:
-                    raise ValueError("创建标记任务失败")
+                    task.add_log('没有获取到有效的prompt_id', log_type=task.LOG_TYPE_ERROR, db=db)
+                    raise ValueError("创建标记任务失败，未获取到prompt_id")
 
+                # 记录成功获取prompt_id
+                task.add_log(f'标记任务创建成功，prompt_id={prompt_id}', log_type=task.LOG_TYPE_SUCCESS, db=db)
                 logger.info(f"标记任务 {task_id} 创建成功, prompt_id={prompt_id}")
 
                 # 更新任务状态和prompt_id
@@ -323,13 +363,22 @@ class TaskService:
 
         except Exception as e:
             logger.error(f"标记任务 {task_id} 处理失败: {str(e)}", exc_info=True)
+            # 捕获所有异常，确保错误信息被记录
+            error_detail = {
+                "message": str(e),
+                "type": type(e).__name__,
+                "traceback": str(traceback.format_exc())
+            }
+            error_json = json.dumps(error_detail, indent=2)
+            
             with get_db() as db:
                 task = db.query(Task).filter(Task.id == task_id).first()
                 if task:
-                    task.update_status('ERROR', str(e))
+                    task.update_status('ERROR', f'标记处理失败: {str(e)}', db=db)
+                    task.add_error_log(error_json, db=db)
                     if task.marking_asset:
                         task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
-                    db.commit()
+                        db.commit()
             raise
 
     @staticmethod
@@ -342,79 +391,79 @@ class TaskService:
 
                 if not task or not asset:
                     raise ValueError("任务或资产不存在")
+                
+                # 记录开始监控
+                task.add_log(f'开始监控标记任务状态, prompt_id={prompt_id}', log_type=task.LOG_TYPE_INFO, db=db)
 
-                handler = MarkRequestHandler(asset.ai_engine)
+                handler = MarkRequestHandler(asset.ai_engine, asset.ip)
                 poll_interval = ConfigService.get_value('mark_poll_interval', 5)
                 last_progress = 0
 
                 while True:
-                    completed, success, task_info = handler.check_status(prompt_id)
-                    current_progress = task_info.get("progress", 0)
-                    
-                    # 只在进度变化时更新数据库
-                    if current_progress != last_progress:
-                        with get_db() as db:
-                            task = db.query(Task).filter(Task.id == task_id).first()
-                            if task:
-                                task.progress = current_progress
-                                # 记录进度变更
-                                task.update_status(
-                                    'MARKING',
-                                    f'标记进度: {current_progress}%'
-                                )
-                                db.commit()
-                    last_progress = current_progress
-                    
-                    if completed:
-                        with get_db() as db:
-                            task = db.query(Task).filter(Task.id == task_id).first()
-                            if task:
-                                if success:
-                                    task.update_status('MARKED', '标记完成')
-                                    task.progress = 100
-                                else:
-                                    error_info = task_info.get("error_info", {})
-                                    error_message = {
-                                        "message": error_info.get("error_message"),
-                                        "type": error_info.get("error_type"),
-                                        "node": error_info.get("node_type"),
-                                        "details": {
-                                            "inputs": error_info.get("inputs"),
-                                            "traceback": error_info.get("traceback")
+                    try:
+                        completed, success, task_info = handler.check_status(prompt_id)
+                        
+                        if completed:
+                            with get_db() as complete_db:
+                                task = complete_db.query(Task).filter(Task.id == task_id).first()
+                                if task:
+                                    if success:
+                                        task.update_status('MARKED', '标记完成', db=complete_db)
+                                        task.progress = 100
+                                        task.add_log('标记任务成功完成', log_type=task.LOG_TYPE_SUCCESS, db=complete_db)
+                                    else:
+                                        error_info = task_info.get("error_info", {})
+                                        error_message = {
+                                            "message": error_info.get("error_message"),
+                                            "type": error_info.get("error_type"),
+                                            "node": error_info.get("node_type"),
+                                            "details": {
+                                                "inputs": error_info.get("inputs"),
+                                                "traceback": error_info.get("traceback")
+                                            }
                                         }
-                                    }
-                                    error_json = json.dumps(error_message, indent=2)
-                                    task.update_status(
-                                        'ERROR',
-                                        error_json
-                                    )
-                                    task.error_message = error_json
-                                
-                                # 更新资产任务计数
-                                if task.marking_asset:
-                                    task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
-                                db.commit()
-                        break
+                                        error_json = json.dumps(error_message, indent=2)
+                                        task.update_status(
+                                            'ERROR',
+                                            f'标记失败: {error_info.get("error_message")}',
+                                            db=complete_db
+                                        )
+                                        task.add_error_log(error_json, db=complete_db)
+                                    
+                                    # 更新资产任务计数
+                                    if task.marking_asset:
+                                        task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
+                                        complete_db.commit()
+                            break
+                    except Exception as check_err:
+                        # 捕获检查状态时的错误
+                        logger.error(f"检查任务状态时出错: {str(check_err)}")
+                        with get_db() as err_db:
+                            task = err_db.query(Task).filter(Task.id == task_id).first()
+                            if task:
+                                task.add_log(f'检查任务状态出错: {str(check_err)}', log_type=task.LOG_TYPE_WARNING, db=err_db)
+                        # 继续尝试，不中断监控
                     
                     time.sleep(poll_interval)
 
         except Exception as e:
             logger.error(f"监控标记任务状态失败: {str(e)}")
+            # 记录详细的错误信息
+            error_detail = {
+                "message": str(e),
+                "type": type(e).__name__,
+                "traceback": str(traceback.format_exc())
+            }
+            error_json = json.dumps(error_detail, indent=2)
+            
             with get_db() as db:
                 task = db.query(Task).filter(Task.id == task_id).first()
                 if task:
-                    error_message = json.dumps({
-                        "message": str(e),
-                        "type": "MONITOR_ERROR"
-                    })
-                    task.update_status(
-                        'ERROR',
-                        error_message
-                    )
-                    task.error_message = error_message
+                    task.update_status('ERROR', f'监控失败: {str(e)}', db=db)
+                    task.add_error_log(error_json, db=db)
                     if task.marking_asset:
                         task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
-                    db.commit()
+                        db.commit()
 
     @staticmethod
     def start_training(db: Session, task_id: int) -> Optional[Dict]:
@@ -428,8 +477,7 @@ class TaskService:
                 raise ValueError(f"任务状态 {task.status} 不允许开始训练")
 
             # 更新任务状态
-            task.update_status('MARKED', '准备开始训练')
-            db.commit()
+            task.update_status('MARKED', '准备开始训练', db=db)
             
             return task.to_dict()
             
@@ -460,8 +508,7 @@ class TaskService:
             elif task.status == 'TRAINING' and task.training_asset:
                 task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
 
-            task.update_status('ERROR', '任务被手动终止')
-            db.commit()
+            task.update_status('ERROR', '任务被手动终止', db=db)
             return True
         except Exception as e:
             logger.error(f"终止任务失败: {e}")
@@ -479,7 +526,7 @@ class TaskService:
             # 根据上一次执行的阶段决定重启到哪个状态
             if task.marking_asset_id and not task.training_asset_id:
                 # 如果只有标记资产，说明是在标记阶段失败的
-                task.update_status('NEW', '任务已重启')
+                task.update_status('NEW', '任务已重启', db=db)
                 task.progress = 0
                 task.prompt_id = None
                 
@@ -490,7 +537,7 @@ class TaskService:
                 
             elif task.training_asset_id:
                 # 如果有训练资产，说明是在训练阶段失败的
-                task.update_status('MARKED', '任务已重启')
+                task.update_status('MARKED', '任务已重启', db=db)
                 task.progress = 0
                 
                 # 清除训练资产关联
@@ -498,7 +545,6 @@ class TaskService:
                     task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
                 task.training_asset_id = None
 
-            db.commit()
             return {
                 'success': True,
                 'task': task.to_dict()
@@ -532,7 +578,7 @@ class TaskService:
                 raise ValueError(f"任务状态 {task.status} 不允许取消")
 
             # 更新任务状态
-            task.update_status('NEW', '任务已取消')
+            task.update_status('NEW', '任务已取消', db=db)
             task.error_message = None
             task.progress = 0
             
@@ -545,7 +591,6 @@ class TaskService:
                 task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
                 task.training_asset_id = None
 
-            db.commit()
             return {
                 'success': True,
                 'task': task.to_dict()
@@ -576,7 +621,7 @@ class TaskService:
                     logger.error(f"任务 {task_id} 不存在")
                     return
 
-                handler = MarkRequestHandler(task.marking_asset.ai_engine)
+                handler = MarkRequestHandler(task.marking_asset.ai_engine, task.marking_asset.ip)
                 
                 while True:
                     task_info = handler.get_status(task.prompt_id)
@@ -587,20 +632,17 @@ class TaskService:
                     # 更新进度
                     progress = task_info.get('progress', 0)
                     if progress != task.progress:
-                        task.progress = progress
-                        task.add_log(f"标记进度: {progress}%", 'MARKING')
-                        db.commit()
+                        task.add_progress_log(progress, db=db)
 
                     # 检查是否完成
                     completed = task_info.get('completed', False)
                     if completed:
                         success = task_info.get('success', False)
                         if success:
-                            task.update_status('MARKED', '标记完成')
+                            task.update_status('MARKED', '标记完成', db=db)
                         else:
                             error_info = task_info.get('error_info', {})
-                            task.update_status('ERROR', f"标记失败: {error_info.get('error_message')}")
-                        db.commit()
+                            task.update_status('ERROR', f"标记失败: {error_info.get('error_message')}", db=db)
                         break
 
                     time.sleep(2)  # 每2秒检查一次
@@ -610,5 +652,33 @@ class TaskService:
             with get_db() as db:
                 task = db.query(Task).filter(Task.id == task_id).first()
                 if task:
-                    task.update_status('ERROR', f"监控失败: {str(e)}")
-                    db.commit() 
+                    task.update_status('ERROR', f"监控失败: {str(e)}", db=db)
+
+    @staticmethod
+    def get_task_status(db: Session, task_id: int) -> Optional[Dict]:
+        """
+        获取任务状态
+        返回任务的当前状态、进度、错误信息等
+        """
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return None
+            
+            # 整理返回数据
+            return {
+                'id': task.id,
+                'name': task.name,
+                'status': task.status,
+                'progress': task.progress,
+                'error_message': task.error_message,
+                'started_at': task.started_at.isoformat() if task.started_at else None,
+                'updated_at': task.updated_at.isoformat() if task.updated_at else None,
+                'completed_at': task.completed_at.isoformat() if task.completed_at else None,
+                'status_history': task.status_history,
+                'marking_asset_id': task.marking_asset_id,
+                'training_asset_id': task.training_asset_id
+            }
+        except Exception as e:
+            logger.error(f"获取任务状态失败: {str(e)}", exc_info=True)
+            return None 

@@ -184,6 +184,7 @@ class TaskScheduler:
                     )
                     logger.info(f"已提交任务 {task.id} 到标记线程池")
 
+                    ## 在提交任务成功后，启动该标记任务的监控线程
                     def start_monitor(f):
                         try:
                             prompt_id = f.result()

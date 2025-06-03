@@ -12,6 +12,4 @@ api_v1.register_blueprint(tasks_bp, url_prefix='/tasks')
 api_v1.register_blueprint(assets_bp, url_prefix='/assets')
 api_v1.register_blueprint(settings_bp, url_prefix='/settings')
 api_v1.register_blueprint(training_bp, url_prefix='/training') 
-
-api_v1.register_blueprint(assets_bp, url_prefix='/assets')
-api_v1.register_blueprint(terminal_bp, url_prefix='/terminal')
+api_v1.register_blueprint(terminal_bp)

@@ -34,15 +34,19 @@ class AssetService:
                 # 设置初始状态为 PENDING
                 asset.status = 'PENDING'
                 
-                # 验证SSH连接
-                try:
-                    if AssetService._verify_ssh_connection(asset_data.dict()):
-                        asset.status = 'CONNECTED'
-                    else:
+                # 如果是本地资产，无需验证SSH连接
+                if asset.is_local:
+                    asset.status = 'CONNECTED'  # 本地资产始终为已连接状态
+                else:
+                    # 验证SSH连接
+                    try:
+                        if AssetService._verify_ssh_connection(asset_data.dict()):
+                            asset.status = 'CONNECTED'
+                        else:
+                            asset.status = 'CONNECTION_ERROR'
+                    except Exception as e:
+                        logger.error(f"SSH connection verification failed: {str(e)}")
                         asset.status = 'CONNECTION_ERROR'
-                except Exception as e:
-                    logger.error(f"SSH connection verification failed: {str(e)}")
-                    asset.status = 'CONNECTION_ERROR'
                 
                 logger.debug("添加资产到数据库")
                 db.add(asset)
@@ -76,8 +80,11 @@ class AssetService:
                 for key, value in update_dict.items():
                     setattr(asset, key, value)
                 
-                # 如果更新了连接信息，重新验证SSH连接
-                if any(key in update_dict for key in ['ip', 'ssh_port', 'ssh_username', 'ssh_key_path']):
+                # 如果是本地资产，无需验证SSH连接
+                if asset.is_local:
+                    asset.status = 'CONNECTED'  # 本地资产始终为已连接状态
+                # 如果不是本地资产且更新了连接信息，重新验证SSH连接
+                elif any(key in update_dict for key in ['ip', 'ssh_port', 'ssh_username', 'ssh_key_path']):
                     try:
                         if AssetService._verify_ssh_connection(asset.__dict__):
                             asset.status = 'CONNECTED'
@@ -123,13 +130,20 @@ class AssetService:
                     'ai_engine': False
                 }
 
+                # 如果是本地资产，确保使用127.0.0.1作为连接地址
+                if asset.is_local:
+                    logger.info(f"验证本地资产 {asset_id} 的能力")
+                    
                 # 验证Lora训练能力
                 if asset.lora_training.get('enabled'):
                     try:
-                        url = asset.lora_training.get('url', '')
+                        # 对于本地资产，始终使用127.0.0.1
+                        url = '127.0.0.1' if asset.is_local else asset.ip
                         port = asset.lora_training.get('port')
                         
-                        if url and port:
+                        logger.info(f"验证Lora训练能力: {url}:{port}")
+                        
+                        if port:
                             import socket
                             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                             sock.settimeout(5)
@@ -141,6 +155,7 @@ class AssetService:
                                     **asset.lora_training,
                                     'verified': True
                                 }
+                                logger.info(f"Lora训练服务连接成功: {url}:{port}")
                             except Exception as e:
                                 logger.error(f"Lora训练服务连接失败: {url}:{port}, 错误: {str(e)}")
                                 asset.lora_training = {
@@ -150,6 +165,7 @@ class AssetService:
                             finally:
                                 sock.close()
                         else:
+                            logger.error(f"Lora训练验证失败: 未配置端口")
                             asset.lora_training = {
                                 **asset.lora_training,
                                 'verified': False
@@ -164,10 +180,13 @@ class AssetService:
                 # 验证AI引擎能力
                 if asset.ai_engine.get('enabled'):
                     try:
-                        url = asset.ai_engine.get('url', '')
+                        # 对于本地资产，始终使用127.0.0.1
+                        url = '127.0.0.1' if asset.is_local else asset.ip
                         port = asset.ai_engine.get('port')
                         
-                        if url and port:
+                        logger.info(f"验证AI引擎能力: {url}:{port}")
+                        
+                        if port:
                             import socket
                             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                             sock.settimeout(5)
@@ -179,6 +198,7 @@ class AssetService:
                                     **asset.ai_engine,
                                     'verified': True
                                 }
+                                logger.info(f"AI引擎服务连接成功: {url}:{port}")
                             except Exception as e:
                                 logger.error(f"AI引擎服务连接失败: {url}:{port}, 错误: {str(e)}")
                                 asset.ai_engine = {
@@ -188,6 +208,7 @@ class AssetService:
                             finally:
                                 sock.close()
                         else:
+                            logger.error(f"AI引擎验证失败: 未配置端口")
                             asset.ai_engine = {
                                 **asset.ai_engine,
                                 'verified': False
@@ -199,7 +220,9 @@ class AssetService:
                             'verified': False
                         }
 
+                # 提交所有变更
                 db.commit()
+                logger.info(f"资产 {asset_id} 能力验证结果: {results}")
                 return results
         except Exception as e:
             logger.error(f"验证资产能力失败: {str(e)}")

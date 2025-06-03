@@ -6,7 +6,7 @@
         0
       ],
       "custom_path": [
-        "154",
+        "155",
         0
       ],
       "filename_prefix": "flux",
@@ -31,7 +31,7 @@
       "proportional_height": 512,
       "method": "lanczos",
       "scale_to_side": "longest",
-      "scale_to_length": 512,
+      "scale_to_length": 1024,
       "round_to_multiple": "8",
       "image": [
         "48",
@@ -64,7 +64,7 @@
   },
   "57": {
     "inputs": {
-      "string": "J:\\代训练素材\\熊猫花花"
+      "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\uploads\\1"
     },
     "class_type": "LayerUtility: String",
     "_meta": {
@@ -77,7 +77,6 @@
       "max_new_tokens": 300,
       "temperature": 0.5,
       "cache": true,
-      "speak_and_recognation": true,
       "joy_pipeline": [
         "65",
         0
@@ -182,27 +181,9 @@
       "title": "Seg到遮罩组"
     }
   },
-  "154": {
-    "inputs": {
-      "delimiter": "\\",
-      "clean_whitespace": "true",
-      "text_a": [
-        "57",
-        0
-      ],
-      "text_b": [
-        "155",
-        0
-      ]
-    },
-    "class_type": "Text Concatenate",
-    "_meta": {
-      "title": "文本连锁"
-    }
-  },
   "155": {
     "inputs": {
-      "string": "15_熊猫花花"
+      "string": "marked"
     },
     "class_type": "Simple String",
     "_meta": {
