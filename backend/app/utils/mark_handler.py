@@ -1,12 +1,26 @@
 import json
 import requests
 import os
+import random
 from typing import Tuple, Dict, Optional, Any
 from ..utils.logger import setup_logger
 from ..services.config_service import ConfigService
 from ..config import Config
+from dataclasses import dataclass
 
 logger = setup_logger('mark_handler')
+
+@dataclass
+class MarkConfig:
+    """标记配置参数类"""
+    input_folder: str
+    output_folder: str
+    auto_crop: bool = True
+    resolution: int = 1024
+    default_crop_ratio: str = '1:1'
+    max_tokens: int = 300
+    min_confidence: float = 0.6
+    trigger_words: str = ''
 
 class MarkRequestHandler:
     def __init__(self, asset_config: dict, asset_ip: str = None):
@@ -31,23 +45,29 @@ class MarkRequestHandler:
             logger.error(f"加载工作流配置失败: {str(e)}")
             return {}
             
-    def mark_request(self, input_folder: str, output_folder: str, resolution: int, ratio: str) -> str:
+    def mark_request(self, mark_config: MarkConfig) -> str:
         """
         发送标记请求
+        :param mark_config: 标记配置参数
         :return: prompt_id
         :raises: ValueError 如果请求失败或返回无效数据
         """
         try:
             # 更新工作流配置
             workflow = self.workflow_api.copy()
-            workflow["35"]["inputs"]["aspect_ratio"] = ratio
-            workflow["35"]["inputs"]["scale_to_length"] = resolution
-            workflow["57"]["inputs"]["string"] = input_folder
-            workflow["155"]["inputs"]["string"] = output_folder
-            workflow["64"]["inputs"]["max_new_tokens"] = 300
+            workflow["209"]["inputs"]["boolean"] = mark_config.auto_crop
+            workflow["35"]["inputs"]["aspect_ratio"] = mark_config.default_crop_ratio
+            workflow["35"]["inputs"]["scale_to_length"] = mark_config.resolution
+            workflow["208"]["inputs"]["string"] = mark_config.input_folder
+            workflow["155"]["inputs"]["string"] = mark_config.output_folder
+            
+            workflow["207"]["inputs"]["seed"] = random.randint(1, 1000000)
+            workflow["64"]["inputs"]["max_new_tokens"] = mark_config.max_tokens
+            workflow["64"]["inputs"]["temperature"] = mark_config.min_confidence
+            workflow["210"]["inputs"]["string"] = mark_config.trigger_words
             # 保存修改后的工作流配置到项目路径的workflow文件夹下
-            workflow_new = os.path.join(Config.DATA_DIR, 'workflow', 'mark_workflow_api_new.json')
-            with open(workflow_new, 'w', encoding='utf-8') as f:
+            workflow_new_file = os.path.join(Config.DATA_DIR, 'workflow', 'mark_workflow_api_new.json')
+            with open(workflow_new_file, 'w', encoding='utf-8') as f:
                 json.dump(workflow, f, ensure_ascii=False, indent=4)
 
             # 构建请求
@@ -91,7 +111,7 @@ class MarkRequestHandler:
             # 构建结构化错误信息
             error_info = {
                 "message": str(e),
-                "type": "UNKNOWN_ERROR"
+                "type": type(e).__name__
             }
             
             raise ValueError(json.dumps(error_info))
@@ -132,66 +152,43 @@ class MarkRequestHandler:
         :param prompt_id: 任务ID
         :return: (is_completed, is_success, task_info)
         """
-        try:
-            url = f"{self.api_base_url}/history/{prompt_id}"
-            logger.debug(f"检查任务状态: {url}")
-            
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            # 检查响应是否为空
-            if not data or data == {}:
-                logger.debug(f"任务 {prompt_id} 执行中...")
-                return False, False, {"status": "processing", "progress": 0}
+        url = f"{self.api_base_url}/history/{prompt_id}"
+        logger.debug(f"检查任务状态: {url}")
+        
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # 检查响应是否为空
+        if not data or data == {}:
+            logger.debug(f"任务 {prompt_id} 执行中...")
+            return False, False, {"status": "processing", "progress": 0}
 
-            # 获取任务状态
-            task_info = data.get(prompt_id, {}).get("status", {})
-            status = task_info.get("status_str")
+        # 获取任务状态
+        task_info = data.get(prompt_id, {}).get("status", {})
+        status = task_info.get("status_str")
 
-            # 提取错误信息
-            error_info = self._extract_error_info(task_info)
+        # 提取错误信息
+        error_info = self._extract_error_info(task_info)
 
-            result_info = {
-                "status": status,
-                "progress": task_info.get("progress", 0),
-                "execution_time": task_info.get("exec_time", 0),
-                "error_info": error_info
-            }
+        result_info = {
+            "status": status,
+            "progress": task_info.get("progress", 0),
+            "execution_time": task_info.get("exec_time", 0),
+            "error_info": error_info
+        }
 
-            if status == "success":
-                logger.info(f"任务 {prompt_id} 完成")
-                return True, True, result_info
-            elif status == "error":
-                error_msg = error_info.get("error_message", "未知错误")
-                logger.error(f"任务 {prompt_id} 失败: {error_msg}")
-                return True, False, result_info
-            else:
-                logger.debug(f"任务 {prompt_id} 状态: {status}, 进度: {result_info['progress']}%")
-                return False, False, result_info
-
-        except requests.exceptions.RequestException as e:
-            error_msg, error_detail = self._parse_request_error(e)
-            logger.error(f"检查任务状态失败: {error_msg}")
-            
-            error_info = {
-                "error_message": error_msg,
-                "error_detail": error_detail,
-                "error_type": "REQUEST_ERROR"
-            }
-            
-            return False, False, {"error_info": error_info}
-            
-        except Exception as e:
-            logger.error(f"检查任务状态时发生未知错误: {str(e)}", exc_info=True)
-            
-            error_info = {
-                "error_message": str(e),
-                "error_type": "UNKNOWN_ERROR"
-            }
-            
-            return False, False, {"error_info": error_info}
+        if status == "success":
+            logger.info(f"任务 {prompt_id} 完成")
+            return True, True, result_info
+        elif status == "error":
+            error_msg = error_info.get("error_message", "未知错误")
+            logger.error(f"任务 {prompt_id} 失败: {error_msg}")
+            return True, False, result_info
+        else:
+            logger.debug(f"任务 {prompt_id} 状态: {status}, 进度: {result_info['progress']}%")
+            return False, False, result_info
             
     def _extract_error_info(self, task_info: Dict) -> Dict:
         """从任务状态中提取错误信息"""

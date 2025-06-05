@@ -16,18 +16,30 @@ class Asset(Base):
     status = Column(String(20), default='PENDING')
     is_local = Column(Boolean, default=False, comment='是否为本地系统资产')
     
-    # 存储为JSON字段
+    # 存储为JSON字段，包含高级配置参数
     lora_training = Column(JSON, default={
         'enabled': False,
         'port': None,
-        'config_path': '',
-        'params': '{}',
-        'verified': False
+        'params': {},  # 高级参数配置，可覆盖全局配置
+        'verified': False,
+        'headers': {  # 请求头配置
+            'Content-Type': 'application/json',
+            'Authorization': ''
+        },
+        'use_global_config': True,  # 是否使用全局配置
     })
     
     ai_engine = Column(JSON, default={
         'enabled': False,
         'port': None,
+        'timeout': 300,
+        'headers': {  # 请求头配置
+            'Content-Type': 'application/json',
+            'Authorization': ''
+        },
+        'max_retries': 3,
+        'retry_interval': 5,
+        'use_global_config': True,  # 是否使用全局配置
         'verified': False
     })
     
@@ -38,6 +50,7 @@ class Asset(Base):
     marking_tasks_count = Column(Integer, default=0, comment='当前标记任务数')
     training_tasks_count = Column(Integer, default=0, comment='当前训练任务数')
     max_concurrent_tasks = Column(Integer, default=2, comment='最大并发任务数')
+    
     def to_dict(self):
         return {
             'id': self.id,

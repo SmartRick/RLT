@@ -117,8 +117,15 @@ class AssetService:
             return False
 
     @staticmethod
-    def verify_capabilities(asset_id: int) -> dict:
-        """验证资产能力"""
+    def verify_capabilities(asset_id: int, capability_type: str = None) -> dict:
+        """
+        验证资产能力
+        
+        Args:
+            asset_id: 资产ID
+            capability_type: 指定验证的能力类型，可选值为 'lora_training' 或 'ai_engine'，
+                            如果不指定则验证所有能力
+        """
         try:
             with get_db() as db:
                 asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
@@ -135,7 +142,7 @@ class AssetService:
                     logger.info(f"验证本地资产 {asset_id} 的能力")
                     
                 # 验证Lora训练能力
-                if asset.lora_training.get('enabled'):
+                if (capability_type is None or capability_type == 'lora_training') and asset.lora_training.get('enabled'):
                     try:
                         # 对于本地资产，始终使用127.0.0.1
                         url = '127.0.0.1' if asset.is_local else asset.ip
@@ -178,7 +185,7 @@ class AssetService:
                         }
 
                 # 验证AI引擎能力
-                if asset.ai_engine.get('enabled'):
+                if (capability_type is None or capability_type == 'ai_engine') and asset.ai_engine.get('enabled'):
                     try:
                         # 对于本地资产，始终使用127.0.0.1
                         url = '127.0.0.1' if asset.is_local else asset.ip
@@ -227,6 +234,50 @@ class AssetService:
         except Exception as e:
             logger.error(f"验证资产能力失败: {str(e)}")
             raise
+
+    @staticmethod
+    def verify_all_assets(capability_type: str) -> List[Dict]:
+        """
+        立即验证所有资产，并返回可用的资产列表
+        
+        Args:
+            capability_type: 要验证的能力类型，必传参数，可选值: 'ai_engine', 'lora_training'
+            
+        Returns:
+            List[Dict]: 可用资产列表
+        """
+        if not capability_type:
+            logger.error("验证资产失败: capability_type 参数必须指定")
+            raise ValueError("必须指定验证引擎类型")
+            
+        try:
+            logger.info(f"开始验证所有资产，能力类型: {capability_type}")
+            available_assets = []
+            
+            with get_db() as db:
+                # 获取所有资产
+                assets = db.query(AssetModel).all()
+                logger.info(f"找到 {len(assets)} 个资产需要验证")
+                
+                for asset in assets:
+                    try:
+                        # 验证资产能力
+                        results = AssetService.verify_capabilities(asset.id, capability_type)
+                        
+                        # 根据验证结果筛选可用资产
+                        if capability_type == 'ai_engine' and results.get('ai_engine'):
+                            available_assets.append(asset)
+                        elif capability_type == 'lora_training' and results.get('lora_training'):
+                            available_assets.append(asset)
+                            
+                    except Exception as e:
+                        logger.error(f"验证资产 {asset.id} 时出错: {str(e)}")
+            
+            logger.info(f"资产验证完成，可用资产数量: {len(available_assets)}")
+            return available_assets
+        except Exception as e:
+            logger.error(f"验证所有资产失败: {str(e)}", exc_info=True)
+            return []
 
     @staticmethod
     def _verify_ssh_connection(asset: dict) -> bool:

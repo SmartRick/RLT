@@ -1,5 +1,5 @@
 import os
-from typing import Dict
+from typing import Dict, List, Any
 
 class Config:
     # 基础配置
@@ -7,16 +7,19 @@ class Config:
     DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
     LOGS_DIR = os.path.join(PROJECT_ROOT, 'logs')
     UPLOAD_DIR = os.path.join(DATA_DIR, 'uploads')
-    
+    MARKED_DIR = os.path.join(DATA_DIR, 'marked')
+    OUTPUT_DIR = os.path.join(DATA_DIR, 'output')
+
     # 确保必要的目录存在
-    for dir_path in [DATA_DIR, LOGS_DIR, UPLOAD_DIR]:
+    for dir_path in [DATA_DIR, LOGS_DIR, UPLOAD_DIR, MARKED_DIR]:
         os.makedirs(dir_path, exist_ok=True)
     
     # 文件路径
     CONFIG_FILE = os.path.join(DATA_DIR, 'config.json')
     
     # 数据库配置
-    DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///' + os.path.join(DATA_DIR, 'app.db'))
+    DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///' + os.path.join(PROJECT_ROOT, 'app.db'))
+    print("DATABASE_URL:", DATABASE_URL)
     
     # 应用固定配置
     APP_CONFIG = {
@@ -45,14 +48,121 @@ class Config:
     MAX_RETRY_COUNT = 3
     
     # 上传文件配置
-    ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}  # 允许的文件类型
+    ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp','json','zip','rar','7z'}  # 允许的文件类型
     MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 最大文件大小 (500MB)
     
     # 确保上传目录存在
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     
-    # 静态文件访问配置
-    STATIC_URL_PATH = '/uploads'
-    STATIC_FOLDER = UPLOAD_DIR
+    # 系统配置
+    SYSTEM_CONFIG = {
+        'scheduling_minute': 5,  # 调度间隔（分钟）
+        'mark_pan_dir': os.path.join(DATA_DIR, 'mark_pan'),  # 标记中间目录
+        'lora_pan_upload_dir': os.path.join(DATA_DIR, 'lora_pan'),  # Lora上传中间目录
+        'mark_poll_interval': 5,  # 标记轮询间隔（秒）
+    }
+    
+    # 打标全局配置
+    MARK_CONFIG = {
+        'auto_crop': True,  # 是否自动裁剪图片
+        'crop_ratios': ['1:1', '3:2', '4:3', '2:3', '16:9', '9:16'],  # 裁剪比例选项
+        'default_crop_ratio': '1:1',  # 默认裁剪比例
+        'min_confidence': 0.6,  # 自动标签最小置信度
+        'max_tags': 300,  # 最大标签数量
+        'trigger_words': ''  # 触发词
+    }
+    
+    # 请求头全局配置
+    HEADERS_CONFIG = {
+        # Lora训练引擎请求头
+        'lora_training': {
+            'Content-Type': 'application/json',
+            'Authorization': '',
+            'User-Agent': 'LoraTrainingClient/1.0',
+            'Accept': 'application/json',
+            'X-API-KEY': '',
+            'Connection': 'keep-alive'
+        },
+        # AI引擎请求头
+        'ai_engine': {
+            'Content-Type': 'application/json',
+            'Authorization': '',
+            'User-Agent': 'AIEngineClient/1.0',
+            'Accept': 'application/json',
+            'X-API-KEY': '',
+            'Connection': 'keep-alive'
+        }
+    }
+    
+    # Lora训练全局配置
+    LORA_TRAINING_CONFIG = {
+        'model_train_type': 'flux-lora',
+        'pretrained_model_name_or_path': './sd-models/flux1-dev.safetensors',
+        'ae': './sd-models/ae.sft',
+        'clip_l': './sd-models/clip_l.safetensors',
+        't5xxl': './sd-models/t5xxl_fp8_e4m3fn.safetensors',
+        'timestep_sampling': 'sigmoid',
+        'sigmoid_scale': 1,
+        'model_prediction_type': 'raw',
+        'discrete_flow_shift': 1,
+        'loss_type': 'l2',
+        'guidance_scale': 1,
+        'prior_loss_weight': 1,
+        'resolution': '512,512',
+        'enable_bucket': True,
+        'min_bucket_reso': 256,
+        'max_bucket_reso': 1024,
+        'bucket_reso_steps': 32,
+        'bucket_no_upscale': True,
+        'output_dir': './output',
+        'save_model_as': 'safetensors',
+        'save_precision': 'fp16',
+        'save_every_n_epochs': 2,
+        'max_train_epochs': 10,
+        'train_batch_size': 1,
+        'gradient_checkpointing': True,
+        'gradient_accumulation_steps': 1,
+        'network_train_unet_only': False,
+        'network_train_text_encoder_only': False,
+        'learning_rate': 0.0001,
+        'unet_lr': 0.0005,
+        'text_encoder_lr': 0.00001,
+        'lr_scheduler': 'cosine_with_restarts',
+        'lr_warmup_steps': 0,
+        'lr_scheduler_num_cycles': 1,
+        'optimizer_type': 'AdamW8bit',
+        'network_module': 'networks.lora_flux',
+        'network_dim': 64,
+        'network_alpha': 32,
+        'sample_sampler': 'euler_a',
+        'sample_every_n_epochs': 2,
+        'log_with': 'tensorboard',
+        'logging_dir': './logs',
+        'caption_extension': '.txt',
+        'shuffle_caption': False,
+        'keep_tokens': 0,
+        'max_token_length': 255,
+        'seed': 1337,
+        'clip_skip': 2,
+        'mixed_precision': 'bf16',
+        'full_fp16': False,
+        'full_bf16': True,
+        'fp8_base': True,
+        'sdpa': True,
+        'lowram': False,
+        'cache_latents': True,
+        'cache_latents_to_disk': True,
+        'cache_text_encoder_outputs': True,
+        'cache_text_encoder_outputs_to_disk': True,
+        'persistent_data_loader_workers': True,
+    }
+    
+    # AI引擎配置
+    AI_ENGINE_CONFIG = {
+        'api_url': 'http://localhost:7860/api/predict',
+        'timeout': 300,  # 请求超时时间（秒）
+        'max_retries': 3,  # 最大重试次数
+        'retry_interval': 5  # 重试间隔（秒）
+    }
 
 config = Config() 

@@ -45,16 +45,29 @@ class LocalAssetService:
                     'enabled': True,
                     'port': 8188,  # 假设ComfyUI默认端口
                     'config_path': '',
-                    'params': '{}',
-                    'verified': True  # 默认验证通过
+                    'params': {},  # 高级参数配置，可覆盖全局配置
+                    'verified': False,
+                    'headers': {  # 请求头配置
+                        'Content-Type': 'application/json',
+                        'Authorization': ''
+                    },
+                    'use_global_config': True,  # 是否使用全局配置
                 }
                 
                 local_asset.ai_engine = {
                     'enabled': True,
                     'port': 8188,  # 假设使用相同端口
-                    'verified': True  # 默认验证通过
+                    'api_url': '',
+                    'timeout': 300,
+                    'headers': {  # 请求头配置
+                        'Content-Type': 'application/json',
+                        'Authorization': ''
+                    },
+                    'max_retries': 3,
+                    'retry_interval': 5,
+                    'use_global_config': True,  # 是否使用全局配置
+                    'verified': False
                 }
-                
                 # 保存到数据库
                 db.add(local_asset)
                 db.commit()

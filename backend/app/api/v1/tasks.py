@@ -3,9 +3,13 @@ from werkzeug.utils import secure_filename
 import os
 from ...database import get_db
 from ...services.task_service import TaskService
+from ...services.config_service import ConfigService
 from ...utils.logger import setup_logger
 from ...utils.validators import validate_task_create, validate_file_upload
 from ...utils.response import success_json, error_json, exception_handler, response_template
+from ...models.task import Task, TaskImage
+from ...models.constants import COMMON_TRAINING_PARAMS, COMMON_MARK_PARAMS, FLUX_LORA_PARAMS
+
 
 logger = setup_logger('tasks_api')
 tasks_bp = Blueprint('tasks', __name__)
@@ -108,16 +112,30 @@ def upload_images(task_id):
         result = TaskService.upload_images(db, task_id, files)
         if result:
             return success_json(result)
-        return error_json(3001, "上传图片失败")
+        return error_json(msg="上传图片失败")
 
 @tasks_bp.route('/<int:task_id>/images/<int:image_id>', methods=['DELETE'])
 @exception_handler
 def delete_image(task_id, image_id):
-    """删除任务图片"""
+    """删除任务图片及相关打标文本"""
     with get_db() as db:
+        # 先获取图片信息，用于返回
+        image = db.query(TaskImage).filter(
+            TaskImage.id == image_id,
+            TaskImage.task_id == task_id
+        ).first()
+        
+        if not image:
+            return response_template("not_found", msg="未找到指定图片")
+        
+        image_info = image.to_dict()
+        
         if TaskService.delete_image(db, task_id, image_id):
-            return response_template("deleted", msg="删除成功")
-        return error_json(3002, "删除图片失败")
+            return success_json({
+                "deleted_image": image_info,
+                "deleted_text": os.path.splitext(image.filename)[0] + ".txt"
+            }, "删除图片及相关文本成功")
+        return error_json(msg="删除图片失败")
 
 @tasks_bp.route('/<int:task_id>/mark', methods=['POST'])
 @exception_handler
@@ -130,7 +148,7 @@ def start_marking(task_id):
                 error_code = 2003 if result.get('error_type') == 'SYSTEM_ERROR' else 1002
                 return error_json(error_code, result['error'], result.get('task'))
             return success_json(result)
-        return error_json(2003, "开始标记失败")
+        return error_json(msg="开始标记失败")
 
 @tasks_bp.route('/<int:task_id>/train', methods=['POST'])
 @exception_handler
@@ -143,7 +161,7 @@ def start_training(task_id):
                 error_code = 2002 if result.get('error_type') == 'SYSTEM_ERROR' else 1002
                 return error_json(error_code, result['error'], result.get('task'))
             return success_json(result)
-        return error_json(2002, "开始训练失败")
+        return error_json(msg="开始训练失败")
 
 @tasks_bp.route('/<int:task_id>/stop', methods=['POST'])
 @exception_handler
@@ -152,7 +170,7 @@ def stop_task(task_id):
     with get_db() as db:
         if TaskService.stop_task(db, task_id):
             return success_json(None, "任务已终止")
-        return error_json(1002, "终止任务失败")
+        return error_json(msg="终止任务失败")
 
 @tasks_bp.route('/<int:task_id>/restart', methods=['POST'])
 @exception_handler
@@ -165,7 +183,7 @@ def restart_task(task_id):
                 error_code = 500 if result.get('error_type') == 'SYSTEM_ERROR' else 1002
                 return error_json(error_code, result.get('error', "重启任务失败"))
             return success_json(result.get('task'))
-        return error_json(500, "重启任务失败")
+        return error_json(msg="重启任务失败")
 
 @tasks_bp.route('/<int:task_id>/cancel', methods=['POST'])
 @exception_handler
@@ -178,7 +196,7 @@ def cancel_task(task_id):
                 error_code = 500 if result.get('error_type') == 'SYSTEM_ERROR' else 1002
                 return error_json(error_code, result.get('error', "取消任务失败"))
             return success_json(result.get('task'))
-        return error_json(500, "取消任务失败")
+        return error_json(msg="取消任务失败")
 
 @tasks_bp.route('/<int:task_id>/status', methods=['GET'])
 @exception_handler
@@ -188,4 +206,58 @@ def get_task_status(task_id):
         task_status = TaskService.get_task_status(db, task_id)
         if task_status:
             return success_json(task_status)
-        return response_template("not_found", code=1001, msg=f"未找到ID为 {task_id} 的任务") 
+        return response_template("not_found", code=1001, msg=f"未找到ID为 {task_id} 的任务")
+    
+@tasks_bp.route('/<int:task_id>/marked_texts', methods=['GET'])
+@exception_handler
+def get_marked_texts(task_id):
+    """获取打标后的文本内容"""
+    with get_db() as db:
+        marked_texts = TaskService.get_marked_texts(db, task_id)
+        if marked_texts:
+            return success_json(marked_texts)
+        return response_template("not_found", code=1001, msg=f"未找到ID为 {task_id} 的任务打标文本")
+    
+@tasks_bp.route('/<int:task_id>/marked_texts', methods=['PUT'])
+@exception_handler
+def update_marked_text(task_id):
+    """更新打标文本内容"""
+    data = request.get_json()
+    if not data or 'filename' not in data or 'content' not in data:
+        return response_template("bad_request", msg="缺少必要的参数: filename 和 content")
+    
+    with get_db() as db:
+        result = TaskService.update_marked_text(db, task_id, data['filename'], data['content'])
+        if result.get('success', False):
+            return success_json(result, result.get('message', '更新成功'))
+        return error_json(msg=result.get('message', '更新失败'))
+    
+#创建一个测试接口，修改任务ID为2的状态为完成
+@tasks_bp.route('/test/complete', methods=['POST'])
+@exception_handler
+def test_complete_task():
+    """测试接口：将任务ID为2的状态修改为完成"""
+    with get_db() as db:
+        task = db.query(Task).filter(Task.id == 2).first()
+        if task:
+            task.update_status('COMPLETED', '测试接口：任务已完成', db=db)
+            return success_json(task.to_dict(), msg="测试成功：任务状态已修改为完成")
+        return error_json(msg="测试失败：未找到ID为2的任务")
+
+@tasks_bp.route('/<int:task_id>/mark-config', methods=['GET'])
+@exception_handler
+def get_task_mark_config(task_id):
+    """获取任务的打标配置"""
+    mark_config = ConfigService.get_task_mark_config(task_id)
+    if mark_config is None:
+        return response_template("not_found", code=1004, msg="任务不存在")
+    return success_json(mark_config)
+
+@tasks_bp.route('/<int:task_id>/training-config', methods=['GET'])
+@exception_handler
+def get_task_training_config(task_id):
+    """获取任务的训练配置"""
+    training_config = ConfigService.get_task_training_config(task_id)
+    if training_config is None:
+        return response_template("not_found", code=1004, msg="任务不存在")
+    return success_json(training_config)

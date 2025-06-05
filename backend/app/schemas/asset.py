@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
@@ -6,8 +6,10 @@ class LoraTrainingConfig(BaseModel):
     enabled: bool = False
     port: Optional[int] = None
     config_path: Optional[str] = ''
-    params: Optional[str] = '{}'
+    params: Optional[Dict[str, Any]] = {}
     verified: bool = False
+    headers: Optional[Dict[str, str]] = {}
+    use_global_config: bool = True
 
     @validator('port')
     def validate_port(cls, v, values):
@@ -22,6 +24,12 @@ class AIEngineConfig(BaseModel):
     enabled: bool = False
     port: Optional[int] = None
     verified: bool = False
+    api_url: Optional[str] = ''
+    timeout: Optional[int] = 300
+    headers: Optional[Dict[str, str]] = {}
+    max_retries: Optional[int] = 3
+    retry_interval: Optional[int] = 5
+    use_global_config: bool = True
 
     @validator('port')
     def validate_port(cls, v, values):

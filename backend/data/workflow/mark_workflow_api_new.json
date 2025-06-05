@@ -1,29 +1,4 @@
 {
-    "31": {
-        "inputs": {
-            "tag_text": [
-                "171",
-                0
-            ],
-            "custom_path": [
-                "155",
-                0
-            ],
-            "filename_prefix": "flux",
-            "timestamp": "None",
-            "format": "png",
-            "quality": 100,
-            "preview": true,
-            "image": [
-                "35",
-                0
-            ]
-        },
-        "class_type": "LayerUtility: ImageTaggerSave",
-        "_meta": {
-            "title": "LayerUtility: Image Tagger Save"
-        }
-    },
     "35": {
         "inputs": {
             "aspect_ratio": "1:1",
@@ -34,8 +9,8 @@
             "scale_to_length": 1024,
             "round_to_multiple": "8",
             "image": [
-                "48",
-                0
+                "197",
+                2
             ],
             "mask": [
                 "152",
@@ -47,43 +22,25 @@
             "title": "LayerUtility: ImageAutoCrop V3"
         }
     },
-    "48": {
-        "inputs": {
-            "directory": [
-                "57",
-                0
-            ],
-            "image_load_cap": 50,
-            "start_index": 0,
-            "load_always": false
-        },
-        "class_type": "LoadImageListFromDir //Inspire",
-        "_meta": {
-            "title": "加载图像列表(路径)"
-        }
-    },
-    "57": {
-        "inputs": {
-            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\uploads\\1"
-        },
-        "class_type": "LayerUtility: String",
-        "_meta": {
-            "title": "LayerUtility: String"
-        }
-    },
     "64": {
         "inputs": {
             "prompt": "One sentence descriptive description of this picture",
             "max_new_tokens": 300,
-            "temperature": 0.5,
+            "temperature": 0.6,
             "cache": true,
+            "speak_and_recognation": {
+                "__value__": [
+                    false,
+                    true
+                ]
+            },
             "joy_pipeline": [
                 "65",
                 0
             ],
             "image": [
-                "48",
-                0
+                "197",
+                2
             ]
         },
         "class_type": "Joy_caption",
@@ -98,28 +55,6 @@
         "class_type": "Joy_caption_load",
         "_meta": {
             "title": "加载JoyCaption"
-        }
-    },
-    "135": {
-        "inputs": {
-            "text": [
-                "136",
-                0
-            ],
-            "path": [
-                "172",
-                0
-            ],
-            "filename_prefix": "ComfyUI",
-            "filename_delimiter": "_",
-            "filename_number_padding": 4,
-            "file_extension": ".txt",
-            "encoding": "utf-8",
-            "filename_suffix": ""
-        },
-        "class_type": "Save Text File",
-        "_meta": {
-            "title": "保存文本"
         }
     },
     "136": {
@@ -137,22 +72,22 @@
     },
     "150": {
         "inputs": {
-            "bbox_threshold": 0.5,
+            "bbox_threshold": 0.5000000000000001,
             "bbox_dilation": 0,
             "crop_factor": 3,
             "drop_size": 10,
-            "sub_threshold": 0.5,
+            "sub_threshold": 0.5000000000000001,
             "sub_dilation": 0,
             "sub_bbox_expansion": 0,
-            "sam_mask_hint_threshold": 0.7000000000000001,
+            "sam_mask_hint_threshold": 0.7000000000000002,
             "post_dilation": 0,
             "bbox_detector": [
                 "151",
                 0
             ],
             "image": [
-                "48",
-                0
+                "197",
+                2
             ]
         },
         "class_type": "ImpactSimpleDetectorSEGS",
@@ -232,18 +167,190 @@
             "title": "String Replace"
         }
     },
-    "172": {
+    "191": {
         "inputs": {
-            "delimiter": "\\",
+            "flow": [
+                "197",
+                0
+            ],
+            "initial_value1": [
+                "209",
+                0
+            ],
+            "initial_value2": [
+                "216",
+                0
+            ]
+        },
+        "class_type": "easy forLoopEnd",
+        "_meta": {
+            "title": "For循环-结束"
+        }
+    },
+    "195": {
+        "inputs": {
+            "text": "tensor([[[[0.7294, 0.7843, 0.7882],\n          [0.7294, 0.7843, 0.7882],\n          [0.7294, 0.7843, 0.7882],\n          ...,\n          [0.6667, 0.7255, 0.7373],\n          [0.6667, 0.7255, 0.7373],\n          [0.6667, 0.7255, 0.7373]],\n\n         [[0.7294, 0.7843, 0.7882],\n          [0.7294, 0.7843, 0.7882],\n          [0.7294, 0.7843, 0.7882],\n          ...,\n          [0.6667, 0.7255, 0.7373],\n          [0.6667, 0.7255, 0.7373],\n          [0.6667, 0.7255, 0.7373]],\n\n         [[0.7294, 0.7843, 0.7882],\n          [0.7294, 0.7843, 0.7882],\n          [0.7294, 0.7843, 0.7882],\n          ...,\n          [0.6667, 0.7255, 0.7373],\n          [0.6667, 0.7255, 0.7373],\n          [0.6667, 0.7255, 0.7373]],\n\n         ...,\n\n         [[0.7451, 0.7843, 0.7804],\n          [0.7412, 0.7804, 0.7765],\n          [0.7451, 0.7843, 0.7804],\n          ...,\n          [0.7373, 0.7765, 0.7725],\n          [0.7294, 0.7686, 0.7647],\n          [0.7294, 0.7686, 0.7647]],\n\n         [[0.7451, 0.7843, 0.7804],\n          [0.7412, 0.7804, 0.7765],\n          [0.7451, 0.7843, 0.7804],\n          ...,\n          [0.7333, 0.7725, 0.7686],\n          [0.7255, 0.7647, 0.7608],\n          [0.7255, 0.7647, 0.7608]],\n\n         [[0.7451, 0.7843, 0.7804],\n          [0.7412, 0.7804, 0.7765],\n          [0.7412, 0.7804, 0.7765],\n          ...,\n          [0.7294, 0.7686, 0.7647],\n          [0.7216, 0.7608, 0.7569],\n          [0.7216, 0.7608, 0.7569]]]])",
+            "anything": [
+                "191",
+                0
+            ]
+        },
+        "class_type": "easy showAnything",
+        "_meta": {
+            "title": "展示任何"
+        }
+    },
+    "197": {
+        "inputs": {
+            "directory": [
+                "208",
+                0
+            ],
+            "start_index": 0,
+            "limit": -1,
+            "initial_value1": [
+                "207",
+                0
+            ]
+        },
+        "class_type": "easy loadImagesForLoop",
+        "_meta": {
+            "title": "Load Images For Loop"
+        }
+    },
+    "200": {
+        "inputs": {
+            "destination": [
+                "155",
+                0
+            ],
+            "save_mode": "Overwrite",
+            "file_mode": "Windows",
+            "file_format": "na",
+            "seed": 1071508585460063,
+            "TextFileNames": [
+                "197",
+                4
+            ],
+            "TextFileContents": [
+                "136",
+                0
+            ]
+        },
+        "class_type": "DataSet_TextFilesSave",
+        "_meta": {
+            "title": "DataSet_TextFilesSave"
+        }
+    },
+    "202": {
+        "inputs": {
+            "names": [
+                "197",
+                4
+            ],
+            "destination": [
+                "155",
+                0
+            ],
+            "image_format": "png",
+            "image_quality": 100,
+            "seed": 130614815639910,
+            "images": [
+                "209",
+                0
+            ]
+        },
+        "class_type": "DataSet_SaveImagePro",
+        "_meta": {
+            "title": "DataSet_SaveImagePro"
+        }
+    },
+    "204": {
+        "inputs": {
+            "text_0": "This photograph captures a pregnant woman standing in a minimalist, light-filled studio against a plain, light gray background subject is dressed in a flowing, white, sleeveless gown with a fitted bodice and a voluminous skirt fabric of the gown appears to be sheer and slightly translucent, creating a delicate, ethereal look woman's hair is neatly styled in an updo, with a small, white accessory adorning itShe stands in profile, facing slightly to the right, with her head tilted back and eyes closed, exuding a serene and contemplative expressionHer right hand is raised gracefully, with the fingers gently touching her forehead, while her left hand rests gently on her abdomen, emphasizing her pregnancy lighting is soft and diffused, creating soft shadows and highlights that accentuate the textures of the fabric and the smoothness of her skin overall composition is elegant and peaceful, highlighting the beauty and grace of pregnancy.",
+            "text": [
+                "136",
+                0
+            ]
+        },
+        "class_type": "ShowText|pysssss",
+        "_meta": {
+            "title": "Show Text 🐍"
+        }
+    },
+    "205": {
+        "inputs": {
+            "text": "tagger, This photograph captures a pregnant woman standing in a minimalist, light-filled studio against a plain, light gray background subject is dressed in a flowing, white, sleeveless gown with a fitted bodice and a voluminous skirt fabric of the gown appears to be sheer and slightly translucent, creating a delicate, ethereal look woman's hair is neatly styled in an updo, with a small, white accessory adorning itShe stands in profile, facing slightly to the right, with her head tilted back and eyes closed, exuding a serene and contemplative expressionHer right hand is raised gracefully, with the fingers gently touching her forehead, while her left hand rests gently on her abdomen, emphasizing her pregnancy lighting is soft and diffused, creating soft shadows and highlights that accentuate the textures of the fabric and the smoothness of her skin overall composition is elegant and peaceful, highlighting the beauty and grace of pregnancy.",
+            "anything": [
+                "191",
+                1
+            ]
+        },
+        "class_type": "easy showAnything",
+        "_meta": {
+            "title": "展示任何"
+        }
+    },
+    "207": {
+        "inputs": {
+            "seed": 370203
+        },
+        "class_type": "easy seed",
+        "_meta": {
+            "title": "随机种"
+        }
+    },
+    "208": {
+        "inputs": {
+            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\uploads\\1"
+        },
+        "class_type": "Simple String",
+        "_meta": {
+            "title": "简易字符串"
+        }
+    },
+    "209": {
+        "inputs": {
+            "boolean": true,
+            "on_true": [
+                "35",
+                0
+            ],
+            "on_false": [
+                "197",
+                2
+            ]
+        },
+        "class_type": "easy ifElse",
+        "_meta": {
+            "title": "是否判断"
+        }
+    },
+    "210": {
+        "inputs": {
+            "string": ""
+        },
+        "class_type": "Simple String",
+        "_meta": {
+            "title": "简易字符串"
+        }
+    },
+    "216": {
+        "inputs": {
+            "delimiter": ", ",
             "clean_whitespace": "true",
             "text_a": [
-                "57",
+                "210",
+                0
+            ],
+            "text_b": [
+                "136",
                 0
             ]
         },
         "class_type": "Text Concatenate",
         "_meta": {
-            "title": "文本连锁"
+            "title": "Text Concatenate"
         }
     }
 }

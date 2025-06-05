@@ -8,6 +8,7 @@ from .database import init_db
 from .api.v1.terminal import sock  # 确保导入 sock
 from .services.config_service import ConfigService  # 添加这行
 from .services.scheduler_service import scheduler
+from .utils.json_encoder import CustomJSONEncoder
 import os
 
 logger = setup_logger('main')
@@ -19,6 +20,9 @@ def create_app():
     # 基础配置
     app.config['SECRET_KEY'] = config.SECRET_KEY
     app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
+    
+    # 注册自定义 JSON 编码器
+    app.json_encoder = CustomJSONEncoder
     
     # 初始化数据库
     init_db()
@@ -50,27 +54,28 @@ def create_app():
     # 注册 WebSocket 扩展
     sock.init_app(app)
     
-    # 注册静态文件路由
-    @app.route(f'{config.STATIC_URL_PATH}/<path:filename>')
-    def serve_uploads(filename):
-        """处理上传文件的访问"""
-        logger.info(f"Accessing file: {filename}")
+    # 注册静态文件路由，用于访问data目录下的任意文件
+    @app.route('/data/<path:filepath>')
+    def serve_data_files(filepath):
+        """处理data目录下的文件访问，包括上传的图片和打标后的文本等"""
+        logger.info(f"Accessing data file: {filepath}")
         
-        # 从完整路径中提取任务ID和文件名
-        parts = filename.split('/')
-        if len(parts) != 2:
-            logger.error(f"Invalid path format: {filename}")
-            return "Invalid path", 400
+        # 构建完整的文件路径
+        full_path = os.path.join(config.DATA_DIR, filepath)
+        directory, filename = os.path.split(full_path)
         
-        task_id, file_name = parts
-        file_path = os.path.join(config.UPLOAD_DIR, task_id)
-        logger.info(f"Looking for file in: {file_path}")
-        
-        if not os.path.exists(file_path):
-            logger.error(f"Directory not found: {file_path}")
+        # 检查目录是否存在
+        if not os.path.exists(directory):
+            logger.error(f"Directory not found: {directory}")
             return "Directory not found", 404
         
-        return send_from_directory(file_path, file_name)
+        # 检查文件是否存在
+        if not os.path.exists(full_path):
+            logger.error(f"File not found: {full_path}")
+            return "File not found", 404
+            
+        logger.info(f"Serving file: {filename} from {directory}")
+        return send_from_directory(directory, filename)
     
     # 启动任务调度器
     scheduler.start()

@@ -1,8 +1,58 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, Enum, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Enum as SQLEnum, ForeignKey, Float, JSON, Boolean
 from sqlalchemy.orm import relationship
 from ..database import Base
 from ..utils.common import logger
+from ..config import config
+import enum
+
+class TaskStatus(enum.Enum):
+    NEW = 'NEW'               # 新建
+    SUBMITTED = 'SUBMITTED'   # 已提交
+    MARKING = 'MARKING'       # 标记中
+    MARKED = 'MARKED'         # 已标记
+    TRAINING = 'TRAINING'     # 训练中
+    COMPLETED = 'COMPLETED'   # 已完成
+    ERROR = 'ERROR'           # 错误
+
+class TaskStatusLog(Base):
+    """任务状态日志"""
+    __tablename__ = 'task_status_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    history_id = Column(Integer, ForeignKey('task_status_history.id', ondelete='CASCADE'), nullable=False)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'message': self.message,
+            'time': self.created_at.isoformat()
+        }
+
+class TaskStatusHistory(Base):
+    """任务状态历史"""
+    __tablename__ = 'task_status_history'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(Integer, ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False)
+    status = Column(String(20), nullable=False)  # 对应 TaskStatus 的值
+    start_time = Column(DateTime, nullable=False, default=datetime.now)
+    end_time = Column(DateTime, nullable=True)
+    
+    # 关联关系
+    logs = relationship('TaskStatusLog', cascade='all, delete-orphan', order_by='TaskStatusLog.created_at')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'status': self.status,
+            'start_time': self.start_time.isoformat(),
+            'end_time': self.end_time.isoformat() if self.end_time else None,
+            'logs': [log.to_dict() for log in self.logs]
+        }
+
 class TaskImage(Base):
     """任务图片模型"""
     __tablename__ = 'task_images'
@@ -31,18 +81,9 @@ class Task(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False, comment='任务名称')
     description = Column(Text, nullable=True, comment='任务描述')
-    status = Column(Enum(
-        'NEW',         # 新建
-        'SUBMITTED',   # 已提交
-        'MARKING',     # 标记中
-        'MARKED',      # 已标记
-        'TRAINING',    # 训练中
-        'COMPLETED',   # 已完成
-        'ERROR'        # 错误
-    ), nullable=False, default='NEW', comment='任务状态')
+    status = Column(SQLEnum(TaskStatus), nullable=False, default=TaskStatus.NEW, comment='任务状态')
     progress = Column(Integer, default=0, comment='进度百分比')
     log_file = Column(String(500), comment='日志文件路径')
-    error_message = Column(Text, comment='错误信息')
     created_at = Column(DateTime, default=datetime.now, comment='创建时间')
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
     prompt_id = Column(String(50))  # 存储ComfyUI的prompt_id
@@ -51,88 +92,72 @@ class Task(Base):
     marking_asset_id = Column(Integer, ForeignKey('assets.id'), comment='标记资产ID')
     training_asset_id = Column(Integer, ForeignKey('assets.id'), comment='训练资产ID')
     
+    # 打标参数配置
+    mark_config = Column(JSON, comment='打标参数配置')
+    use_global_mark_config = Column(Boolean, default=True, comment='是否使用全局打标配置')
+    
+    # 训练参数配置
+    training_config = Column(JSON, comment='训练参数配置，包含可能需要修改的参数')
+    use_global_training_config = Column(Boolean, default=True, comment='是否使用全局训练配置')
+    
     # 关联关系
     marking_asset = relationship('Asset', foreign_keys=[marking_asset_id])
     training_asset = relationship('Asset', foreign_keys=[training_asset_id])
+    status_history = relationship('TaskStatusHistory', cascade='all, delete-orphan', order_by='TaskStatusHistory.start_time')
 
     # 关联图片
     images = relationship('TaskImage', cascade='all, delete-orphan')
-
-    # 状态历史记录字段 - 简化结构
-    status_history = Column(
-        JSON,
-        nullable=False,
-        default=dict,
-        comment='任务状态历史'
-    )
     
     # 添加开始时间和结束时间
     started_at = Column(DateTime, comment='任务开始时间')
     completed_at = Column(DateTime, comment='任务完成时间')
 
-    # 日志类型枚举，用于前端展示不同样式
-    LOG_TYPE_INFO = "INFO"         # 普通信息
-    LOG_TYPE_SUCCESS = "SUCCESS"   # 成功信息
-    LOG_TYPE_WARNING = "WARNING"   # 警告信息
-    LOG_TYPE_ERROR = "ERROR"       # 错误信息
-    LOG_TYPE_PROGRESS = "PROGRESS" # 进度信息
-    LOG_TYPE_SYSTEM = "SYSTEM"     # 系统信息
-
-    def update_status(self, new_status: str, message: str = None):
+    def update_status(self, new_status, message: str = None, db: object=None):
         """
         更新任务状态并记录历史
         
         Args:
-            new_status: 新状态
+            new_status: 新状态，可以是字符串或 TaskStatus 枚举值
             message: 状态变更消息
             db: 数据库会话对象，如果提供则自动提交更改
         """
         now = datetime.now()
-        old_status = self.status
+        old_status = self.status.value if self.status else None
         
-        # 初始化状态历史
-        if not self.status_history:
-            self.status_history = {}
+        # 确保 new_status 是字符串
+        if isinstance(new_status, TaskStatus):
+            new_status = new_status.value
             
-        # 如果是新状态，创建新的状态记录
-        if new_status not in self.status_history:
-            self.status_history[new_status] = {
-                'start_time': now.isoformat(),
-                'end_time': None,
-                'duration': None,
-                'logs': []
-            }
-            
-        # 更新旧状态的结束时间和持续时间
-        if old_status and old_status in self.status_history:
-            self.status_history[old_status]['end_time'] = now.isoformat()
-            # 计算状态持续时间（秒）
-            try:
-                start_time = datetime.fromisoformat(self.status_history[old_status]['start_time'])
-                self.status_history[old_status]['duration'] = (now - start_time).total_seconds()
-            except Exception:
-                self.status_history[old_status]['duration'] = None
+        # 结束当前状态的历史记录
+        current_history = None
+        if old_status:
+            current_history = next((h for h in self.status_history if h.status == old_status and h.end_time is None), None)
+            if current_history:
+                current_history.end_time = now
+        
+        # 创建新状态的历史记录
+        new_history = TaskStatusHistory(
+            task_id=self.id,
+            status=new_status,
+            start_time=now
+        )
+        self.status_history.append(new_history)
+        # 添加到状态历史
+        if db:
+            db.add(new_history)
+            db.flush()  # 确保 new_history.id 被生成
         
         # 更新任务状态
-        self.status = new_status
+        self.status = TaskStatus(new_status)
         
         if message:
-            # 根据状态选择日志类型
-            log_type = self.LOG_TYPE_INFO
-            if new_status == 'ERROR':
-                log_type = self.LOG_TYPE_ERROR
-            elif new_status == 'COMPLETED':
-                log_type = self.LOG_TYPE_SUCCESS
-            elif new_status in ['MARKED', 'TRAINING']:
-                log_type = self.LOG_TYPE_SUCCESS
-                
             # 添加自定义消息
-            self.add_log(message, log_type=log_type)
+            self.add_log(message, db=db)
         else:
             # 生成默认的状态变更消息
             default_message = f"任务状态从 {old_status or 'None'} 变更为 {new_status}"
             # 添加状态变更日志
-            self.add_log(default_message, log_type=self.LOG_TYPE_SYSTEM)
+            self.add_log(default_message, db=db)
         
         # 更新开始和结束时间
         if new_status in ['MARKING', 'TRAINING'] and not self.started_at:
@@ -141,60 +166,49 @@ class Task(Base):
             self.completed_at = now
 
         logger.info(f"任务 {self.id} 状态更新为 {new_status}")
+        if db:
+            db.commit()
 
-    def add_log(self, message: str, log_type: str = None, db: object = None):
+    def add_log(self, message: str, db: object = None):
         """
         添加日志到当前状态
         
         Args:
             message: 日志消息
-            log_type: 日志类型
             db: 数据库会话对象，如果提供则自动提交更改
         """
         # 当前状态
-        status = self.status
+        status = self.status.value if self.status else None
         
-        # 如果没有指定日志类型，根据消息内容和状态猜测
-        if log_type is None:
-            if "错误" in message or "失败" in message:
-                log_type = self.LOG_TYPE_ERROR
-            elif "成功" in message or "完成" in message:
-                log_type = self.LOG_TYPE_SUCCESS
-            elif "%" in message or "进度" in message:
-                log_type = self.LOG_TYPE_PROGRESS
-            elif "警告" in message:
-                log_type = self.LOG_TYPE_WARNING
-            else:
-                log_type = self.LOG_TYPE_INFO
+        # 查找当前状态的历史记录
+        current_history = next((h for h in self.status_history if h.status == status and h.end_time is None), None)
         
-        current_time = datetime.now()
-        timestamp = current_time.isoformat()
-        
-        # 确保status_history是字典类型
-        if not self.status_history:
-            self.status_history = {}
+        # 如果没有找到当前状态的历史记录，创建一个
+        if not current_history:
+            current_history = TaskStatusHistory(
+                task_id=self.id,
+                status=status,
+                start_time=datetime.now()
+            )
+            if db:
+                db.add(current_history)
+                db.flush()  # 确保 current_history.id 被生成
         
         # 创建日志条目
-        log_entry = {
-            'time': timestamp,
-            'message': message,
-            'type': log_type
-        }
-            
-        # 添加到对应状态的日志中
-        if status not in self.status_history:
-            self.status_history[status] = {
-                'start_time': timestamp,
-                'end_time': None,
-                'duration': None,
-                'logs': []
-            }
-            
-        # 添加到状态特定日志
-        self.status_history[status]['logs'].append(log_entry)
-        logger.info(f"任务 {self.id} 日志更新为 {log_entry}")
+        log_entry = TaskStatusLog(
+            history_id=current_history.id,
+            message=message,
+            created_at=datetime.now()
+        )
+        
+        # 添加到数据库
+        if db:
+            db.add(log_entry)
+            db.commit()
+        
+        logger.info(f"任务 {self.id} 日志更新为 {message}")
 
-    def add_progress_log(self, progress: int):
+    def add_progress_log(self, progress: int, db: object = None):
         """
         添加进度日志
         
@@ -203,34 +217,20 @@ class Task(Base):
             db: 数据库会话对象，如果提供则自动提交更改
         """
         message = f"当前进度: {progress}%"
-        self.add_log(message, log_type=self.LOG_TYPE_PROGRESS)
+        self.add_log(message, db=db)
         self.progress = progress
-    
-    def add_error_log(self, error_message: str, db: object = None):
-        """
-        添加错误日志
-        
-        Args:
-            error_message: 错误消息
-            db: 数据库会话对象，如果提供则自动提交更改
-        """
-        self.add_log(error_message, log_type=self.LOG_TYPE_ERROR)
-        self.error_message = error_message
+        if db:
+            db.commit()
             
     def get_all_logs(self, limit: int = 100):
         """获取所有日志列表（按时间倒序排列）"""
-        if not self.status_history:
-            return []
-            
-        # 从所有状态中收集日志
+        # 从所有状态历史中收集日志
         all_logs = []
-        for status, data in self.status_history.items():
-            logs = data.get('logs', [])
-            for log in logs:
-                # 添加状态信息以便前端区分
-                log_with_status = log.copy()
-                log_with_status['status'] = status
-                all_logs.append(log_with_status)
+        for history in self.status_history:
+            for log in history.logs:
+                log_dict = log.to_dict()
+                log_dict['status'] = history.status
+                all_logs.append(log_dict)
         
         # 按时间排序（倒序）
         all_logs.sort(key=lambda x: x.get('time', ''), reverse=True)
@@ -240,19 +240,31 @@ class Task(Base):
 
     def to_dict(self):
         """转换为字典"""
+        # 将状态历史转换为与之前 JSON 字段格式兼容的字典
+        status_history_dict = {}
+        for history in self.status_history:
+            status_history_dict[history.status] = {
+                'start_time': history.start_time.isoformat(),
+                'end_time': history.end_time.isoformat() if history.end_time else None,
+                'logs': [log.to_dict() for log in history.logs]
+            }
+        
         return {
             'id': self.id,
             'name': self.name,
             'description': self.description,
-            'status': self.status,
+            'status': self.status.value if self.status else None,
             'progress': self.progress,
-            'error_message': self.error_message,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
-            'status_history': self.status_history,
+            'status_history': status_history_dict,
             'images': [img.to_dict() for img in self.images],
             'marking_asset': self.marking_asset.to_dict() if self.marking_asset else None,
-            'training_asset': self.training_asset.to_dict() if self.training_asset else None
-        } 
+            'training_asset': self.training_asset.to_dict() if self.training_asset else None,
+            'mark_config': self.mark_config,
+            'use_global_mark_config': self.use_global_mark_config,
+            'training_config': self.training_config,
+            'use_global_training_config': self.use_global_training_config
+        }
