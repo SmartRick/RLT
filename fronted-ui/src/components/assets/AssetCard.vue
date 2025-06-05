@@ -108,7 +108,7 @@ import {
   TrashIcon,
   ClockIcon,
   CheckCircleIcon,
-  TerminalIcon
+  CommandLineIcon as TerminalIcon
 } from '@heroicons/vue/24/outline'
 
 defineProps({

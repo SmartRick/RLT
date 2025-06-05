@@ -13,9 +13,12 @@ module.exports = defineConfig({
         },
         ws: true
       },
-      '/uploads': {
+      '/data': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        pathRewrite: {
+          '^/data': '/data'
+        },
       }
     }
   },

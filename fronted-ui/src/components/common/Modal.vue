@@ -63,7 +63,7 @@ export default {
 }
 
 .modal-wrapper {
-  width: 600px;
+  width: 650px;
   max-width: 90vw;
   max-height: 85vh;
   margin: var(--spacing-6);

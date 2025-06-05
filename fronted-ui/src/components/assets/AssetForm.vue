@@ -129,6 +129,17 @@
           </div>
           <div v-show="assetForm.lora_training.enabled" class="capability-form">
             <div class="form-item">
+              <div class="config-switch-container">
+                <label>使用全局配置</label>
+                <switch-button v-model="assetForm.lora_training.use_global_config" />
+              </div>
+              <div v-if="assetForm.lora_training.use_global_config" class="global-config-note">
+                <InformationCircleIcon class="info-icon" />
+                <span>已启用全局配置，以下字段将显示全局值（不可编辑）</span>
+              </div>
+            </div>
+            
+            <div class="form-item">
               <label>服务端口</label>
               <input 
                 v-model="assetForm.lora_training.port" 
@@ -139,20 +150,41 @@
               >
               <span class="error-message" v-if="formErrors.lora_port">{{ formErrors.lora_port }}</span>
             </div>
+            
+            <div v-if="!assetForm.lora_training.use_global_config">
             <div class="form-item">
-              <label>配置文件路径</label>
-              <input v-model="assetForm.lora_training.config_path" class="mac-input">
+                <label>Headers配置</label>
+                <KeyValueConfig
+                  v-model="assetForm.lora_training.headers"
+                  keyPlaceholder="Header名称"
+                  valuePlaceholder="Header值"
+                  addButtonText="添加"
+                  keyRequiredMessage="请输入Header名称"
+                />
             </div>
+              
             <div class="form-item">
               <label>训练参数配置</label>
-              <textarea 
-                v-model="assetForm.lora_training.params" 
-                class="mac-textarea"
-                placeholder="请输入JSON格式的训练参数配置"
-                :class="{ 'is-error': formErrors.lora_params }"
-                @blur="validateCapabilityField('lora_training', 'params')"
-              ></textarea>
-              <span class="error-message" v-if="formErrors.lora_params">{{ formErrors.lora_params }}</span>
+                <div class="training-params-form">
+                  <div class="params-header">
+                    <span>模型训练参数配置</span>
+                    <button 
+                      type="button" 
+                      class="mac-btn small show-params-btn" 
+                      @click="toggleShowAllParams"
+                    >
+                      {{ showAllParams ? '隐藏更多参数' : '显示更多参数' }}
+                    </button>
+                  </div>
+                  
+                  <LoraTrainingParams
+                    v-model="trainingParams"
+                    :disabled="false"
+                    layout="asset"
+                    :showAllParams="showAllParams"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -164,6 +196,18 @@
           </div>
           <div v-show="assetForm.ai_engine.enabled" class="capability-form">
             <div class="form-item">
+              <div class="config-switch-container">
+                <label>使用全局配置</label>
+                <switch-button v-model="assetForm.ai_engine.use_global_config" />
+              </div>
+              <div v-if="assetForm.ai_engine.use_global_config" class="global-config-note">
+                <InformationCircleIcon class="info-icon" />
+                <span>已启用全局配置，以下字段将显示全局值（不可编辑）</span>
+              </div>
+            </div>
+            
+            <!-- 单独一行的服务端口 -->
+            <div class="form-item">
               <label>服务端口</label>
               <input 
                 v-model="assetForm.ai_engine.port" 
@@ -173,6 +217,50 @@
                 @blur="validateCapabilityField('ai_engine', 'port')"
               >
               <span class="error-message" v-if="formErrors.ai_port">{{ formErrors.ai_port }}</span>
+            </div>
+            
+            <div v-if="!assetForm.ai_engine.use_global_config">
+              <!-- 单独一行的Headers配置 -->
+              <div class="form-item">
+                <label>Headers配置</label>
+                <KeyValueConfig
+                  v-model="assetForm.ai_engine.headers"
+                  keyPlaceholder="Header名称"
+                  valuePlaceholder="Header值"
+                  addButtonText="添加"
+                  keyRequiredMessage="请输入Header名称"
+                />
+              </div>
+              
+              <!-- 两列布局的超时和重试次数 -->
+              <div class="form-row">
+                <div class="form-item">
+                  <label>超时时间（秒）</label>
+                  <input 
+                    v-model="assetForm.ai_engine.timeout" 
+                    type="number" 
+                    class="mac-input"
+                  >
+                </div>
+                <div class="form-item">
+                  <label>最大重试次数</label>
+                  <input 
+                    v-model="assetForm.ai_engine.max_retries" 
+                    type="number" 
+                    class="mac-input"
+                  >
+                </div>
+              </div>
+              
+              <!-- 单独一行的重试间隔 -->
+              <div class="form-item">
+                <label>重试间隔（秒）</label>
+                <input 
+                  v-model="assetForm.ai_engine.retry_interval" 
+                  type="number" 
+                  class="mac-input"
+                >
+              </div>
             </div>
           </div>
         </div>
@@ -193,12 +281,14 @@
 </template>
 
 <script setup>
-import { ref, defineEmits, defineProps, computed, watch } from 'vue'
+import { ref, defineEmits, defineProps, computed, watch, reactive } from 'vue'
 import BaseModal from '@/components/common/Modal.vue'
 import SwitchButton from '@/components/common/SwitchButton.vue'
+import KeyValueConfig from '@/components/common/KeyValueConfig.vue'
+import LoraTrainingParams from '@/components/common/LoraTrainingParams.vue'
 import { assetApi } from '@/api/asset'
 import message from '@/utils/message'
-import { CheckCircleIcon } from '@heroicons/vue/24/outline'
+import { CheckCircleIcon, InformationCircleIcon } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
   modelValue: {
@@ -232,12 +322,26 @@ const assetForm = ref({
   lora_training: {
     enabled: false,
     port: null,
-    config_path: '',
-    params: JSON.stringify({}, null, 2)
+    params: JSON.stringify({}, null, 2),
+    headers: {
+      "Authorization": "",
+      "Content-Type": "application/json"
+    },
+    use_global_config: true,
+    verified: false
   },
   ai_engine: {
     enabled: false,
-    port: null
+    port: null,
+    headers: {
+      "Authorization": "",
+      "Content-Type": "application/json"
+    },
+    timeout: 300,
+    max_retries: 3,
+    retry_interval: 5,
+    use_global_config: true,
+    verified: false
   },
   ssh_auth_type: 'KEY',
   ssh_password: ''
@@ -252,6 +356,78 @@ const isSubmitting = ref(false)
 // SSH验证状态
 const isVerifyingSsh = ref(false)
 
+// 添加训练参数状态
+const showAllParams = ref(false)
+const trainingParams = ref({
+  model_train_type: '',
+  pretrained_model_name_or_path: '',
+  ae: '',
+  clip_l: '',
+  t5xxl: '',
+  timestep_sampling: '',
+  sigmoid_scale: '',
+  model_prediction_type: '',
+  discrete_flow_shift: '',
+  loss_type: '',
+  guidance_scale: '',
+  train_data_dir: '',
+  prior_loss_weight: '',
+  resolution: '',
+  enable_bucket: '',
+  min_bucket_reso: '',
+  max_bucket_reso: '',
+  bucket_reso_steps: '',
+  bucket_no_upscale: '',
+  output_name: '',
+  output_dir: '',
+  save_model_as: '',
+  save_precision: '',
+  save_every_n_epochs: '',
+  max_train_epochs: '',
+  train_batch_size: '',
+  gradient_checkpointing: '',
+  gradient_accumulation_steps: '',
+  network_train_unet_only: '',
+  network_train_text_encoder_only: '',
+  learning_rate: '',
+  unet_lr: '',
+  text_encoder_lr: '',
+  lr_scheduler: '',
+  lr_warmup_steps: '',
+  lr_scheduler_num_cycles: '',
+  optimizer_type: '',
+  network_module: '',
+  network_dim: '',
+  network_alpha: '',
+  sample_prompts: '',
+  sample_sampler: '',
+  sample_every_n_epochs: '',
+  log_with: '',
+  logging_dir: '',
+  caption_extension: '',
+  shuffle_caption: '',
+  keep_tokens: '',
+  max_token_length: '',
+  seed: '',
+  clip_skip: '',
+  mixed_precision: '',
+  full_fp16: '',
+  full_bf16: '',
+  fp8_base: '',
+  sdpa: '',
+  lowram: '',
+  cache_latents: '',
+  cache_latents_to_disk: '',
+  cache_text_encoder_outputs: '',
+  cache_text_encoder_outputs_to_disk: '',
+  persistent_data_loader_workers: ''
+})
+
+// 切换显示所有参数
+const toggleShowAllParams = () => {
+  showAllParams.value = !showAllParams.value
+}
+
 // 重置表单
 const resetForm = () => {
   assetForm.value = {
@@ -265,12 +441,26 @@ const resetForm = () => {
     lora_training: {
       enabled: false,
       port: null,
-      config_path: '',
-      params: JSON.stringify({}, null, 2)
+      params: JSON.stringify({}, null, 2),
+      headers: {
+        "Authorization": "",
+        "Content-Type": "application/json"
+      },
+      use_global_config: true,
+      verified: false
     },
     ai_engine: {
       enabled: false,
-      port: null
+      port: null,
+      headers: {
+        "Authorization": "",
+        "Content-Type": "application/json"
+      },
+      timeout: 300,
+      max_retries: 3,
+      retry_interval: 5,
+      use_global_config: true,
+      verified: false
     }
   }
   formErrors.value = {}
@@ -286,11 +476,68 @@ watch(() => props.asset, (newValue) => {
       ssh_password: newValue.ssh_password || '',
       ssh_key_path: newValue.ssh_key_path || ''
     }
+    
+    // 处理lora_training的参数
+    if (assetData.lora_training) {
+      // 处理params参数
+      if (assetData.lora_training.params) {
+        let params = assetData.lora_training.params
+        if (typeof params === 'string') {
+          try {
+            params = JSON.parse(params)
+          } catch (e) {
+            params = {}
+          }
+        }
+        
+        // 将params对象的值赋给trainingParams
+        Object.keys(params).forEach(key => {
+          if (key in trainingParams.value) {
+            trainingParams.value[key] = params[key]
+          }
+        })
+      }
+      
+      // 确保use_global_config存在
+      assetData.lora_training.use_global_config = assetData.lora_training.use_global_config ?? true
+    }
+    
+    // 处理ai_engine的字段
+    if (assetData.ai_engine) {
+      // 确保use_global_config存在
+      assetData.ai_engine.use_global_config = assetData.ai_engine.use_global_config ?? true
+    }
+    
     assetForm.value = assetData
   } else {
     resetForm()
+    // 清空训练参数
+    Object.keys(trainingParams.value).forEach(key => {
+      trainingParams.value[key] = ''
+    })
   }
 }, { immediate: true })
+
+// 监听trainingParams的变化，更新assetForm.lora_training.params
+watch(trainingParams, (newParams) => {
+  // 过滤掉空值
+  const filteredParams = {}
+  Object.keys(newParams).forEach(key => {
+    if (newParams[key] !== '' && newParams[key] !== null && newParams[key] !== undefined) {
+      // 处理布尔值
+      if (newParams[key] === 'true') {
+        filteredParams[key] = true
+      } else if (newParams[key] === 'false') {
+        filteredParams[key] = false
+      } else {
+        filteredParams[key] = newParams[key]
+      }
+    }
+  })
+  
+  // 更新params字段
+  assetForm.value.lora_training.params = JSON.stringify(filteredParams, null, 2)
+}, { deep: true })
 
 // 表单验证规则
 const formRules = {
@@ -359,37 +606,16 @@ const validateField = (field, value) => {
   return true
 }
 
-// 验证并格式化JSON
-const validateJson = (jsonString) => {
-  try {
-    const parsed = JSON.parse(jsonString)
-    return JSON.stringify(parsed, null, 2)
-  } catch (e) {
-    return false
-  }
-}
-
 // 验证能力字段
 const validateCapabilityField = (capability, field) => {
   const value = assetForm.value[capability][field]
   const errorKey = `${capability.split('_')[0]}_${field}`
   
-  // 如果能力被启用，验证字段
-  if (assetForm.value[capability].enabled) {
+  // 如果能力被启用并且不使用全局配置，验证字段
+  if (assetForm.value[capability].enabled && !assetForm.value[capability].use_global_config) {
     if (!value || (typeof value === 'string' && !value.trim())) {
       formErrors.value[errorKey] = `请输入${field === 'port' ? '服务端口' : '必填项'}`
       return false
-    }
-    
-    // 验证params字段
-    if (field === 'params') {
-      const validJson = validateJson(value)
-      if (validJson === false) {
-        formErrors.value[errorKey] = '请输入有效的JSON格式'
-        return false
-      }
-      // 更新为格式化后的JSON
-      assetForm.value[capability][field] = validJson
     }
     
     if (field === 'port') {
@@ -434,13 +660,12 @@ const validateForm = () => {
   })
 
   // 验证 Lora 训练能力
-  if (assetForm.value.lora_training.enabled) {
+  if (assetForm.value.lora_training.enabled && !assetForm.value.lora_training.use_global_config) {
     if (!validateCapabilityField('lora_training', 'port')) isValid = false
-    if (!validateCapabilityField('lora_training', 'params')) isValid = false
   }
 
   // 验证 AI 引擎能力
-  if (assetForm.value.ai_engine.enabled) {
+  if (assetForm.value.ai_engine.enabled && !assetForm.value.ai_engine.use_global_config) {
     if (!validateCapabilityField('ai_engine', 'port')) isValid = false
   }
 
@@ -516,20 +741,59 @@ const handleSubmit = async () => {
         ssh_key_path: assetForm.value.ssh_auth_type === 'KEY' ? assetForm.value.ssh_key_path : undefined,
       }),
       
-      // 处理能力配置
+      // 处理 Lora 训练能力配置
       lora_training: assetForm.value.lora_training.enabled 
         ? {
             ...assetForm.value.lora_training,
+            // 处理JSON格式的字段
             params: typeof assetForm.value.lora_training.params === 'string' 
-              ? assetForm.value.lora_training.params 
-              : JSON.stringify(assetForm.value.lora_training.params)
+              ? JSON.parse(assetForm.value.lora_training.params) 
+              : assetForm.value.lora_training.params,
+            // 确保headers是对象格式
+            headers: typeof assetForm.value.lora_training.headers === 'string'
+              ? JSON.parse(assetForm.value.lora_training.headers)
+              : assetForm.value.lora_training.headers,
+            // 如果使用全局配置，只保留几个基本字段
+            ...(assetForm.value.lora_training.use_global_config ? {
+              use_global_config: true,
+              enabled: true,
+              verified: assetForm.value.lora_training.verified || false
+            } : {})
           }
-        : { enabled: false, port: null, config_path: '', params: '{}' },
+        : { 
+            enabled: false, 
+            port: null, 
+            params: {}, 
+            headers: { "Authorization": "", "Content-Type": "application/json" },
+            use_global_config: true,
+            verified: false
+          },
+      
+      // 处理 AI 引擎能力配置
       ai_engine: assetForm.value.ai_engine.enabled
         ? {
             ...assetForm.value.ai_engine,
+            // 确保headers是对象格式
+            headers: typeof assetForm.value.ai_engine.headers === 'string'
+              ? JSON.parse(assetForm.value.ai_engine.headers)
+              : assetForm.value.ai_engine.headers,
+            // 如果使用全局配置，只保留几个基本字段
+            ...(assetForm.value.ai_engine.use_global_config ? {
+              use_global_config: true,
+              enabled: true,
+              verified: assetForm.value.ai_engine.verified || false
+            } : {})
           }
-        : { enabled: false, port: null }
+        : { 
+            enabled: false, 
+            port: null, 
+            headers: { "Authorization": "", "Content-Type": "application/json" },
+            timeout: 300,
+            max_retries: 3,
+            retry_interval: 5,
+            use_global_config: true,
+            verified: false
+          }
     }
 
     let result
@@ -861,5 +1125,220 @@ select.mac-input:focus {
   height: 16px;
   flex-shrink: 0;
   color: #D97706;
+}
+
+.config-switch-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #F3F4F6;
+  border-radius: 6px;
+}
+
+.global-config-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background-color: #F0F9FF;
+  border-radius: 6px;
+  color: #0369A1;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.training-params-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  padding: 16px;
+  background: #F9FAFB;
+}
+
+.params-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.params-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px dashed #E5E7EB;
+  padding-top: 16px;
+}
+
+.params-section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.params-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4B5563;
+  margin: 0;
+}
+
+.params-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.param-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.param-item label {
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.show-params-btn {
+  background: #F0F9FF;
+  color: #0369A1;
+  border: none;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.show-params-btn:hover {
+  background: #E0F2FE;
+}
+
+.param-item-group {
+  display: flex;
+  gap: 12px;
+  grid-column: span 2;
+}
+
+.param-item-half {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.param-item-half label {
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.param-item-full {
+  grid-column: span 2;
+}
+
+/* 确保输入框在移动设备上垂直对齐 */
+@media (max-width: 768px) {
+  .param-item-group {
+    flex-direction: column;
+    grid-column: span 1;
+    gap: 16px;
+  }
+  
+  .param-item-full {
+    grid-column: span 1;
+  }
+  
+  .params-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.param-item input:hover,
+.param-item select:hover,
+.param-item-half input:hover,
+.param-item-half select:hover {
+  border-color: #93C5FD;
+}
+
+.param-item input:focus,
+.param-item select:focus,
+.param-item-half input:focus,
+.param-item-half select:focus {
+  border-color: #007AFF;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
+}
+
+.param-item-half input::-webkit-outer-spin-button,
+.param-item-half input::-webkit-inner-spin-button,
+.param-item input::-webkit-outer-spin-button,
+.param-item input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.param-item-half input[type=number],
+.param-item input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.params-subsection {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed #E5E7EB;
+  grid-column: span 2;
+}
+
+.params-subsection-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4B5563;
+  margin: 0 0 12px 0;
+}
+
+.mac-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  color: #1C1C1E;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  transition: all 0.2s ease;
+}
+
+.mac-textarea:focus {
+  outline: none;
+  border-color: #007AFF;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
+}
+
+.mac-textarea.is-error {
+  border-color: #DC2626;
+  background: #FEF2F2;
+}
+
+.mac-textarea:disabled {
+  background: #F3F4F6;
+  cursor: not-allowed;
+}
+
+.param-name {
+  font-size: 11px;
+  color: #6B7280;
+  opacity: 0.8;
+  font-weight: normal;
+  margin-left: 4px;
 }
 </style> 

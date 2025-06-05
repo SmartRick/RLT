@@ -77,5 +77,28 @@ export const tasksApi = {
    */
   async getTaskStatus(taskId) {
     return request.get(`${BASE_URL}/${taskId}/status`)
+  },
+  
+  /**
+   * 获取打标文本
+   * @param {number|string} taskId - 任务ID
+   * @returns {Promise<Object>} 打标文本信息，key为图片名称，value为打标文本
+   */
+  async getMarkedTexts(taskId) {
+    return request.get(`${BASE_URL}/${taskId}/marked_texts`)
+  },
+  
+  /**
+   * 更新打标文本
+   * @param {number|string} taskId - 任务ID
+   * @param {string} filename - 图片文件名
+   * @param {string} content - 打标文本内容
+   * @returns {Promise<Object>} 更新后的打标文本信息
+   */
+  async updateMarkedText(taskId, filename, content) {
+    return request.put(`${BASE_URL}/${taskId}/marked_texts`, {
+      filename,
+      content
+    })
   }
 } 

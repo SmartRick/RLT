@@ -1,31 +1,42 @@
 <template>
   <div class="settings-container">
-    <div class="mac-card settings-card">
+    <div class="settings-header">
       <h2 class="settings-title">系统设置</h2>
+      <div class="settings-actions">
+        <button 
+          type="button" 
+          class="mac-btn primary"
+          :disabled="isSubmitting"
+          @click="handleSubmit"
+        >
+          {{ isSubmitting ? '保存中...' : '保存设置' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-tabs">
+      <button 
+        v-for="tab in tabs" 
+        :key="tab.key"
+        class="tab-button" 
+        :class="{ active: activeTab === tab.key }"
+        @click="activeTab = tab.key"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+        
+    <!-- 系统配置 -->
+    <div v-if="activeTab === 'system'" class="mac-card settings-card">
+      <h3 class="section-title">系统配置</h3>
       
-      <form @submit.prevent="handleSubmit" class="settings-form">
+      <div class="form-row">
         <div class="form-group">
-          <label>源文件目录</label>
+          <label>
+            <div class="label-text">标记轮询间隔(分钟)</div>
+          </label>
           <input 
-            v-model="form.source_dir"
-            class="mac-input"
-            placeholder="请输入源文件目录路径"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label>Lora输出目录</label>
-          <input 
-            v-model="form.lora_output_path"
-            class="mac-input"
-            placeholder="请输入Lora输出目录路径"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label>调度间隔(分钟)</label>
-          <input 
-            v-model.number="form.scheduling_minute"
+            v-model.number="form.mark_poll_interval"
             type="number"
             class="mac-input"
             min="1"
@@ -34,57 +45,364 @@
         </div>
         
         <div class="form-group">
-          <label>标记文件目录</label>
+          <label>
+            <div class="label-text">调度间隔(分钟)</div>
+          </label>
           <input 
-            v-model="form.mark_pan_dir"
+            v-model.number="form.scheduling_minute"
+            type="number"
             class="mac-input"
-            placeholder="请输入标记文件目录路径"
+            min="1"
+            max="60"
+          >
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <div class="label-text">标记文件目录</div>
+        </label>
+        <input 
+          v-model="form.mark_pan_dir"
+          class="mac-input"
+          placeholder="请输入标记文件目录路径"
+        >
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <div class="label-text">Lora上传目录</div>
+        </label>
+        <input 
+          v-model="form.lora_pan_upload_dir"
+          class="mac-input"
+          placeholder="请输入Lora上传目录路径"
+        >
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <div class="label-text">标记工作流文件</div>
+        </label>
+        <div class="workflow-file-container">
+          <div v-if="form.mark_workflow_api" class="workflow-file-info">
+            <div class="workflow-file-path">{{ form.mark_workflow_api }}</div>
+            <div class="workflow-file-actions">
+              <button 
+                v-if="uploadedWorkflowFile"
+                type="button" 
+                class="workflow-action-btn"
+                @click="downloadWorkflowFile"
+                title="下载文件"
+              >
+                <ArrowDownTrayIcon class="action-icon" />
+              </button>
+              <button 
+                type="button" 
+                class="workflow-action-btn delete"
+                @click="clearWorkflowFile"
+                title="移除文件"
+              >
+                <XMarkIcon class="action-icon" />
+              </button>
+            </div>
+          </div>
+          <FileUploader
+            v-else
+            ref="workflowUploaderRef"
+            accept=".json"
+            :auto-upload="true"
+            description="标记工作流配置文件"
+            @upload-success="handleWorkflowUploadSuccess"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- 标记配置 -->
+    <div v-if="activeTab === 'mark'" class="mac-card settings-card">
+      <h3 class="section-title">标记配置</h3>
+      
+      <div class="form-row">
+        <div class="form-group toggle-group">
+          <div class="toggle-label">自动裁剪</div>
+          <div class="toggle-switch">
+            <input 
+              type="checkbox" 
+              id="auto_crop" 
+              v-model="form.mark_config.auto_crop"
+            >
+            <label for="auto_crop"></label>
+          </div>
+        </div>
+        
+        <div class="form-group toggle-group">
+          <div class="toggle-label">自动标签</div>
+          <div class="toggle-switch">
+            <input 
+              type="checkbox" 
+              id="auto_tag" 
+              v-model="form.mark_config.auto_tag"
+            >
+            <label for="auto_tag"></label>
+          </div>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>
+            <div class="label-text">最小置信度</div>
+          </label>
+          <input 
+            v-model.number="form.mark_config.min_confidence"
+            type="number"
+            class="mac-input"
+            min="0"
+            max="1"
+            step="0.1"
           >
         </div>
         
         <div class="form-group">
-          <label>Lora上传目录</label>
+          <label>
+            <div class="label-text">最大标签数</div>
+          </label>
           <input 
-            v-model="form.lora_pan_upload_dir"
+            v-model.number="form.mark_config.max_tags"
+            type="number"
             class="mac-input"
-            placeholder="请输入Lora上传目录路径"
+            min="1"
           >
         </div>
         
-        <div class="form-actions">
-          <button 
-            type="submit" 
-            class="mac-btn primary"
-            :disabled="isSubmitting"
-          >
-            {{ isSubmitting ? '保存中...' : '保存设置' }}
-          </button>
+        <div class="form-group">
+          <label>
+            <div class="label-text">默认裁剪比例</div>
+          </label>
+          <select v-model="form.mark_config.default_crop_ratio" class="mac-input">
+            <option v-for="ratio in form.mark_config.crop_ratios" :key="ratio" :value="ratio">
+              {{ ratio }}
+            </option>
+          </select>
         </div>
-      </form>
+      </div>
+    </div>
+
+    <!-- AI引擎配置 -->
+    <div v-if="activeTab === 'ai'" class="mac-card settings-card">
+      <h3 class="section-title">AI引擎配置</h3>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>
+            <div class="label-text">超时时间(秒)</div>
+          </label>
+          <input 
+            v-model.number="form.ai_engine_config.timeout"
+            type="number"
+            class="mac-input"
+            min="1"
+          >
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <div class="label-text">最大重试次数</div>
+          </label>
+          <input 
+            v-model.number="form.ai_engine_config.max_retries"
+            type="number"
+            class="mac-input"
+            min="0"
+          >
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <div class="label-text">重试间隔(秒)</div>
+          </label>
+          <input 
+            v-model.number="form.ai_engine_config.retry_interval"
+            type="number"
+            class="mac-input"
+            min="1"
+          >
+        </div>
+      </div>
+      
+      <h4 class="subsection-title">请求头配置</h4>
+      <KeyValueConfig
+        v-model="form.ai_engine_headers"
+        keyPlaceholder="Header名称"
+        valuePlaceholder="Header值"
+        addButtonText="添加"
+      />
+    </div>
+
+    <!-- Lora训练配置 -->
+    <div v-if="activeTab === 'lora'" class="mac-card settings-card">
+      <h3 class="section-title">Lora训练配置</h3>
+      
+      <LoraTrainingParams
+        v-model="form.lora_training_config"
+        :disabled="false"
+        layout="settings"
+        :showAllParams="true"
+      />
+      
+      <h4 class="subsection-title">请求头配置</h4>
+      <KeyValueConfig
+        v-model="form.lora_training_headers"
+        keyPlaceholder="Header名称"
+        valuePlaceholder="Header值"
+        addButtonText="添加"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { 
+  ArrowDownTrayIcon, 
+  XMarkIcon 
+} from '@heroicons/vue/24/outline'
 import { settingsApi } from '@/api/settings'
+import { uploadApi } from '@/api/upload'
 import message from '@/utils/message'
+import FileUploader from '@/components/common/FileUploader.vue'
+import KeyValueConfig from '@/components/common/KeyValueConfig.vue'
+import LoraTrainingParams from '@/components/common/LoraTrainingParams.vue'
 
+// 标签页定义
+const tabs = [
+  { key: 'system', label: '系统配置' },
+  { key: 'mark', label: '标记配置' },
+  { key: 'ai', label: 'AI引擎配置' },
+  { key: 'lora', label: 'Lora训练配置' }
+]
+const activeTab = ref('system')
+
+// 表单数据
 const form = ref({
-  source_dir: '',
-  lora_output_path: '',
-  scheduling_minute: 5,
+  // 系统配置
   mark_pan_dir: '',
-  lora_pan_upload_dir: ''
+  lora_pan_upload_dir: '',
+  scheduling_minute: 5,
+  mark_poll_interval: 5,
+  mark_workflow_api: '',
+  
+  // 标记配置
+  mark_config: {
+    auto_crop: true,
+    auto_tag: true,
+    crop_ratios: [],
+    default_crop_ratio: '1:1',
+    max_tags: 20,
+    min_confidence: 0.6
+  },
+  
+  // AI引擎配置
+  ai_engine_config: {
+    max_retries: 3,
+    retry_interval: 5,
+    timeout: 300
+  },
+  ai_engine_headers: {},
+  
+  // Lora训练配置
+  lora_training_config: {
+    pretrained_model_name_or_path: '',
+    ae: '',
+    clip_l: '',
+    t5xxl: '',
+    output_dir: '',
+    resolution: '512,512',
+    timestep_sampling: 'sigmoid',
+    sigmoid_scale: 1,
+    model_prediction_type: 'raw',
+    discrete_flow_shift: 1,
+    loss_type: 'l2',
+    guidance_scale: 1,
+    prior_loss_weight: 1,
+    learning_rate: 0.0001,
+    unet_lr: 0.0005,
+    text_encoder_lr: 0.00001,
+    max_train_epochs: 10,
+    train_batch_size: 1,
+    gradient_checkpointing: true,
+    gradient_accumulation_steps: 1,
+    network_train_unet_only: false,
+    network_train_text_encoder_only: false,
+    network_dim: 64,
+    network_alpha: 32,
+    lr_warmup_steps: 0,
+    lr_scheduler_num_cycles: 1,
+    optimizer_type: 'AdamW8bit',
+    lr_scheduler: 'cosine_with_restarts',
+    mixed_precision: 'bf16',
+    full_fp16: false,
+    full_bf16: false,
+    fp8_base: true,
+    sdpa: true,
+    save_precision: 'fp16',
+    save_model_as: 'safetensors',
+    save_every_n_epochs: 2,
+    sample_every_n_epochs: 2,
+    network_module: 'networks.lora_flux',
+    clip_skip: 2,
+    seed: 1337,
+    enable_bucket: true,
+    bucket_no_upscale: true,
+    min_bucket_reso: 256,
+    max_bucket_reso: 1024,
+    bucket_reso_steps: 32,
+    cache_latents: true,
+    cache_latents_to_disk: true,
+    cache_text_encoder_outputs: true,
+    cache_text_encoder_outputs_to_disk: true,
+    persistent_data_loader_workers: true,
+    lowram: false,
+    sample_prompts: '(masterpiece, best quality:1.2), 1girl, solo, --n lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry,  --w 512  --h 768  --l 7  --s 24  --d 1337',
+    sample_sampler: 'euler_a',
+    log_with: 'tensorboard',
+    logging_dir: './logs',
+    caption_extension: '.txt',
+    shuffle_caption: false,
+    keep_tokens: 0,
+    max_token_length: 255
+  },
+  lora_training_headers: {}
 })
 
 const isSubmitting = ref(false)
+
+const workflowUploaderRef = ref(null)
+const uploadedWorkflowFile = ref(null)
 
 // 获取设置
 const fetchSettings = async () => {
   try {
     const data = await settingsApi.getSettings()
     form.value = data
+    
+    // 如果存在工作流路径，尝试获取文件信息
+    if (form.value.mark_workflow_api && form.value.mark_workflow_api.includes('uploads/')) {
+      try {
+        // 从路径中提取文件ID，假设格式为 uploads/{id}.{ext}
+        const filePathMatch = form.value.mark_workflow_api.match(/uploads\/(\d+)\..+/)
+        if (filePathMatch && filePathMatch[1]) {
+          const fileId = parseInt(filePathMatch[1])
+          const fileResponse = await uploadApi.getFile(fileId)
+          if (fileResponse && fileResponse.file) {
+            uploadedWorkflowFile.value = fileResponse.file
+          }
+        }
+      } catch (err) {
+        console.error('获取工作流文件信息失败', err)
+      }
+    }
   } catch (error) {
     message.error('获取设置失败')
   }
@@ -103,6 +421,26 @@ const handleSubmit = async () => {
   }
 }
 
+// 处理工作流文件上传成功
+const handleWorkflowUploadSuccess = (file) => {
+  form.value.mark_workflow_api = file.storage_path
+  uploadedWorkflowFile.value = file
+}
+
+// 下载工作流文件
+const downloadWorkflowFile = () => {
+  if (uploadedWorkflowFile.value) {
+    const downloadUrl = uploadApi.getDownloadUrl(uploadedWorkflowFile.value.id)
+    window.open(downloadUrl, '_blank')
+  }
+}
+
+// 清除工作流文件
+const clearWorkflowFile = () => {
+  form.value.mark_workflow_api = ''
+  uploadedWorkflowFile.value = null
+}
+
 onMounted(() => {
   fetchSettings()
 })
@@ -115,38 +453,269 @@ onMounted(() => {
   overflow: auto;
 }
 
-.settings-card {
-  max-width: 800px;
-  margin: 0 auto;
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
 }
 
 .settings-title {
   font-size: 20px;
   font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  background: var(--background-tertiary);
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.tab-button {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.tab-button.active {
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.settings-card {
+  margin-bottom: 20px;
+  padding: 24px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
   margin-bottom: 24px;
   color: var(--text-primary);
 }
 
-.settings-form {
-  display: flex;
-  flex-direction: column;
+.subsection-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 24px 0 16px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color-light);
+  padding-bottom: 8px;
+}
+
+/* 改为统一的网格布局 */
+.form-row, .config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
+  margin-bottom: 20px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-bottom: 0;
 }
 
 .form-group label {
   font-size: 14px;
   color: var(--text-secondary);
+  margin-bottom: 4px;
 }
 
-.form-actions {
-  margin-top: 12px;
+/* 开关组样式调整 */
+.toggle-group {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.toggle-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.toggle-switch {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  margin-top: 4px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-switch label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--background-tertiary);
+  border-radius: 24px;
+  cursor: pointer;
+  transition: 0.4s;
+}
+
+.toggle-switch label:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.4s;
+}
+
+.toggle-switch input:checked + label {
+  background-color: var(--primary-color);
+}
+
+.toggle-switch input:checked + label:before {
+  transform: translateX(22px);
+}
+
+/* 工作流文件样式优化 */
+.workflow-file-container {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.workflow-file-info {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background-color: var(--background-tertiary);
+}
+
+.workflow-file-path {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workflow-file-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.workflow-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.workflow-action-btn:hover {
+  background-color: var(--background-secondary);
+  color: var(--primary-color);
+}
+
+.workflow-action-btn.delete:hover {
+  color: var(--danger-color);
+}
+
+.action-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.param-name {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  font-weight: normal;
+  margin-left: 4px;
+}
+
+.config-group-wide {
+  grid-column: 1 / -1;
+}
+
+.mac-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  transition: all 0.2s ease;
+}
+
+.mac-textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.mac-textarea:disabled {
+  background: var(--background-tertiary);
+  cursor: not-allowed;
+}
+
+.params-section {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.params-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* 响应式设计优化 */
+@media (max-width: 768px) {
+  .form-row, .config-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .settings-card {
+    padding: 16px;
+  }
+  
+  .section-title {
+    margin-bottom: 20px;
+  }
+}
+
+.label-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: normal;
 }
 </style> 

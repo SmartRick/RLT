@@ -320,6 +320,7 @@ const openTerminal = (asset) => {
 
 // 处理表单提交成功
 const handleFormSuccess = async (result) => {
+  console.log("handleFormSuccess",result)
   await fetchAssets()
 }
 
