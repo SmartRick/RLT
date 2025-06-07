@@ -293,3 +293,27 @@ def get_task_training_config(task_id):
     if training_config is None:
         return response_template("not_found", code=1004, msg="任务不存在")
     return success_json(training_config)
+
+@tasks_bp.route('/<int:task_id>/training-results', methods=['GET'])
+def get_training_results(task_id):
+    """
+    获取任务的训练结果，包括模型文件和预览图
+    """
+    try:
+        result = TaskService.get_training_results(task_id)
+        return success_json(data=result)
+    except Exception as e:
+        logger.error(f"获取训练结果失败: {str(e)}")
+        return error_json(msg=f"获取训练结果失败: {str(e)}")
+
+@tasks_bp.route('/<int:task_id>/training-loss', methods=['GET'])
+def get_training_loss(task_id):
+    """
+    获取任务的训练loss曲线数据和训练进度
+    """
+    try:
+        result = TaskService.get_training_loss_data(task_id)
+        return success_json(data=result)
+    except Exception as e:
+        logger.error(f"获取训练loss数据失败: {str(e)}")
+        return error_json(msg=f"获取训练loss数据失败: {str(e)}")

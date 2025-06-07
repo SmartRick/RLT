@@ -2,7 +2,7 @@ import json
 import requests
 import os
 import uuid
-from typing import Tuple, Dict, Optional, Any
+from typing import Tuple, Dict, Optional, Any, List
 from ..utils.logger import setup_logger
 from dataclasses import dataclass, field
 
@@ -272,6 +272,9 @@ class TrainRequestHandler:
             elif status == "FAILED":
                 logger.error(f"任务 {task_id} 失败: {result_info.get('message', '')}")
                 return True, False, result_info
+            elif status == "TERMINATED":
+                logger.warning(f"任务 {task_id} 被终止")
+                return True, False, result_info
             else:  # RUNNING 或其他状态
                 logger.debug(f"任务 {task_id} 状态: {status}, 进度: {result_info['progress']}%")
                 return False, False, result_info
@@ -345,3 +348,82 @@ class TrainRequestHandler:
         except Exception as e:
             logger.error(f"取消训练任务时发生错误: {str(e)}", exc_info=True)
             return False 
+            
+    def get_all_training_logs(self) -> Optional[List[str]]:
+        """
+        获取所有训练日志key
+        :return: 所有训练日志key的列表
+        """
+        try:
+            url = f"http://{self.asset_ip}:{self.training_port}/proxy/tensorboard/data/runs"
+            logger.debug(f"获取所有训练日志key: {url}")
+            
+            headers = {
+                'Accept': 'application/json, text/plain, */*',
+                'X-TensorBoard-Feature-Flags': '{"enabledColorGroup":true,"enabledColorGroupByRegex":true,"enabledExperimentalPlugins":[],"enabledLinkedTime":false,"enabledCardWidthSetting":true,"enabledScalarDataTable":false,"forceSvg":false,"enableDarkModeOverride":null,"defaultEnableDarkMode":false,"isAutoDarkModeAllowed":true,"inColab":false,"metricsImageSupportEnabled":true,"enableTimeSeriesPromotion":false}'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            logger.debug(f"获取到所有训练日志key: {data}")
+            
+            return data
+            
+        except Exception as e:
+            logger.error(f"获取所有训练日志key时发生错误: {str(e)}", exc_info=True)
+            return None
+            
+    def get_training_loss_data(self, task_id: str) -> Optional[Dict]:
+        """
+        获取训练loss曲线数据
+        :param task_id: 训练任务ID
+        :return: loss曲线数据
+        """
+        try:
+            # 先获取所有训练日志key
+            all_logs = self.get_all_training_logs()
+            if not all_logs:
+                logger.error("无法获取训练日志列表")
+                return None
+                
+            # 匹配当前任务ID对应的key
+            matched_key = None
+            for key in all_logs:
+                # 检查key是否包含任务ID
+                if task_id in key:
+                    matched_key = key
+                    logger.info(f"找到匹配的训练日志key: {matched_key}")
+                    break
+                    
+            if not matched_key:
+                logger.error(f"未找到与任务ID {task_id} 匹配的训练日志key")
+                return None
+                
+            # 使用匹配到的key获取loss数据
+            url = f"http://{self.asset_ip}:{self.training_port}/proxy/tensorboard/experiment/defaultExperimentId/data/plugin/timeseries/timeSeries"
+            logger.debug(f"获取训练loss曲线数据: {url}")
+            
+            # 构建正确的multipart/form-data请求
+            headers = {
+                'Accept': 'application/json, text/plain, */*',
+                'X-XSRF-Protected': '1'
+            }
+            
+            # 使用正确的请求参数格式，使用匹配到的key
+            files = {
+                'requests': (None, json.dumps([{"plugin":"scalars","tag":"loss/average","run":matched_key}]))
+            }
+            
+            response = requests.post(url, files=files, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            logger.debug(f"获取到训练loss曲线数据: {data}")
+            
+            return data
+            
+        except Exception as e:
+            logger.error(f"获取训练loss曲线数据时发生错误: {str(e)}", exc_info=True)
+            return None 

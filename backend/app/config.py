@@ -97,6 +97,9 @@ class Config:
     # Lora训练全局配置
     LORA_TRAINING_CONFIG = {
         'model_train_type': 'flux-lora',
+        'train_data_dir':'./input', #任务独立设置
+        'output_dir': './output',   #任务独立设置
+        'output_name':'rick',   #任务独立设置
         'pretrained_model_name_or_path': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/unet/flux/flux1-dev-fp8.safetensors',
         'ae': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/vae/ae.sft',
         'clip_l': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/clip/clip_l.safetensors',
@@ -114,7 +117,6 @@ class Config:
         'max_bucket_reso': 1024,
         'bucket_reso_steps': 32,
         'bucket_no_upscale': True,
-        'output_dir': './output',
         'save_model_as': 'safetensors',
         'save_precision': 'fp16',
         'save_every_n_epochs': 2,
@@ -134,6 +136,7 @@ class Config:
         'network_module': 'networks.lora_flux',
         'network_dim': 64,
         'network_alpha': 32,
+        'sample_prompts':'(masterpiece, best quality:1.2), 1girl, solo, --n lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry,  --w 512  --h 768  --l 7  --s 24  --d 1337',
         'sample_sampler': 'euler_a',
         'sample_every_n_epochs': 2,
         'log_with': 'tensorboard',

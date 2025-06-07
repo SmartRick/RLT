@@ -293,7 +293,7 @@
     },
     "207": {
         "inputs": {
-            "seed": 300107
+            "seed": 607116
         },
         "class_type": "easy seed",
         "_meta": {
@@ -328,7 +328,7 @@
     },
     "210": {
         "inputs": {
-            "string": ""
+            "string": "Lion"
         },
         "class_type": "Simple String",
         "_meta": {

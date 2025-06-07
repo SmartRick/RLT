@@ -313,19 +313,19 @@ class ConfigService:
                 else:
                     # 混合全局配置和任务配置
                     mark_params = ConfigService.get_global_mark_config()
-                    
+                
                     # 如果有资产特定配置，优先使用资产配置
                     if task.mark_asset_id:
                         # 获取资产的AI引擎配置
                         asset_config = ConfigService.get_asset_ai_engine_config(task.mark_asset_id)
                         if asset_config:
                             mark_params.update(asset_config)
-
+                
                     # 如果有任务特定配置，混合到全局配置中
-                    if task.mark_config and isinstance(task.mark_config, dict):
-                        mark_params.update(task.mark_config)
-                        
-                    return mark_params
+                if task.mark_config and isinstance(task.mark_config, dict):
+                    mark_params.update(task.mark_config)
+                    
+                return mark_params
                     
         except Exception as e:
             logger.error(f"获取任务打标配置失败, 任务ID: {task_id}, 错误: {str(e)}")
@@ -357,19 +357,19 @@ class ConfigService:
                 else:
                     # 混合全局配置和任务配置
                     training_params = ConfigService.get_global_lora_training_config()
-                    
-                    # 如果有资产特定配置，优先使用资产配置
-                    if task.training_asset_id:
-                        # 获取资产的Lora训练配置
-                        asset_config = ConfigService.get_asset_lora_config(task.training_asset_id)
-                        if asset_config:
-                            training_params.update(asset_config)
-                    
+                
+                # 如果有资产特定配置，优先使用资产配置
+                if task.training_asset_id:
+                    # 获取资产的Lora训练配置
+                    asset_config = ConfigService.get_asset_lora_config(task.training_asset_id)
+                    if asset_config:
+                        training_params.update(asset_config)
+                
                     # 如果有任务特定配置，混合到配置中
-                    if task.training_config and isinstance(task.training_config, dict):
-                        training_params.update(task.training_config)
-                        
-                    return training_params
+                if task.training_config and isinstance(task.training_config, dict):
+                    training_params.update(task.training_config)
+                    
+                return training_params
                     
         except Exception as e:
             logger.error(f"获取任务训练配置失败, 任务ID: {task_id}, 错误: {str(e)}")
