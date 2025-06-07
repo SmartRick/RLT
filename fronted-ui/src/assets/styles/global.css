@@ -118,6 +118,13 @@ body {
   width: 100%;
 }
 
+/* textarea样式 */
+textarea, .mac-textarea {
+  font-family: "微软雅黑", "Heiti SC", "黑体", -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  padding: var(--spacing-3);
+  line-height: 1.6;
+}
+
 .mac-input:focus {
   outline: none;
   border-color: var(--primary-color);
@@ -139,37 +146,6 @@ body {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 20%, transparent);
-}
-
-/* 模态框样式 */
-.modal-wrapper {
-  width: 600px;
-  max-width: 90vw;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--background-secondary);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.modal-header {
-  padding: var(--spacing-4) var(--spacing-6);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.modal-body {
-  padding: var(--spacing-6);
-  overflow-y: auto;
-}
-
-.modal-footer {
-  padding: var(--spacing-4) var(--spacing-6);
-  border-top: 1px solid var(--border-color-light);
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-3);
 }
 
 /* 表单样式 */

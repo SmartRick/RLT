@@ -4,8 +4,6 @@ import os
 import uuid
 from typing import Tuple, Dict, Optional, Any
 from ..utils.logger import setup_logger
-from ..services.config_service import ConfigService
-from ..config import Config
 from dataclasses import dataclass, field
 
 logger = setup_logger('train_handler')
@@ -93,16 +91,15 @@ class TrainConfig:
     extra_params: Dict[str, Any] = field(default_factory=dict)
 
 class TrainRequestHandler:
-    def __init__(self, asset_config: dict, asset_ip: str = None):
+    def __init__(self, asset_ip: str = None,training_port:int = 28000):
         """
         初始化训练处理器
         :param asset_config: 资产配置信息，包含Lora训练端口等
         :param asset_ip: 资产IP地址，如果不提供则使用127.0.0.1
         """
-        self.asset_config = asset_config
         self.asset_ip = asset_ip or '127.0.0.1'
-        self.config = ConfigService.get_config()
-        self.api_base_url = f"http://{self.asset_ip}:{self.asset_config.get('port', 28000)}/api"
+        self.training_port = training_port
+        self.api_base_url = f"http://{self.asset_ip}:{self.training_port}/api"
 
     def train_request(self, train_config: TrainConfig) -> str:
         """
@@ -132,11 +129,11 @@ class TrainRequestHandler:
             }
             
             # 如果有自定义请求头，添加到headers
-            if 'headers' in self.asset_config and isinstance(self.asset_config['headers'], dict):
-                headers.update(self.asset_config['headers'])
+            if hasattr(train_config, 'headers') and isinstance(train_config.headers, dict):
+                headers.update(train_config.headers)
             
             logger.debug(f"发送训练请求到 {url}")
-            logger.debug(f"请求参数: {json.dumps(payload, indent=2)}")
+            logger.info(f"请求参数: {json.dumps(payload, indent=2)}")
             
             # 发送请求
             response = requests.post(url, json=payload, headers=headers, timeout=60)
@@ -219,10 +216,11 @@ class TrainRequestHandler:
             
         return error_msg, error_detail
 
-    def check_status(self, task_id: str) -> Tuple[bool, bool, Dict[str, Any]]:
+    def check_status(self, task_id: str, train_config: Optional[TrainConfig] = None) -> Tuple[bool, bool, Dict[str, Any]]:
         """
         检查训练任务状态
         :param task_id: 任务ID
+        :param train_config: 可选的训练配置参数
         :return: (is_completed, is_success, task_info)
         """
         url = f"{self.api_base_url}/tasks"
@@ -230,8 +228,8 @@ class TrainRequestHandler:
         
         headers = {}
         # 如果有自定义请求头，添加到headers
-        if 'headers' in self.asset_config and isinstance(self.asset_config['headers'], dict):
-            headers.update(self.asset_config['headers'])
+        if train_config and hasattr(train_config, 'headers') and isinstance(train_config.headers, dict):
+            headers.update(train_config.headers)
         
         try:
             response = requests.get(url, headers=headers, timeout=30)
@@ -242,7 +240,7 @@ class TrainRequestHandler:
             # 检查响应是否有效
             if data.get('status') != 'success' or 'data' not in data or 'tasks' not in data['data']:
                 logger.warning(f"任务状态响应格式无效: {data}")
-                return False, False, {"status": "unknown", "progress": 0}
+                return False, False, {"status": "UNKNOWN", "progress": 0}
             
             # 查找指定ID的任务
             task_info = None
@@ -254,7 +252,7 @@ class TrainRequestHandler:
             # 如果没有找到任务
             if not task_info:
                 logger.warning(f"未找到任务 {task_id} 的状态信息")
-                return False, False, {"status": "unknown", "progress": 0}
+                return True, False, {"status": "UNKNOWN", "progress": 0,"message":f"未找到任务 {task_id} 的状态信息, 可能训练引擎已经重启"}
             
             # 获取任务状态
             status = task_info.get("status", "RUNNING")
@@ -295,14 +293,15 @@ class TrainRequestHandler:
                 "message": f"未知错误: {str(e)}"
             }
             
-    def get_status(self, task_id: str) -> Optional[Dict]:
+    def get_status(self, task_id: str, train_config: Optional[TrainConfig] = None) -> Optional[Dict]:
         """
         获取任务状态信息（简化版）
         :param task_id: 任务ID
+        :param train_config: 可选的训练配置参数
         :return: 状态信息字典或None（如果获取失败）
         """
         try:
-            completed, success, info = self.check_status(task_id)
+            completed, success, info = self.check_status(task_id, train_config)
             return {
                 "completed": completed,
                 "success": success,
@@ -315,10 +314,11 @@ class TrainRequestHandler:
             logger.error(f"获取训练状态失败: {str(e)}", exc_info=True)
             return None
             
-    def cancel_training(self, task_id: str) -> bool:
+    def cancel_training(self, task_id: str, train_config: Optional[TrainConfig] = None) -> bool:
         """
         取消训练任务
         :param task_id: 任务ID
+        :param train_config: 可选的训练配置参数
         :return: 是否成功取消
         """
         try:
@@ -327,8 +327,8 @@ class TrainRequestHandler:
             
             headers = {}
             # 如果有自定义请求头，添加到headers
-            if 'headers' in self.asset_config and isinstance(self.asset_config['headers'], dict):
-                headers.update(self.asset_config['headers'])
+            if train_config and hasattr(train_config, 'headers') and isinstance(train_config.headers, dict):
+                headers.update(train_config.headers)
             
             response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()

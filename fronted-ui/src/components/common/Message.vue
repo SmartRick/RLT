@@ -2,7 +2,8 @@
   <transition name="message-fade">
     <div v-if="visible" 
          class="message-container"
-         :class="type">
+         :class="type"
+         :style="{ top: `${offset}px` }">
       <component :is="iconComponent" 
                 class="message-icon" 
                 v-if="iconComponent" />
@@ -12,8 +13,8 @@
 </template>
 
 <script setup>
-import { defineProps, defineExpose, defineComponent } from 'vue'
-import { ref, computed } from 'vue'
+import { defineProps, defineExpose, defineComponent, defineEmits } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
   CheckCircleIcon,
   ExclamationCircleIcon,
@@ -29,6 +30,8 @@ defineComponent({
  * @typedef {'success' | 'warning' | 'error' | 'info'} MessageType
  */
 
+const emit = defineEmits(['close'])
+
 const props = defineProps({
   content: {
     type: String,
@@ -41,10 +44,20 @@ const props = defineProps({
   duration: {
     type: Number,
     default: 3000
+  },
+  offset: {
+    type: Number,
+    default: 20
   }
 })
 
 const visible = ref(false)
+const offsetValue = ref(props.offset)
+
+// 监听偏移量变化
+watch(() => props.offset, (newVal) => {
+  offsetValue.value = newVal
+})
 
 const iconComponent = computed(() => {
   const iconMap = {
@@ -63,20 +76,44 @@ const show = () => {
   visible.value = true
   if (props.duration > 0) {
     setTimeout(() => {
-      visible.value = false
+      hide()
     }, props.duration)
   }
 }
 
+/**
+ * 隐藏消息
+ */
+const hide = () => {
+  visible.value = false
+  setTimeout(() => {
+    emit('close')
+  }, 300) // 等待动画结束
+}
+
+/**
+ * 更新偏移量
+ */
+const updateOffset = (offset) => {
+  offsetValue.value = offset
+}
+
+/**
+ * 获取当前偏移量
+ */
+const getOffset = () => offsetValue.value
+
 defineExpose({
-  show
+  show,
+  hide,
+  updateOffset,
+  getOffset
 })
 </script>
 
 <style scoped>
 .message-container {
   position: fixed;
-  top: 20px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;

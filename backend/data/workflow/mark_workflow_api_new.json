@@ -118,7 +118,7 @@
     },
     "155": {
         "inputs": {
-            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1"
+            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1\\10_rick"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -233,7 +233,7 @@
                 4
             ],
             "TextFileContents": [
-                "136",
+                "216",
                 0
             ]
         },
@@ -293,7 +293,7 @@
     },
     "207": {
         "inputs": {
-            "seed": 370203
+            "seed": 300107
         },
         "class_type": "easy seed",
         "_meta": {

@@ -4,7 +4,6 @@ import os
 import random
 from typing import Tuple, Dict, Optional, Any
 from ..utils.logger import setup_logger
-from ..services.config_service import ConfigService
 from ..config import Config
 from dataclasses import dataclass
 
@@ -23,21 +22,20 @@ class MarkConfig:
     trigger_words: str = ''
 
 class MarkRequestHandler:
-    def __init__(self, asset_config: dict, asset_ip: str = None):
+    def __init__(self,  asset_ip: str = None,mark_port:int = 8188):
         """
         初始化标记处理器
         :param asset_config: 资产配置信息，包含AI引擎端口等
         :param asset_ip: 资产IP地址，如果不提供则使用127.0.0.1
         """
-        self.asset_config = asset_config
         self.asset_ip = asset_ip or '127.0.0.1'
-        self.config = ConfigService.get_config()
-        self.workflow_api = self.load_workflow_api()
-        self.api_base_url = f"http://{self.asset_ip}:{self.asset_config.get('port', 8188)}"
+        self.mark_port = mark_port
+        self.api_base_url = f"http://{self.asset_ip}:{self.mark_port}"
 
     def load_workflow_api(self) -> Dict:
         """加载标记工作流配置"""
         try:
+            #TODO: 从数据库中获取工作流配置
             workflow_file = os.path.join(Config.DATA_DIR, 'workflow', 'mark_workflow_api.json')
             with open(workflow_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
@@ -54,7 +52,7 @@ class MarkRequestHandler:
         """
         try:
             # 更新工作流配置
-            workflow = self.workflow_api.copy()
+            workflow = self.load_workflow_api()
             workflow["209"]["inputs"]["boolean"] = mark_config.auto_crop
             workflow["35"]["inputs"]["aspect_ratio"] = mark_config.default_crop_ratio
             workflow["35"]["inputs"]["scale_to_length"] = mark_config.resolution
@@ -146,7 +144,7 @@ class MarkRequestHandler:
             
         return error_msg, error_detail
 
-    def check_status(self, prompt_id: str) -> Tuple[bool, bool, Dict[str, Any]]:
+    def check_status(self, prompt_id: str,mark_config: MarkConfig) -> Tuple[bool, bool, Dict[str, Any]]:
         """
         检查标记任务状态
         :param prompt_id: 任务ID
@@ -211,13 +209,13 @@ class MarkRequestHandler:
                     
         return error_info
         
-    def get_status(self, prompt_id: str) -> Optional[Dict]:
+    def get_status(self, prompt_id: str,mark_config: MarkConfig) -> Optional[Dict]:
         """
         获取任务状态信息（简化版）
         :param prompt_id: 任务ID
         :return: 状态信息字典或None（如果获取失败）
         """
-        completed, success, info = self.check_status(prompt_id)
+        completed, success, info = self.check_status(prompt_id,mark_config)
         if not info:
             return None
             

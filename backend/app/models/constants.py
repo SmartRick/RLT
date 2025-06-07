@@ -20,7 +20,8 @@ COMMON_TRAINING_PARAMS = {
     'clip_skip': 'CLIP跳过层数',
     'seed': '随机种子',
     'mixed_precision': '混合精度',
-    'optimizer_type': '优化器类型'
+    'optimizer_type': '优化器类型',
+    'repeat_num': '单张图片重复次数',
 } 
 
 # 常用标记参数，用户可以在任务级别配置这些参数
@@ -64,5 +65,5 @@ FLUX_LORA_PARAMS = {
     'cache_text_encoder_outputs_to_disk': '文本编码器输出缓存到磁盘',
     'persistent_data_loader_workers': '持久化数据加载器工作线程',
     'gradient_checkpointing': '梯度检查点',
-    'gradient_accumulation_steps': '梯度累积步数'
+    'gradient_accumulation_steps': '梯度累积步数',
 } 

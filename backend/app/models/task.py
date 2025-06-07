@@ -107,7 +107,9 @@ class Task(Base):
 
     # 关联图片
     images = relationship('TaskImage', cascade='all, delete-orphan')
-    
+    # 打标后的图片文件路径
+    marked_images_path = Column(String(500), comment='打标后的图片文件路径')
+
     # 添加开始时间和结束时间
     started_at = Column(DateTime, comment='任务开始时间')
     completed_at = Column(DateTime, comment='任务完成时间')
@@ -261,6 +263,7 @@ class Task(Base):
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'status_history': status_history_dict,
             'images': [img.to_dict() for img in self.images],
+            'marked_images_path': self.marked_images_path,
             'marking_asset': self.marking_asset.to_dict() if self.marking_asset else None,
             'training_asset': self.training_asset.to_dict() if self.training_asset else None,
             'mark_config': self.mark_config,

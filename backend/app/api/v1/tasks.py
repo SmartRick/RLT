@@ -137,6 +137,24 @@ def delete_image(task_id, image_id):
             }, "删除图片及相关文本成功")
         return error_json(msg="删除图片失败")
 
+@tasks_bp.route('/<int:task_id>/images/batch', methods=['DELETE'])
+@exception_handler
+def batch_delete_images(task_id):
+    """批量删除任务图片及相关打标文本"""
+    data = request.get_json()
+    if not data or 'image_ids' not in data or not isinstance(data['image_ids'], list):
+        return response_template("bad_request", msg="请提供有效的图片ID列表")
+    
+    image_ids = data['image_ids']
+    if not image_ids:
+        return response_template("bad_request", msg="图片ID列表不能为空")
+    
+    with get_db() as db:
+        result = TaskService.batch_delete_images(db, task_id, image_ids)
+        if result.get('success', False):
+            return success_json(result, result.get('message', '批量删除成功'))
+        return error_json(msg=result.get('message', '批量删除失败'), data=result)
+
 @tasks_bp.route('/<int:task_id>/mark', methods=['POST'])
 @exception_handler
 def start_marking(task_id):
@@ -231,7 +249,21 @@ def update_marked_text(task_id):
         if result.get('success', False):
             return success_json(result, result.get('message', '更新成功'))
         return error_json(msg=result.get('message', '更新失败'))
+
+@tasks_bp.route('/<int:task_id>/marked_texts/batch', methods=['PUT'])
+@exception_handler
+def batch_update_marked_texts(task_id):
+    """批量更新打标文本内容"""
+    data = request.get_json()
+    if not data or not isinstance(data, dict) or not data:
+        return response_template("bad_request", msg="请提供有效的文件名到文本内容的映射字典")
     
+    with get_db() as db:
+        result = TaskService.batch_update_marked_texts(db, task_id, data)
+        if result.get('success', False):
+            return success_json(result, result.get('message', '批量更新成功'))
+        return error_json(msg=result.get('message', '批量更新失败'))
+        
 #创建一个测试接口，修改任务ID为2的状态为完成
 @tasks_bp.route('/test/complete', methods=['POST'])
 @exception_handler

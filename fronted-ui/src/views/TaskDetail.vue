@@ -25,6 +25,10 @@
           <PlayIcon class="btn-icon" />
           开始训练
         </button>
+        <button v-if="canStop" class="mac-btn error" :disabled="isLoading" @click="handleStop">
+          <StopIcon class="btn-icon" />
+          终止任务
+        </button>
         <button v-if="canRestart" class="mac-btn warning" :disabled="isLoading" @click="handleRestart">
           <ArrowPathIcon class="btn-icon" />
           重启任务
@@ -41,8 +45,46 @@
       <!-- 左侧图片区域 -->
       <div class="images-section mac-card">
         <div class="section-header">
-          <h3>训练图片</h3>
+          <h3>
+            训练图片
+            <span class="image-count" v-if="task?.images?.length > 0">
+              ({{ task.images.length }} 张)
+            </span>
+          </h3>
           <div class="header-actions">
+            <!-- 批量操作按钮组，只有当有选中图片时显示 -->
+            <template v-if="selectedImagesCount > 0">
+              <div class="selected-count">已选择 {{ selectedImagesCount }} 张图片</div>
+              <button class="mac-btn danger" @click="handleBatchDelete" title="批量删除">
+                <TrashIcon class="btn-icon" />
+                删除所选
+              </button>
+              <button class="mac-btn" @click="showBatchEditModal()" title="批量编辑文本" v-if="canEditMarkedText">
+                <PencilIcon class="btn-icon" />
+                批量编辑
+              </button>
+              <button class="mac-btn secondary" @click="clearImageSelection" title="取消选择">
+                <XMarkIcon class="btn-icon" />
+                取消选择
+              </button>
+              <div class="action-divider"></div>
+            </template>
+            <!-- 全选按钮 -->
+            <template v-if="task?.images?.length > 0">
+              <button 
+                class="mac-btn secondary" 
+                @click="toggleSelectAllImages" 
+                title="全选/取消全选"
+              >
+                <input 
+                  type="checkbox" 
+                  :checked="isAllImagesSelected" 
+                  class="select-all-checkbox"
+                />
+                <span>{{ isAllImagesSelected ? '取消全选' : '全选' }}</span>
+              </button>
+              <div class="action-divider"></div>
+            </template>
             <button class="mac-btn" @click="showUploader" :title="uploadButtonTitle">
               <PlusIcon class="btn-icon" />
               上传图片
@@ -51,9 +93,21 @@
         </div>
 
         <!-- 图片网格 -->
-        <ImageGrid :images="task?.images" :loading="isLoading" :status="task?.status" :marked-texts="markedTexts"
-          :task-id="taskId" @delete="handleDeleteImage" @preview="handlePreview"
-          @update:marked-text="handleUpdateMarkedText" />
+        <ImageGrid 
+          ref="imageGridRef"
+          :images="task?.images" 
+          :loading="isLoading" 
+          :status="task?.status" 
+          :marked-texts="markedTexts"
+          :task-id="taskId" 
+          @delete="handleDeleteImage" 
+          @preview="handlePreview"
+          @update:marked-text="handleUpdateMarkedText"
+          @batch-delete="handleBatchDeleteImages"
+          @batch-update-marked-text="handleBatchUpdateMarkedTexts"
+          @selection-change="handleSelectionChange"
+          @upload-files="handleDragUpload"
+        />
       </div>
 
       <!-- 右侧信息区域 -->
@@ -122,7 +176,10 @@ import {
   PlayIcon,
   PlusIcon,
   XMarkIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  StopIcon,
+  TrashIcon,
+  PencilIcon
 } from '@heroicons/vue/24/outline'
 import { tasksApi } from '@/api/tasks'
 import { formatDate } from '@/utils/datetime'
@@ -158,6 +215,13 @@ const REFRESH_INTERVAL = 5000 // 5秒刷新一次
 const statusUpdating = ref(false) // 添加状态更新标志
 const markedTexts = ref({}) // 打标文本数据
 
+// 图片网格引用和批量操作相关
+const imageGridRef = ref(null)
+const selectedImagesCount = ref(0)
+
+// 批量编辑相关
+const isBatchEditing = ref(false)
+
 // 获取任务详情
 const fetchTask = async () => {
   if (!taskId.value) return // 添加ID判断，防止无ID时请求
@@ -173,16 +237,32 @@ const fetchTask = async () => {
 
         // 处理图片URL，将uploads替换为marked
         if (data.images && data.images.length > 0) {
+          // 检查是否有对应的markedText路径
+          const relativePaths = Object.keys(markedTexts.value);
+          
           data.images.forEach(image => {
             if (image.preview_url) {
-              image.preview_url = image.preview_url.replace('/uploads/', '/marked/')
               // 将图片URL后缀统一替换为png
-              if (image.preview_url && !image.preview_url.endsWith('.png')) {
+              if (!image.preview_url.endsWith('.png')) {
                 const urlWithoutExtension = image.preview_url.substring(0, image.preview_url.lastIndexOf('.'));
                 image.preview_url = `${urlWithoutExtension}.png`;
               }
+              
+              // 对于已标记的图片，直接使用相对路径作为URL
+              if (['MARKED', 'TRAINING', 'COMPLETED'].includes(data.status)) {
+                const matchingPath = relativePaths.find(path => {
+                  // 从路径中提取文件名
+                  const pathFilename = path.split('/').pop();
+                  return pathFilename === image.filename;
+                });
+                
+                if (matchingPath) {
+                  // 使用完整的相对路径
+                  image.preview_url = matchingPath.replace('.txt', '.png');
+                }
+              }
             }
-          })
+          });
         }
       }
 
@@ -299,6 +379,11 @@ const canCancel = computed(() => {
   return ['SUBMITTED', 'MARKED'].includes(task.value?.status)
 })
 
+// 计算是否可以停止任务
+const canStop = computed(() => {
+  return ['MARKING', 'TRAINING'].includes(task.value?.status)
+})
+
 // 上传按钮提示文本
 const uploadButtonTitle = computed(() => {
   if (canUploadImages.value) {
@@ -383,7 +468,7 @@ const handleStartTraining = async () => {
     message.success('开始训练')
     task.value = response
   } catch (error) {
-    message.error(error)
+    // message.error(error)
   } finally {
     isLoading.value = false
   }
@@ -397,7 +482,7 @@ const handleRestart = async () => {
     message.success('任务已重启')
     task.value = response
   } catch (error) {
-    message.error(error)
+    // message.error(error)
   } finally {
     isLoading.value = false
   }
@@ -411,7 +496,21 @@ const handleCancel = async () => {
     message.success('任务已取消')
     task.value = response
   } catch (error) {
-    message.error(error)
+    // message.error(error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 处理停止任务
+const handleStop = async () => {
+  try {
+    isLoading.value = true
+    const response = await tasksApi.stopTask(taskId.value)
+    message.success('任务已终止')
+    task.value = response
+  } catch (error) {
+    message.error('终止任务失败')
   } finally {
     isLoading.value = false
   }
@@ -501,6 +600,123 @@ const handleTaskUpdate = async (updatedTask) => {
   }
 };
 
+// 处理批量删除图片
+const handleBatchDeleteImages = async (imageIds) => {
+  if (!imageIds || imageIds.length === 0) return
+  
+  try {
+    isLoading.value = true
+    await tasksApi.batchDeleteImages(taskId.value, imageIds)
+    message.success(`成功删除 ${imageIds.length} 张图片`)
+    await fetchTask() // 重新获取任务信息，刷新图片列表
+  } catch (error) {
+    console.error('批量删除图片失败:', error)
+    message.error('批量删除图片失败')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 处理批量更新打标文本
+const handleBatchUpdateMarkedTexts = async (updateData) => {
+  if (!updateData || Object.keys(updateData).length === 0) return
+  
+  try {
+    isLoading.value = true
+    await tasksApi.batchUpdateMarkedTexts(taskId.value, updateData)
+    message.success('批量更新打标文本成功')
+    
+    // 更新本地打标文本数据
+    Object.entries(updateData).forEach(([filename, content]) => {
+      markedTexts.value[filename] = content
+    })
+  } catch (error) {
+    message.error('批量更新打标文本失败')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 处理图片选择变化
+const handleSelectionChange = (count) => {
+  selectedImagesCount.value = count
+}
+
+// 清除图片选择
+const clearImageSelection = () => {
+  if (imageGridRef.value) {
+    imageGridRef.value.clearSelection()
+  }
+}
+
+// 判断是否可以编辑打标文本
+const canEditMarkedText = computed(() => {
+  return ['MARKED', 'TRAINING', 'COMPLETED'].includes(task.value?.status)
+})
+
+// 处理批量删除
+const handleBatchDelete = () => {
+  if (imageGridRef.value) {
+    // 只触发图片网格组件内部的批量删除逻辑
+    imageGridRef.value.handleBatchDelete()
+  }
+}
+
+// 处理拖拽上传图片
+const handleDragUpload = async (files) => {
+  if (!canUploadImages.value) {
+    message.warning(`${getStatusText(task.value?.status)}状态不能上传图片`)
+    return
+  }
+  
+  if (!files || files.length === 0) return
+  
+  try {
+    isLoading.value = true
+    const formData = new FormData()
+    files.forEach(file => {
+      formData.append('files', file)
+    })
+    
+    await tasksApi.uploadImages(taskId.value, formData)
+    message.success(`成功上传 ${files.length} 张图片`)
+    await fetchTask() // 刷新任务数据
+  } catch (error) {
+    console.error('拖拽上传图片失败:', error)
+    message.error('图片上传失败')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 全选相关计算属性
+const isAllImagesSelected = computed(() => {
+  if (!task.value?.images || task.value.images.length === 0) return false
+  return selectedImagesCount.value === task.value.images.length
+})
+
+// 全选/取消全选
+const toggleSelectAllImages = () => {
+  if (!task.value?.images || task.value.images.length === 0) return
+  
+  if (isAllImagesSelected.value) {
+    // 取消全选
+    clearImageSelection()
+  } else {
+    // 全选
+    if (imageGridRef.value) {
+      imageGridRef.value.selectAllImages()
+    }
+  }
+}
+
+// 处理批量编辑模态框显示
+const showBatchEditModal = () => {
+  if (imageGridRef.value) {
+    imageGridRef.value.showBatchEditModal = true
+  }
+}
+
 // 初始化
 onMounted(() => {
   if (taskId.value) {
@@ -575,7 +791,7 @@ onUnmounted(() => {
 
 .content-area {
   display: grid;
-  grid-template-columns: 4fr 1fr;
+  grid-template-columns: 3fr 1fr;
   /* 修改比例，从2:1改为3:1 */
   gap: 20px;
   flex: 1;
@@ -601,6 +817,15 @@ onUnmounted(() => {
 .section-header h3 {
   margin: 0;
   font-size: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.image-count {
+  font-size: 14px;
+  font-weight: normal;
+  color: var(--text-secondary);
+  margin-left: 6px;
 }
 
 .info-section {
@@ -732,6 +957,11 @@ onUnmounted(() => {
   font-style: italic;
 }
 
+.mac-btn.error {
+  background-color: #ea3f3f;
+  color: #ffffff;
+}
+
 .mac-btn.warning {
   background-color: #FEF3C7;
   color: #92400E;
@@ -769,5 +999,41 @@ onUnmounted(() => {
 
 .mac-btn:not(:disabled):hover {
   background: var(--background-tertiary);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-divider {
+  width: 1px;
+  height: 24px;
+  background-color: var(--border-color);
+  margin: 0 8px;
+}
+
+.selected-count {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-right: 8px;
+}
+
+.mac-btn.danger {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.mac-btn.danger:hover {
+  background-color: #fecaca;
+}
+
+/* 删除批量编辑模态框样式 */
+
+.select-all-checkbox {
+  margin-right: 6px;
+  vertical-align: middle;
 }
 </style>

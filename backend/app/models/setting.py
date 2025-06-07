@@ -64,6 +64,17 @@ class Setting(Base):
                 'type': 'json',
                 'value': json.dumps(config.HEADERS_CONFIG['ai_engine']),
                 'description': 'AI引擎请求头'
+            },
+            'baidu_translate_config': {
+                'type': 'json',
+                'value': json.dumps({
+                    'app_id': '20250327002316619',
+                    'secret_key': '67qaSQg_WdfWqQFvx7ml',
+                    'api_url': 'https://fanyi-api.baidu.com/api/trans/vip/translate',
+                    'default_from': 'auto',
+                    'default_to': 'zh'
+                }),
+                'description': '百度翻译API配置'
             }
         }
         

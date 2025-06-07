@@ -35,6 +35,17 @@
         </div>
       </div>
       
+      <!-- 触发词配置，不受全局配置开关影响，始终显示 -->
+      <div class="form-group full-width trigger-words-section">
+        <label>触发词</label>
+        <textarea
+          v-model="localConfig.markConfig.trigger_words"
+          placeholder="输入触发词，用逗号分隔"
+          rows="3"
+          class="mac-textarea"
+        ></textarea>
+      </div>
+      
       <div v-if="localConfig.useGlobalMarkConfig" class="global-config-message">
         使用系统全局打标配置
       </div>
@@ -88,20 +99,9 @@
                 min="1" 
                 max="100" 
                 class="mac-input"
-        :disabled="!canEdit"
-      />
+                :disabled="!canEdit"
+              />
             </div>
-          
-          <div class="form-group full-width">
-            <label>触发词</label>
-            <textarea
-              v-model="localConfig.markConfig.trigger_words"
-              placeholder="输入触发词，用逗号分隔"
-              rows="3"
-              class="mac-textarea"
-              :disabled="!canEdit"
-            ></textarea>
-          </div>
         </div>
       </div>
     </div>
@@ -329,8 +329,8 @@
                 v-model.number="localConfig.trainingConfig.seed" 
                 placeholder="42"
                 class="mac-input"
-        :disabled="!canEdit"
-      />
+                :disabled="!canEdit"
+              />
             </div>
           </div>
           
@@ -759,6 +759,12 @@ watch(localConfig, () => {
 .toggle-checkbox:checked + .toggle-label:after {
   left: calc(100% - 2px);
   transform: translateX(-100%);
+}
+
+.trigger-words-section {
+  margin-top: 8px;
+  margin-bottom: 16px;
+  padding: 0 16px;
 }
 
 @media (max-width: 768px) {

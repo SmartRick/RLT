@@ -97,10 +97,10 @@ class Config:
     # Lora训练全局配置
     LORA_TRAINING_CONFIG = {
         'model_train_type': 'flux-lora',
-        'pretrained_model_name_or_path': './sd-models/flux1-dev.safetensors',
-        'ae': './sd-models/ae.sft',
-        'clip_l': './sd-models/clip_l.safetensors',
-        't5xxl': './sd-models/t5xxl_fp8_e4m3fn.safetensors',
+        'pretrained_model_name_or_path': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/unet/flux/flux1-dev-fp8.safetensors',
+        'ae': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/vae/ae.sft',
+        'clip_l': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/clip/clip_l.safetensors',
+        't5xxl': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/clip/t5xxl_fp8_e4m3fn.safetensors',
         'timestep_sampling': 'sigmoid',
         'sigmoid_scale': 1,
         'model_prediction_type': 'raw',
@@ -155,6 +155,7 @@ class Config:
         'cache_text_encoder_outputs': True,
         'cache_text_encoder_outputs_to_disk': True,
         'persistent_data_loader_workers': True,
+        'repeat_num':10,
     }
     
     # AI引擎配置

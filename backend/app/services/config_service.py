@@ -281,13 +281,15 @@ class ConfigService:
     @staticmethod
     def get_task_mark_config(task_id: int) -> Optional[Dict[str, Any]]:
         """
-        获取任务的打标配置，按照优先级合并：全局配置 < 资产配置 < 任务配置
+        获取任务的打标配置
+        如果use_global_mark_config为true，使用全局配置，但仍然应用任务的trigger_words
+        如果use_global_mark_config为false，混合全局配置和任务配置
         
         Args:
             task_id: 任务ID
             
         Returns:
-            合并后的打标配置，如果任务不存在则返回None
+            打标配置，如果任务不存在则返回None
         """
         try:
             with get_db() as db:
@@ -296,25 +298,35 @@ class ConfigService:
                     logger.error(f"任务不存在: {task_id}")
                     return None
                 
-                if not task.use_global_mark_config:
-                    # 不使用全局配置，直接返回任务特定配置
-                    return task.mark_config or {}
+                if task.use_global_mark_config:
+                    # 使用全局配置
+                    mark_params = ConfigService.get_global_mark_config()
                     
-                # 使用全局配置作为基础
-                mark_params = ConfigService.get_global_mark_config()
-                
-                # 如果有资产特定配置，优先使用资产配置
-                if task.marking_asset_id:
-                    # 获取资产的AI引擎配置
-                    asset_config = ConfigService.get_asset_ai_engine_config(task.marking_asset_id)
-                    if asset_config:
-                        mark_params.update(asset_config)
-                
-                # 如果有任务特定配置，最后使用任务配置
-                if task.mark_config and isinstance(task.mark_config, dict):
-                    mark_params.update(task.mark_config)
+                    # 即使使用全局配置，也要应用任务配置中的trigger_words属性（如果存在且不为空）
+                    if task.mark_config and isinstance(task.mark_config, dict) and 'trigger_words' in task.mark_config:
+                        trigger_words = task.mark_config.get('trigger_words')
+                        # 只有当trigger_words不为空字符串时才应用
+                        if trigger_words is not None and trigger_words.strip() != '':
+                            mark_params['trigger_words'] = trigger_words
                     
-                return mark_params
+                    return mark_params
+                else:
+                    # 混合全局配置和任务配置
+                    mark_params = ConfigService.get_global_mark_config()
+                    
+                    # 如果有资产特定配置，优先使用资产配置
+                    if task.mark_asset_id:
+                        # 获取资产的AI引擎配置
+                        asset_config = ConfigService.get_asset_ai_engine_config(task.mark_asset_id)
+                        if asset_config:
+                            mark_params.update(asset_config)
+
+                    # 如果有任务特定配置，混合到全局配置中
+                    if task.mark_config and isinstance(task.mark_config, dict):
+                        mark_params.update(task.mark_config)
+                        
+                    return mark_params
+                    
         except Exception as e:
             logger.error(f"获取任务打标配置失败, 任务ID: {task_id}, 错误: {str(e)}")
             return None
@@ -322,13 +334,15 @@ class ConfigService:
     @staticmethod
     def get_task_training_config(task_id: int) -> Optional[Dict[str, Any]]:
         """
-        获取任务的训练配置，按照优先级合并：全局配置 < 资产配置 < 任务配置
+        获取任务的训练配置
+        如果use_global_training_config为true，使用全局配置
+        如果use_global_training_config为false，混合全局配置和任务配置
         
         Args:
             task_id: 任务ID
             
         Returns:
-            合并后的训练配置，如果任务不存在则返回None
+            训练配置，如果任务不存在则返回None
         """
         try:
             with get_db() as db:
@@ -337,25 +351,26 @@ class ConfigService:
                     logger.error(f"任务不存在: {task_id}")
                     return None
                 
-                if not task.use_global_training_config:
-                    # 不使用全局配置，直接返回任务特定配置
-                    return task.training_config or {}
+                if task.use_global_training_config:
+                    # 使用全局配置
+                    return ConfigService.get_global_lora_training_config()
+                else:
+                    # 混合全局配置和任务配置
+                    training_params = ConfigService.get_global_lora_training_config()
                     
-                # 使用全局配置作为基础
-                training_params = ConfigService.get_global_lora_training_config()
-                
-                # 如果有资产特定配置，优先使用资产配置
-                if task.training_asset_id:
-                    # 获取资产的Lora训练配置
-                    asset_config = ConfigService.get_asset_lora_config(task.training_asset_id)
-                    if asset_config:
-                        training_params.update(asset_config)
-                
-                # 如果有任务特定配置，最后使用任务配置
-                if task.training_config and isinstance(task.training_config, dict):
-                    training_params.update(task.training_config)
+                    # 如果有资产特定配置，优先使用资产配置
+                    if task.training_asset_id:
+                        # 获取资产的Lora训练配置
+                        asset_config = ConfigService.get_asset_lora_config(task.training_asset_id)
+                        if asset_config:
+                            training_params.update(asset_config)
                     
-                return training_params
+                    # 如果有任务特定配置，混合到配置中
+                    if task.training_config and isinstance(task.training_config, dict):
+                        training_params.update(task.training_config)
+                        
+                    return training_params
+                    
         except Exception as e:
             logger.error(f"获取任务训练配置失败, 任务ID: {task_id}, 错误: {str(e)}")
             return None

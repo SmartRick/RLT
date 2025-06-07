@@ -1,6 +1,7 @@
 import threading
 import time
 from typing import List, Dict
+from sqlalchemy import func
 from ..database import get_db
 from ..models.task import Task, TaskStatus
 from ..utils.logger import setup_logger
@@ -103,7 +104,7 @@ class TaskScheduler:
             })
             
             # 更新标记任务计数
-            marking_assets = db.query(Asset.id, db.func.count(Task.id)).join(
+            marking_assets = db.query(Asset.id, func.count(Task.id)).join(
                 Task, Asset.id == Task.marking_asset_id
             ).filter(
                 Task.status == TaskStatus.MARKING
@@ -115,7 +116,7 @@ class TaskScheduler:
                 })
                 
             # 更新训练任务计数
-            training_assets = db.query(Asset.id, db.func.count(Task.id)).join(
+            training_assets = db.query(Asset.id, func.count(Task.id)).join(
                 Task, Asset.id == Task.training_asset_id
             ).filter(
                 Task.status == TaskStatus.TRAINING

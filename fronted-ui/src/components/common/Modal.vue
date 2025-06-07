@@ -66,11 +66,14 @@ export default {
   width: 650px;
   max-width: 90vw;
   max-height: 85vh;
-  margin: var(--spacing-6);
+  display: flex;
+  flex-direction: column;
   background: var(--background-secondary);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
+
 
 .modal-header {
   padding: var(--spacing-4) var(--spacing-6);
@@ -78,6 +81,20 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+
+.modal-body {
+  padding: var(--spacing-2);
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: var(--spacing-4) var(--spacing-6) 0 var(--spacing-6);
+  border-top: 1px solid var(--border-color-light);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-3);
 }
 
 .modal-title {
@@ -111,18 +128,6 @@ export default {
   height: 20px;
 }
 
-.modal-body {
-  padding: var(--spacing-6);
-  overflow-y: auto;
-}
-
-.modal-footer {
-  padding: var(--spacing-4) var(--spacing-6);
-  border-top: 1px solid var(--border-color-light);
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-3);
-}
 
 /* 动画 */
 .modal-backdrop-enter-active,

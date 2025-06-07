@@ -100,5 +100,36 @@ export const tasksApi = {
       filename,
       content
     })
+  },
+  
+  /**
+   * 停止任务
+   * @param {number} taskId 任务ID
+   * @returns {Promise<Object>} 任务对象
+   */
+  async stopTask(taskId) {
+    return request.post(`${BASE_URL}/${taskId}/stop`)
+  },
+  
+  /**
+   * 批量删除任务图片
+   * @param {number|string} taskId 任务ID
+   * @param {Array<number>} imageIds 图片ID数组
+   * @returns {Promise<Object>}
+   */
+  async batchDeleteImages(taskId, imageIds) {
+    return request.delete(`${BASE_URL}/${taskId}/images/batch`, {
+      data: { image_ids: imageIds }
+    })
+  },
+  
+  /**
+   * 批量更新打标文本
+   * @param {number|string} taskId 任务ID
+   * @param {Object} markedTexts 文件名到文本内容的映射
+   * @returns {Promise<Object>}
+   */
+  async batchUpdateMarkedTexts(taskId, markedTexts) {
+    return request.put(`${BASE_URL}/${taskId}/marked_texts/batch`, markedTexts)
   }
 } 

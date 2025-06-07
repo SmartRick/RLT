@@ -7,6 +7,7 @@ from ..models.task import Task, TaskImage, TaskStatus, TaskStatusHistory, TaskSt
 from ..utils.train_handler import TrainRequestHandler, TrainConfig
 from ..database import get_db
 from ..utils.logger import setup_logger
+from ..utils.common import copy_attributes
 import os
 from werkzeug.utils import secure_filename
 from ..config import config
@@ -21,7 +22,6 @@ from ..services.local_asset_service import LocalAssetService
 import traceback
 from ..services.asset_service import AssetService
 from ..utils.mark_handler import MarkConfig
-from ..utils.common import copy_attributes
 
 logger = setup_logger('task_service')
 
@@ -240,6 +240,98 @@ class TaskService:
             return False
 
     @staticmethod
+    def batch_delete_images(db: Session, task_id: int, image_ids: List[int]) -> Dict:
+        """批量删除任务图片
+        
+        Args:
+            db: 数据库会话
+            task_id: 任务ID
+            image_ids: 要删除的图片ID列表
+            
+        Returns:
+            包含操作结果的字典，包括成功删除的图片和失败的图片
+        """
+        # 检查任务是否存在
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            return {
+                "success": False,
+                "message": f"任务 {task_id} 不存在",
+                "deleted": [],
+                "failed": [{"id": image_id, "reason": "任务不存在"} for image_id in image_ids]
+            }
+            
+        # 检查任务状态，只有NEW状态的任务可以删除图片
+        if task.status != TaskStatus.NEW:
+            return {
+                "success": False,
+                "message": f"任务状态为 {task.status}，不允许删除图片",
+                "deleted": [],
+                "failed": [{"id": image_id, "reason": f"任务状态为 {task.status}，不允许删除图片"} for image_id in image_ids]
+            }
+            
+        results = {
+            "success": True,
+            "message": "批量删除图片完成",
+            "deleted": [],
+            "failed": []
+        }
+        
+        for image_id in image_ids:
+            try:
+                # 查询图片
+                image = db.query(TaskImage).filter(
+                    TaskImage.id == image_id,
+                    TaskImage.task_id == task_id
+                ).first()
+                
+                if not image:
+                    results["failed"].append({
+                        "id": image_id,
+                        "reason": f"图片不存在或不属于任务 {task_id}"
+                    })
+                    continue
+                    
+                image_info = image.to_dict()
+                
+                # 1. 删除原始图片文件
+                if image.file_path and os.path.exists(image.file_path):
+                    os.remove(image.file_path)
+                
+                # 2. 删除对应的打标文本文件（如果存在）
+                name_without_ext = os.path.splitext(image.filename)[0]
+                marked_dir = os.path.join(Config.MARKED_DIR, str(task_id))
+                text_file_path = os.path.join(marked_dir, f"{name_without_ext}.txt")
+                
+                if os.path.exists(text_file_path):
+                    os.remove(text_file_path)
+                
+                # 3. 从数据库中删除图片记录
+                db.delete(image)
+                
+                # 添加到成功列表
+                results["deleted"].append(image_info)
+                
+            except Exception as e:
+                logger.error(f"删除图片 {image_id} 失败: {str(e)}")
+                results["failed"].append({
+                    "id": image_id,
+                    "reason": str(e)
+                })
+        
+        # 记录操作日志
+        if results["deleted"]:
+            deleted_filenames = [img.get("filename", f"ID:{img.get('id')}") for img in results["deleted"]]
+            task.add_log(f"批量删除了 {len(results['deleted'])} 个图片: {', '.join(deleted_filenames)}", db=db)
+        
+        # 如果全部失败，则整体标记为失败
+        if not results["deleted"] and results["failed"]:
+            results["success"] = False
+            results["message"] = "所有图片删除都失败了"
+        
+        return results
+
+    @staticmethod
     def get_available_marking_assets() -> List[Asset]:
         """获取可用于标记的资产"""
         try:
@@ -318,25 +410,26 @@ class TaskService:
                 logger.info(f"开始处理标记任务 {task_id}")
                 
                 # 更新任务状态，记录开始处理标记
-                task.update_status(TaskStatus.MARKING, f'开始处理标记任务，使用资产: {asset.name}', db=db)
-
-                # 准备输入输出目录
-                input_dir = os.path.join(Config.UPLOAD_DIR, str(task_id))
-                output_dir = os.path.join(Config.MARKED_DIR, str(task_id))
-
-                # 记录目录信息
-                task.add_log(f'输入目录: {input_dir}',  db=db)
-                task.add_log(f'输出目录: {output_dir}',  db=db)
+                task.update_status(TaskStatus.MARKING, f'开始处理标记任务，使用资产: {asset.name}')
 
                 mark_config = ConfigService.get_task_mark_config(task.id)
+                training_config = ConfigService.get_task_training_config(task.id)
+                # 准备输入输出目录
+                input_dir = os.path.join(Config.UPLOAD_DIR, str(task_id))
+                output_dir = os.path.join(Config.MARKED_DIR, str(task_id),f"{training_config.get('repeat_num',10)}_rick")
+                task.marked_images_path = output_dir
+
+                # 记录目录信息
+                task.add_log(f'输入目录: {input_dir}')
+                task.add_log(f'输出目录: {output_dir}')
+
                 # 创建标记处理器
-                handler = MarkRequestHandler(asset.ai_engine, asset.ip)
-                
                 # 记录请求准备信息
-                task.add_log(f'准备发送标记请求: task_id={task_id}, asset_id={asset_id}, asset_ip={asset.ip}', db=db)
-                
+                task.add_log(f'准备发送标记请求: task_id={task_id}, asset_id={asset_id}, asset_ip={asset.ip}')
+                db.commit()
                 
                 try:
+                    handler = MarkRequestHandler(asset.ip,asset.ai_engine.get('port',8188))
                     # 发送标记请求
                     logger.info(f"发送标记请求: task_id={task_id}, asset_id={asset_id}")
                     logger.info(f"输入目录: {input_dir}")
@@ -414,14 +507,14 @@ class TaskService:
                 
                 # 记录开始监控
                 task.add_log(f'开始监控标记任务状态, prompt_id={prompt_id}', db=db)
-
-                handler = MarkRequestHandler(asset.ai_engine, asset.ip)
+                handler = MarkRequestHandler(asset.ip,asset.ai_engine.get('port',8188))
                 poll_interval = ConfigService.get_value('mark_poll_interval', 5)
+                mark_config = ConfigService.get_task_mark_config(task.id)
                 last_progress = 0
                 error_count = 0
                 while True:
                     try:
-                        completed, success, task_info = handler.check_status(prompt_id)
+                        completed, success, task_info = handler.check_status(prompt_id,mark_config)
                         logger.info(f"检查标记任务状态: {completed}, {success}, {task_info}")
                         with get_db() as complete_db:
                             task = complete_db.query(Task).filter(Task.id == task_id).first()
@@ -584,6 +677,25 @@ class TaskService:
                 
             elif task.training_asset_id:
                 # 如果有训练资产，说明是在训练阶段失败的
+                # 只清除ERROR和TRAINING状态的历史记录和日志
+                error_training_histories = db.query(TaskStatusHistory).filter(
+                    TaskStatusHistory.task_id == task_id,
+                    TaskStatusHistory.status.in_(['ERROR', 'TRAINING'])
+                ).all()
+                
+                # 获取需要删除的历史记录ID
+                history_ids = [h.id for h in error_training_histories]
+                
+                # 删除这些历史记录相关的日志
+                if history_ids:
+                    db.query(TaskStatusLog).filter(TaskStatusLog.history_id.in_(history_ids)).delete(synchronize_session=False)
+                
+                # 删除历史记录
+                for history in error_training_histories:
+                    db.delete(history)
+                
+                db.commit()
+                
                 task.update_status(TaskStatus.MARKED, '任务已重启', db=db)
                 task.progress = 0
                 
@@ -719,9 +831,8 @@ class TaskService:
                 return None
             
             # 打标后的文本存储目录
-            marked_dir = os.path.join(Config.MARKED_DIR, str(task_id))
-            if not os.path.exists(marked_dir):
-                logger.warning(f"打标目录不存在: {marked_dir}")
+            if not os.path.exists(task.marked_images_path):
+                logger.warning(f"打标目录不存在: {task.marked_images_path}")
                 return None
             
             # 构建图片文件名到原始文件名的映射
@@ -731,11 +842,26 @@ class TaskService:
                 name_without_ext = os.path.splitext(image.filename)[0]
                 image_name_map[name_without_ext] = image.filename
             
+            # 获取marked_images_path的相对路径（从/data开始）
+            if task.marked_images_path:
+                # 从完整路径中提取相对路径
+                relative_path = task.marked_images_path.replace(config.PROJECT_ROOT, "")
+                # 确保路径以/data开头
+                relative_path = relative_path.replace("\\", "/")
+            else:
+                # 如果没有marked_images_path，使用上传路径
+                relative_path = f"/data/{config.UPLOAD_DIR}/{task_id}"
+            
+            # 确保路径使用正斜杠并以斜杠结尾
+
+            if not relative_path.endswith("/"):
+                relative_path += "/"
+            
             result = {}
             # 遍历目录中的所有txt文件
-            for filename in os.listdir(marked_dir):
+            for filename in os.listdir(task.marked_images_path):
                 if filename.endswith('.txt'):
-                    file_path = os.path.join(marked_dir, filename)
+                    file_path = os.path.join(task.marked_images_path, filename)
                     try:
                         # 获取不带扩展名的文件名
                         name_without_ext = os.path.splitext(filename)[0]
@@ -745,13 +871,16 @@ class TaskService:
                         if original_filename:
                             with open(file_path, 'r', encoding='utf-8') as f:
                                 content = f.read()
-                                result[original_filename] = content
+                                # 使用相对路径作为键的前缀
+                                result_key = f"{relative_path}{original_filename}"
+                                result[result_key] = content
                         else:
                             logger.warning(f"找不到与打标文本 {filename} 对应的原始图片")
                     except Exception as e:
                         logger.error(f"读取文件 {file_path} 失败: {str(e)}")
                         if original_filename:
-                            result[original_filename] = f"读取失败: {str(e)}"
+                            result_key = f"{relative_path}{original_filename}"
+                            result[result_key] = f"读取失败: {str(e)}"
             
             return result
         except Exception as e:
@@ -766,7 +895,7 @@ class TaskService:
         Args:
             db: 数据库会话
             task_id: 任务ID
-            image_filename: 图片文件名
+            image_filename: 图片文件名或从/data开始的相对路径+文件名
             content: 新的打标文本内容
             
         Returns:
@@ -780,18 +909,31 @@ class TaskService:
             if task.status not in [TaskStatus.MARKED, TaskStatus.TRAINING, TaskStatus.COMPLETED]:
                 return {"success": False, "message": f"任务状态为 {task.status}，不允许编辑打标文本"}
             
-            # 检查图片是否属于该任务
-            image = next((img for img in task.images if img.filename == image_filename), None)
-            if not image:
-                return {"success": False, "message": f"图片 {image_filename} 不属于该任务"}
+            # 检查marked_images_path是否存在
+            if not task.marked_images_path or not os.path.exists(task.marked_images_path):
+                return {"success": False, "message": f"打标目录不存在: {task.marked_images_path}"}
             
-            # 打标后的文本存储目录
-            marked_dir = os.path.join(Config.MARKED_DIR, str(task_id))
-            if not os.path.exists(marked_dir):
-                os.makedirs(marked_dir, exist_ok=True)
+            # 使用任务的marked_images_path作为打标目录
+            marked_dir = task.marked_images_path
+            
+            # 处理可能是从/data开始的相对路径的情况
+            original_filename = None
+            
+            # 如果是相对路径（以/data开头），需要提取实际的文件名
+            if image_filename.startswith('/data/'):
+                original_filename = os.path.basename(image_filename)
+            else:
+                # 直接使用传入的文件名
+                image = next((img for img in task.images if img.filename == image_filename), None)
+                if image:
+                    original_filename = image_filename
+            
+            # 如果无法找到对应的原始文件名，返回错误
+            if not original_filename:
+                return {"success": False, "message": f"图片 {image_filename} 不属于该任务或路径无法识别"}
             
             # 获取不带扩展名的文件名
-            name_without_ext = os.path.splitext(image_filename)[0]
+            name_without_ext = os.path.splitext(original_filename)[0]
             # 打标文本文件路径
             text_file_path = os.path.join(marked_dir, f"{name_without_ext}.txt")
             
@@ -800,18 +942,120 @@ class TaskService:
                 f.write(content)
             
             # 记录日志
-            task.add_log(f"更新了图片 {image_filename} 的打标文本", db=db)
+            task.add_log(f"更新了图片 {original_filename} 的打标文本", db=db)
             
             return {
                 "success": True, 
                 "message": "打标文本更新成功",
-                "filename": image_filename,
+                "filename": original_filename,
+                "original_path": image_filename,
                 "text_path": text_file_path
             }
             
         except Exception as e:
             logger.error(f"更新打标文本失败: {str(e)}", exc_info=True)
-            return {"success": False, "message": f"更新打标文本失败: {str(e)}"} 
+            return {"success": False, "message": f"更新打标文本失败: {str(e)}"}
+            
+    @staticmethod
+    def batch_update_marked_texts(db: Session, task_id: int, texts_map: Dict[str, str]) -> Dict:
+        """
+        批量更新多个图片的打标文本
+        
+        Args:
+            db: 数据库会话
+            task_id: 任务ID
+            texts_map: 从/data开始的相对路径+文件名到文本内容的映射字典
+            
+        Returns:
+            包含操作结果的字典
+        """
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return {"success": False, "message": f"任务 {task_id} 不存在"}
+            
+            if task.status not in [TaskStatus.MARKED, TaskStatus.TRAINING, TaskStatus.COMPLETED]:
+                return {"success": False, "message": f"任务状态为 {task.status}，不允许编辑打标文本"}
+            
+            # 检查marked_images_path是否存在
+            if not task.marked_images_path or not os.path.exists(task.marked_images_path):
+                return {"success": False, "message": f"打标目录不存在: {task.marked_images_path}"}
+            
+            # 使用任务的marked_images_path作为打标目录
+            marked_dir = task.marked_images_path
+            
+            results = {
+                "success": True,
+                "message": "批量更新打标文本完成",
+                "updated": [],
+                "failed": []
+            }
+            
+            # 获取任务中所有图片的文件名和/data路径的映射
+            image_name_map = {}
+            marked_data_path = task.marked_images_path.replace(config.PROJECT_ROOT, "")
+            # 确保路径使用正斜杠
+            marked_data_path = marked_data_path.replace("\\", "/")
+            if not marked_data_path.endswith("/"):
+                marked_data_path += "/"
+                
+            for image in task.images:
+                marked_path = f"{marked_data_path}{image.filename}"
+                image_name_map[marked_path] = image.filename
+            
+            for path_filename, content in texts_map.items():
+                try:
+                    # 从路径中提取原始文件名
+                    original_filename = None
+                    
+                    # 直接在映射中查找
+                    if path_filename in image_name_map:
+                        original_filename = image_name_map[path_filename]
+                    
+                    if not original_filename:
+                        results["failed"].append({
+                            "filename": path_filename,
+                            "reason": f"无法匹配路径 {path_filename} 到任务中的图片"
+                        })
+                        continue
+                    
+                    # 获取不带扩展名的文件名
+                    name_without_ext = os.path.splitext(original_filename)[0]
+                    # 打标文本文件路径
+                    text_file_path = os.path.join(marked_dir, f"{name_without_ext}.txt")
+                    
+                    # 写入新的打标文本内容
+                    with open(text_file_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    
+                    results["updated"].append({
+                        "filename": original_filename,
+                        "path": path_filename,
+                        "text_path": text_file_path
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"更新图片 {path_filename} 的打标文本失败: {str(e)}")
+                    results["failed"].append({
+                        "filename": path_filename,
+                        "reason": str(e)
+                    })
+            
+            # 记录日志
+            if results["updated"]:
+                updated_files = [item["filename"] for item in results["updated"]]
+                task.add_log(f"批量更新了 {len(updated_files)} 个图片的打标文本: {', '.join(updated_files)}", db=db)
+            
+            # 如果全部失败，则整体标记为失败
+            if not results["updated"] and results["failed"]:
+                results["success"] = False
+                results["message"] = "所有打标文本更新都失败了"
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"批量更新打标文本失败: {str(e)}", exc_info=True)
+            return {"success": False, "message": f"批量更新打标文本失败: {str(e)}"}
 
     @staticmethod
     def _process_training(task_id: int, asset_id: int):
@@ -829,8 +1073,11 @@ class TaskService:
                 # 更新任务状态，记录开始处理训练
                 task.update_status(TaskStatus.TRAINING, f'开始处理训练任务，使用资产: {asset.name}', db=db)
 
-                # 准备输入输出目录
-                input_dir = os.path.join(Config.MARKED_DIR, str(task_id))
+                # 去掉最后一个路径部分
+                input_dir = os.path.dirname(task.marked_images_path)
+                # 检查输入目录是否存在
+                if not os.path.exists(input_dir):
+                    raise ValueError(f"标记图片目录不存在: {input_dir}")
                 output_dir = os.path.join(Config.OUTPUT_DIR, str(task_id))
                 
                 # 确保输出目录存在
@@ -846,7 +1093,7 @@ class TaskService:
                 # 记录训练配置
                 task.add_log(f'训练配置: {json.dumps(training_config, indent=2, ensure_ascii=False)}', db=db)
                 
-                handler = TrainRequestHandler(asset.lora_training, asset.ip)
+                handler = TrainRequestHandler(asset.ip,asset.lora_training.get('port',28000))
                 
                 # 记录请求准备信息
                 task.add_log(f'准备发送训练请求: task_id={task_id}, asset_id={asset_id}, asset_ip={asset.ip}', db=db)
@@ -933,9 +1180,7 @@ class TaskService:
                 # 记录开始监控
                 task.add_log(f'开始监控训练任务状态, training_task_id={training_task_id}', db=db)
 
-                # 创建训练处理器
-                from ..utils.train_handler import TrainRequestHandler
-                handler = TrainRequestHandler(asset.lora_training, asset.ip)
+                handler = TrainRequestHandler(asset.ip,asset.lora_training.get('port',28000))
                 
                 poll_interval = ConfigService.get_value('train_poll_interval', 30)
                 last_progress = 0
@@ -954,7 +1199,7 @@ class TaskService:
                             task = complete_db.query(Task).filter(Task.id == task_id).first()
                             
                             # 可能在训练过程中取消了任务，不再继续监听
-                            if task and task.status == TaskStatus.MARKED:
+                            if task and task.status != TaskStatus.TRAINING:
                                 logger.info("监听训练过程中任务被取消")
                                 break
                                 

@@ -240,6 +240,88 @@
       />
     </div>
 
+    <!-- 百度翻译配置 -->
+    <div v-if="activeTab === 'translate'" class="mac-card settings-card">
+      <h3 class="section-title">翻译配置</h3>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>
+            <div class="label-text">百度翻译APP ID</div>
+          </label>
+          <input 
+            v-model="form.baidu_translate_config.app_id"
+            type="text"
+            class="mac-input"
+          >
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <div class="label-text">百度翻译密钥</div>
+          </label>
+          <input 
+            v-model="form.baidu_translate_config.secret_key"
+            type="text"
+            class="mac-input"
+          >
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>
+            <div class="label-text">默认源语言</div>
+          </label>
+          <select v-model="form.baidu_translate_config.default_from" class="mac-input">
+            <option v-for="option in languageOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <div class="label-text">默认目标语言</div>
+          </label>
+          <select v-model="form.baidu_translate_config.default_to" class="mac-input">
+            <option v-for="option in languageOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+      </div>
+      
+      <!-- 翻译测试 -->
+      <h4 class="subsection-title">翻译测试</h4>
+      <div class="translate-test-container">
+        <div class="translate-input-area">
+          <textarea 
+            v-model="testTranslateText" 
+            class="mac-textarea" 
+            placeholder="请输入要翻译的文本"
+            rows="4"
+          ></textarea>
+        </div>
+        
+        <div class="translate-actions">
+          <button 
+            type="button" 
+            class="mac-btn" 
+            @click="testTranslate"
+            :disabled="isTranslating || !testTranslateText"
+          >
+            {{ isTranslating ? '翻译中...' : '测试翻译' }}
+          </button>
+        </div>
+        
+        <div class="translate-result-area" v-if="testTranslateResult">
+          <div class="translate-result-title">翻译结果：</div>
+          <div class="translate-result-content">{{ testTranslateResult }}</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Lora训练配置 -->
     <div v-if="activeTab === 'lora'" class="mac-card settings-card">
       <h3 class="section-title">Lora训练配置</h3>
@@ -270,6 +352,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import { settingsApi } from '@/api/settings'
 import { uploadApi } from '@/api/upload'
+import { commonApi } from '@/api/common'
 import message from '@/utils/message'
 import FileUploader from '@/components/common/FileUploader.vue'
 import KeyValueConfig from '@/components/common/KeyValueConfig.vue'
@@ -280,6 +363,7 @@ const tabs = [
   { key: 'system', label: '系统配置' },
   { key: 'mark', label: '标记配置' },
   { key: 'ai', label: 'AI引擎配置' },
+  { key: 'translate', label: '翻译配置' },
   { key: 'lora', label: 'Lora训练配置' }
 ]
 const activeTab = ref('system')
@@ -310,6 +394,14 @@ const form = ref({
     timeout: 300
   },
   ai_engine_headers: {},
+  
+  // 百度翻译配置
+  baidu_translate_config: {
+    app_id: '20250327002316619',
+    secret_key: '67qaSQg_WdfWqQFvx7ml',
+    default_from: 'auto',
+    default_to: 'zh'
+  },
   
   // Lora训练配置
   lora_training_config: {
@@ -381,6 +473,32 @@ const isSubmitting = ref(false)
 const workflowUploaderRef = ref(null)
 const uploadedWorkflowFile = ref(null)
 
+// 翻译相关
+const testTranslateText = ref('love you')
+const testTranslateResult = ref('')
+const isTranslating = ref(false)
+
+// 支持的语言列表
+const languageOptions = [
+  { value: 'auto', label: '自动检测' },
+  { value: 'zh', label: '中文' },
+  { value: 'en', label: '英文' },
+  { value: 'yue', label: '粤语' },
+  { value: 'wyw', label: '文言文' },
+  { value: 'jp', label: '日语' },
+  { value: 'kor', label: '韩语' },
+  { value: 'fra', label: '法语' },
+  { value: 'spa', label: '西班牙语' },
+  { value: 'th', label: '泰语' },
+  { value: 'ara', label: '阿拉伯语' },
+  { value: 'ru', label: '俄语' },
+  { value: 'pt', label: '葡萄牙语' },
+  { value: 'de', label: '德语' },
+  { value: 'it', label: '意大利语' },
+  { value: 'nl', label: '荷兰语' },
+  { value: 'pl', label: '波兰语' }
+]
+
 // 获取设置
 const fetchSettings = async () => {
   try {
@@ -439,6 +557,37 @@ const downloadWorkflowFile = () => {
 const clearWorkflowFile = () => {
   form.value.mark_workflow_api = ''
   uploadedWorkflowFile.value = null
+}
+
+// 测试翻译
+const testTranslate = async () => {
+  if (!testTranslateText.value) {
+    message.warning('请输入要测试的文本')
+    return
+  }
+  
+  try {
+    isTranslating.value = true
+    const resp = await commonApi.translateText(
+      testTranslateText.value,
+      form.value.baidu_translate_config.default_to,
+      form.value.baidu_translate_config.default_from
+    )
+    
+    if (resp && resp.result) {
+      testTranslateResult.value = resp.result
+      message.success('翻译成功')
+    } else {
+      testTranslateResult.value = '翻译失败'
+      message.error('翻译失败：' + (resp.message || '未知错误'))
+    }
+  } catch (error) {
+    console.error('翻译测试失败:', error)
+    testTranslateResult.value = '翻译服务异常'
+    message.error('翻译服务异常')
+  } finally {
+    isTranslating.value = false
+  }
 }
 
 onMounted(() => {
@@ -717,5 +866,42 @@ onMounted(() => {
   font-size: 14px;
   color: var(--text-secondary);
   font-weight: normal;
+}
+
+/* 翻译测试样式 */
+.translate-test-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.translate-input-area {
+  flex: 1;
+}
+
+.translate-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.translate-result-area {
+  background: var(--background-tertiary);
+  padding: 16px;
+  border-radius: 6px;
+  margin-top: 16px;
+}
+
+.translate-result-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.translate-result-content {
+  font-size: 14px;
+  color: var(--text-secondary);
 }
 </style> 
