@@ -131,5 +131,33 @@ export const tasksApi = {
    */
   async batchUpdateMarkedTexts(taskId, markedTexts) {
     return request.put(`${BASE_URL}/${taskId}/marked_texts/batch`, markedTexts)
+  },
+  
+  /**
+   * 获取训练结果
+   * @param {number|string} taskId 任务ID
+   * @returns {Promise<Object>} 训练结果信息，包含模型列表等
+   */
+  async getTrainingResults(taskId) {
+    return request.get(`${BASE_URL}/${taskId}/training-results`)
+  },
+  
+  /**
+   * 获取训练loss曲线数据
+   * @param {number|string} taskId 任务ID
+   * @returns {Promise<Object>} 训练loss数据，包含数据点和训练进度
+   */
+  async getTrainingLoss(taskId) {
+    return request.get(`${BASE_URL}/${taskId}/training-loss`)
+  },
+  
+  /**
+   * 下载训练模型
+   * @param {number|string} taskId 任务ID
+   * @param {string} modelPath 模型路径
+   * @returns {string} 下载链接
+   */
+  getModelDownloadUrl(taskId, modelPath) {
+    return `${BASE_URL}/${taskId}/download-model?path=${encodeURIComponent(modelPath)}`
   }
 } 

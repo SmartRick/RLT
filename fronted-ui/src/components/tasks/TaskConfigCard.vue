@@ -43,6 +43,7 @@
           placeholder="输入触发词，用逗号分隔"
           rows="3"
           class="mac-textarea"
+          :disabled="!canEdit"
         ></textarea>
       </div>
       

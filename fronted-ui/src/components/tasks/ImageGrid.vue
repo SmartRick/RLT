@@ -6,6 +6,7 @@
     @dragover.prevent="handleDragOver"
     @dragleave.prevent="handleDragLeave"
     @drop.prevent="handleDrop"
+    ref="gridContainer"
   >
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-state">
@@ -75,16 +76,18 @@
             <div v-if="showMarkedText" class="marked-text-container">
               <div 
                 class="marked-text" 
-                :class="{ 'expanded': expandedTexts.includes(image.filename) }"
-                @click="toggleExpandText(image.filename)"
+                @click="showFullTextTooltip($event, image.filename)"
                 v-html="highlightMarkedText(getMarkedTextContent(image.filename))"
+                @mouseenter="showFullTextTooltip($event, image.filename)"
+                @mouseleave="hideTooltipWithDelay"
               ></div>
               <div class="text-actions">
                 <button 
                   class="text-toggle" 
-                  @click="toggleExpandText(image.filename)"
+                  @click.stop="copyMarkedText(image.filename)"
+                  title="复制提示词"
                 >
-                  {{ expandedTexts.includes(image.filename) ? '收起' : '展开' }}
+                  复制
                 </button>
                 <button
                   v-if="canEdit"
@@ -113,6 +116,17 @@
         </template>
       </div>
     </div>
+    
+    <!-- 使用封装的TextTooltip组件 -->
+    <TextTooltip
+      v-model="showFullTextTooltipContent"
+      :trigger-element="tooltipTriggerElement"
+      :content="highlightedFullTextContent"
+      :translation="fullTextTranslation"
+      :is-translating="isTooltipTranslating"
+      :hide-delay="300"
+      ref="textTooltipRef"
+    />
     
     <!-- 文本编辑模态框 -->
     <BaseModal
@@ -183,43 +197,25 @@
             </div>
           </div>
           
-          <div v-if="batchEditType === 'prefix'" class="batch-edit-input">
-            <label>添加前缀</label>
-            <HighlightEditableDiv
-              v-model="batchEditPrefix"
-              :highlightChars="[',', '，']"
-              highlightColor="#ff3333"
-              maxHeight="60px"
-              placeholder="请输入要添加的前缀"
-            />
-          </div>
-          
-          <div v-if="batchEditType === 'suffix'" class="batch-edit-input">
-            <label>添加后缀</label>
-            <HighlightEditableDiv
-              v-model="batchEditSuffix"
-              :highlightChars="[',', '，']"
-              highlightColor="#ff3333"
-              maxHeight="60px"
-              placeholder="请输入要添加的后缀"
-            />
-          </div>
-          
-          <div v-if="batchEditType === 'replace'" class="batch-edit-inputs">
+          <!-- 统一的输入区域 -->
+          <div class="batch-edit-unified-inputs">
+            <!-- 主输入框 -->
             <div class="batch-edit-input">
-              <label>查找文本</label>
+              <label>{{ getBatchEditMainLabel }}</label>
               <HighlightEditableDiv
-                v-model="batchEditFind"
+                v-model="batchEditText"
                 :highlightChars="[',', '，']"
                 highlightColor="#ff3333"
                 maxHeight="60px"
-                placeholder="请输入要查找的文本"
+                :placeholder="getBatchEditMainPlaceholder"
               />
             </div>
-            <div class="batch-edit-input">
+            
+            <!-- 替换模式下的第二个输入框 -->
+            <div v-if="batchEditType === 'replace'" class="batch-edit-input">
               <label>替换为</label>
               <HighlightEditableDiv
-                v-model="batchEditReplace"
+                v-model="batchEditReplaceText"
                 :highlightChars="[',', '，']"
                 highlightColor="#ff3333"
                 maxHeight="60px"
@@ -228,33 +224,9 @@
             </div>
           </div>
           
-          <div v-if="batchEditType === 'remove'" class="batch-edit-input">
-            <label>删除文本</label>
-            <HighlightEditableDiv
-              v-model="batchEditRemove"
-              :highlightChars="[',', '，']"
-              highlightColor="#ff3333"
-              maxHeight="60px"
-              placeholder="请输入要删除的文本"
-            />
-          </div>
-          
           <div class="preview-section" v-if="batchEditPreview">
             <div class="preview-label">预览效果：</div>
             <div class="preview-content" v-html="highlightMarkedText(batchEditPreview)"></div>
-            
-            <!-- 批量编辑翻译结果 -->
-            <div class="translation-section">
-              <div class="translation-header">
-                <span class="translation-title">中文翻译参考：</span>
-                <div v-if="isBatchTranslating" class="translation-loading">
-                  <span class="loading-dot"></span>
-                  <span class="loading-dot"></span>
-                  <span class="loading-dot"></span>
-                </div>
-              </div>
-              <div class="translation-content" v-html="batchTranslatedPreview"></div>
-            </div>
           </div>
         </div>
       </template>
@@ -264,12 +236,15 @@
 
 <script setup>
 import { computed, ref, watch, onUnmounted } from 'vue'
+import { Teleport, Transition } from 'vue'
 import { PhotoIcon, TrashIcon, PencilIcon, XMarkIcon, CloudArrowUpIcon as UploadIcon } from '@heroicons/vue/24/outline'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import BaseModal from '@/components/common/Modal.vue'
 import HighlightEditableDiv from '@/components/common/HighlightEditableDiv.vue'
+import TextTooltip from '@/components/common/TextTooltip.vue'
 import message from '@/utils/message'
-import { commonApi } from '@/api/common'
+import { highlightMarkedText } from '@/utils/textFormatters'
+import { getTranslation } from '@/utils/translationCache'
 
 const props = defineProps({
   images: {
@@ -303,6 +278,9 @@ const emit = defineEmits([
   'selection-change',
   'upload-files'
 ])
+
+const gridContainer = ref(null) // 添加网格容器引用
+const textTooltipRef = ref(null) // 添加对TextTooltip的引用
 
 // 是否可以删除图片
 const canDelete = computed(() => {
@@ -420,19 +398,6 @@ const handleDelete = (image) => {
   }
 }
 
-// 打标文本展开状态管理
-const expandedTexts = ref([])
-
-// 切换文本展开状态
-const toggleExpandText = (filename) => {
-  const index = expandedTexts.value.indexOf(filename)
-  if (index === -1) {
-    expandedTexts.value.push(filename)
-  } else {
-    expandedTexts.value.splice(index, 1)
-  }
-}
-
 // 文本编辑相关
 const showEditModal = ref(false)
 const currentEditingFilename = ref('')
@@ -450,12 +415,14 @@ const translateEditingText = async () => {
   
   try {
     isTranslating.value = true
-    const result = await commonApi.translateText(editingTextContent.value, 'zh', 'en')
-    if (result && result.result) {
+    // 使用全局翻译缓存服务
+    const { text, isError } = await getTranslation(editingTextContent.value, 'zh', 'en')
+    
+    if (!isError) {
       // 应用高亮处理到翻译结果
-      translatedText.value = highlightMarkedText(result.result)
+      translatedText.value = highlightMarkedText(text)
     } else {
-      translatedText.value = '翻译失败'
+      translatedText.value = text // 错误信息
     }
   } catch (error) {
     console.error('翻译失败:', error)
@@ -594,40 +561,68 @@ const handleBatchDelete = async () => {
 const showBatchEditModal = ref(false)
 const isBatchEditing = ref(false)
 const batchEditType = ref('prefix')
-const batchEditPrefix = ref('')
-const batchEditSuffix = ref('')
-const batchEditFind = ref('')
-const batchEditReplace = ref('')
-const batchEditRemove = ref('')
+const batchEditText = ref('') // 统一的主输入框文本
+const batchEditReplaceText = ref('') // 替换模式下的第二个输入框
 const batchEditPreview = ref('')
-const batchTranslatedPreview = ref('') // 批量编辑翻译结果
-const isBatchTranslating = ref(false) // 批量翻译中状态
 
-// 批量翻译防抖计时器
-let batchTranslationDebounceTimer = null
+// 获取批量编辑主输入框的标签
+const getBatchEditMainLabel = computed(() => {
+  switch (batchEditType.value) {
+    case 'prefix': return '添加前缀';
+    case 'suffix': return '添加后缀';
+    case 'replace': return '查找文本';
+    case 'remove': return '删除文本';
+    default: return '输入文本';
+  }
+})
 
-// 监听批量编辑类型变化，更新预览
-watch([batchEditType, batchEditPrefix, batchEditSuffix, batchEditFind, batchEditReplace, batchEditRemove], 
-  () => {
-    // 使用防抖函数处理批量翻译请求
-    if (batchTranslationDebounceTimer) clearTimeout(batchTranslationDebounceTimer)
-    batchTranslationDebounceTimer = setTimeout(() => {
+// 获取批量编辑主输入框的占位符
+const getBatchEditMainPlaceholder = computed(() => {
+  switch (batchEditType.value) {
+    case 'prefix': return '请输入要添加的前缀';
+    case 'suffix': return '请输入要添加的后缀';
+    case 'replace': return '请输入要查找的文本';
+    case 'remove': return '请输入要删除的文本';
+    default: return '请输入文本';
+  }
+})
+
+// 批量编辑防抖计时器
+let batchEditDebounceTimer = null
+
+// 监听批量编辑类型变化，重置相关字段
+watch(batchEditType, (newType, oldType) => {
+  // 如果类型变了，清空输入框
+  if (newType !== oldType) {
+    batchEditText.value = ''
+    batchEditReplaceText.value = ''
+  }
+  
+  // 更新预览
       updateBatchEditPreview()
-    }, 500)
-  },
-  { deep: true }
-)
+})
+
+// 监听批量编辑输入内容变化，更新预览
+watch([batchEditText, batchEditReplaceText], () => {
+  // 使用防抖函数延迟更新预览
+  if (batchEditDebounceTimer) clearTimeout(batchEditDebounceTimer)
+  batchEditDebounceTimer = setTimeout(() => {
+    updateBatchEditPreview()
+  }, 300)
+}, { deep: true })
 
 // 监听批量编辑模态框显示状态变化
 watch(showBatchEditModal, (newValue) => {
   if (newValue) {
-    // 当模态框打开时，立即更新预览
+    // 当模态框打开时，重置输入并立即更新预览
+    batchEditText.value = ''
+    batchEditReplaceText.value = ''
     updateBatchEditPreview()
   }
 })
 
 // 更新批量编辑预览
-const updateBatchEditPreview = async () => {
+const updateBatchEditPreview = () => {
   if (selectedImages.value.length === 0) return
   
   // 获取第一个选中图片的打标文本作为预览
@@ -640,51 +635,24 @@ const updateBatchEditPreview = async () => {
   let newText = originalText
   
   if (batchEditType.value === 'prefix') {
-    newText = batchEditPrefix.value + originalText
+    newText = batchEditText.value + originalText
   } else if (batchEditType.value === 'suffix') {
-    newText = originalText + batchEditSuffix.value
+    newText = originalText + batchEditText.value
   } else if (batchEditType.value === 'replace') {
-    if (!batchEditFind.value) {
+    if (!batchEditText.value) {
       newText = originalText
     } else {
-      newText = originalText.replaceAll(batchEditFind.value, batchEditReplace.value || '')
+      newText = originalText.replaceAll(batchEditText.value, batchEditReplaceText.value || '')
     }
   } else if (batchEditType.value === 'remove') {
-    if (!batchEditRemove.value) {
+    if (!batchEditText.value) {
       newText = originalText
     } else {
-      newText = originalText.replaceAll(batchEditRemove.value, '')
+      newText = originalText.replaceAll(batchEditText.value, '')
     }
   }
   
   batchEditPreview.value = newText
-  
-  // 翻译预览文本
-  await translateBatchPreview(newText)
-}
-
-// 翻译批量编辑预览
-const translateBatchPreview = async (text) => {
-  if (!text) {
-    batchTranslatedPreview.value = ''
-    return
-  }
-  
-  try {
-    isBatchTranslating.value = true
-    const result = await commonApi.translateText(text, 'zh', 'en')
-    if (result && result.result) {
-      // 应用高亮处理到翻译结果
-      batchTranslatedPreview.value = highlightMarkedText(result.result)
-    } else {
-      batchTranslatedPreview.value = '翻译失败'
-    }
-  } catch (error) {
-    console.error('翻译预览失败:', error)
-    batchTranslatedPreview.value = '翻译服务异常'
-  } finally {
-    isBatchTranslating.value = false
-  }
 }
 
 // 批量编辑确认
@@ -725,13 +693,13 @@ const handleBatchEditConfirm = async () => {
       let newText = originalText
       
       if (batchEditType.value === 'prefix') {
-        newText = batchEditPrefix.value + originalText
+        newText = batchEditText.value + originalText
       } else if (batchEditType.value === 'suffix') {
-        newText = originalText + batchEditSuffix.value
-      } else if (batchEditType.value === 'replace' && batchEditFind.value) {
-        newText = originalText.replaceAll(batchEditFind.value, batchEditReplace.value)
-      } else if (batchEditType.value === 'remove' && batchEditRemove.value) {
-        newText = originalText.replaceAll(batchEditRemove.value, '')
+        newText = originalText + batchEditText.value
+      } else if (batchEditType.value === 'replace' && batchEditText.value) {
+        newText = originalText.replaceAll(batchEditText.value, batchEditReplaceText.value)
+      } else if (batchEditType.value === 'remove' && batchEditText.value) {
+        newText = originalText.replaceAll(batchEditText.value, '')
       }
       
       // 只有当文本有变化时才添加到更新列表
@@ -761,13 +729,9 @@ const handleBatchEditConfirm = async () => {
 
 // 重置批量编辑状态
 const resetBatchEdit = () => {
-  batchEditPrefix.value = ''
-  batchEditSuffix.value = ''
-  batchEditFind.value = ''
-  batchEditReplace.value = ''
-  batchEditRemove.value = ''
+  batchEditText.value = ''
+  batchEditReplaceText.value = ''
   batchEditPreview.value = ''
-  batchTranslatedPreview.value = '' // 清空翻译内容
 }
 
 // 暴露方法给父组件
@@ -785,22 +749,112 @@ onUnmounted(() => {
     clearTimeout(translationDebounceTimer)
   }
   
-  if (batchTranslationDebounceTimer) {
-    clearTimeout(batchTranslationDebounceTimer)
+  if (batchEditDebounceTimer) {
+    clearTimeout(batchEditDebounceTimer)
   }
 })
 
-// 为显示区域添加高亮功能
-const highlightMarkedText = (text) => {
-  if (!text) return '';
+// 浮动提示词框相关
+const showFullTextTooltipContent = ref(false)
+const tooltipTriggerElement = ref(null) // 触发元素的DOM引用
+const fullTextContent = ref('')
+const highlightedFullTextContent = ref('') // 添加高亮后的内容引用
+const fullTextTranslation = ref('')
+const isTooltipTranslating = ref(false) // 翻译加载状态
+let lastHoveredFilename = null // 记录最后悬停的文件名
+
+// 显示完整提示词的浮动框
+const showFullTextTooltip = (event, filename) => {
+  // 如果是相同文件，不重新触发处理，直接保持显示状态
+  if (showFullTextTooltipContent.value && filename === lastHoveredFilename) {
+    // 如果已经显示且文件名相同，只需更新触发元素位置
+    tooltipTriggerElement.value = event.target
+    // 确保不会自动隐藏
+    if (textTooltipRef.value) {
+      textTooltipRef.value.cancelHideTimer()
+    }
+    return
+  }
   
-  // 创建临时div以确保HTML安全
-  const tempDiv = document.createElement('div');
-  tempDiv.textContent = text;
-  const safeText = tempDiv.innerHTML;
+  // 记录当前文件名
+  lastHoveredFilename = filename
   
-  // 高亮逗号
-  return safeText.replace(/,|，/g, '<span style="color: #ff3333; font-weight: bold;">$&</span>');
+  // 如果当前有显示的提示框，先隐藏当前的，再显示新的
+  if (showFullTextTooltipContent.value) {
+    // 立即隐藏当前提示框
+    showFullTextTooltipContent.value = false
+    
+    // 清除任何可能的隐藏计时器
+    if (textTooltipRef.value) {
+      textTooltipRef.value.cancelHideTimer()
+    }
+  }
+  
+  // 直接处理内容显示，无需延迟
+  processTooltipContent(event, filename)
+}
+
+// 处理提示词内容并显示提示框
+const processTooltipContent = async (event, filename) => {
+  if (!gridContainer.value) return // 确保网格容器存在
+  
+  // 保存触发元素引用
+  tooltipTriggerElement.value = event.target
+  
+  // 获取完整的提示词内容
+  fullTextContent.value = getMarkedTextContent(filename)
+  
+  // 高亮提示词内容
+  highlightedFullTextContent.value = highlightMarkedText(fullTextContent.value)
+  
+  // 显示提示词框
+  showFullTextTooltipContent.value = true
+
+  // 如果有内容，则尝试获取翻译
+  if (fullTextContent.value) {
+    isTooltipTranslating.value = true
+    // 使用全局翻译缓存服务
+    const { text } = await getTranslation(fullTextContent.value, 'zh', 'en')
+    fullTextTranslation.value = highlightMarkedText(text)
+    isTooltipTranslating.value = false
+  } else {
+    fullTextTranslation.value = ''
+  }
+}
+
+// 延迟隐藏浮动框
+const hideTooltipWithDelay = () => {
+  // 记录要隐藏的是哪个文件的提示框
+  const hidingFilename = lastHoveredFilename
+  
+  // 启动隐藏计时器
+  if (textTooltipRef.value) {
+    textTooltipRef.value.startHideTimer()
+    
+    // 设置一个短暂的延迟，检查是否在这段时间内触发了新的提示框
+    setTimeout(() => {
+      // 如果当前显示的文件名与要隐藏的文件名不同，说明用户已经移动到了新的元素
+      // 这种情况下应该取消隐藏计时器，保持新的提示框显示
+      if (showFullTextTooltipContent.value && lastHoveredFilename !== hidingFilename) {
+        textTooltipRef.value.cancelHideTimer()
+      }
+    }, 50)
+  }
+}
+
+// 复制提示词内容
+const copyMarkedText = (filename) => {
+  const text = getMarkedTextContent(filename)
+  if (text) {
+    navigator.clipboard.writeText(text)
+      .then(() => message.success('提示词已复制到剪贴板'))
+      .catch(err => {
+        console.error('无法复制文本: ', err)
+        message.error('复制失败，请手动复制')
+      })
+  } else {
+    message.warning('没有可复制的提示词')
+  }
 }
 </script>
 
@@ -1063,12 +1117,6 @@ const highlightMarkedText = (text) => {
   -webkit-box-orient: vertical;
   text-overflow: ellipsis;
   cursor: pointer;
-}
-
-.marked-text.expanded {
-  display: block;
-  -webkit-line-clamp: unset;
-  white-space: pre-wrap;
 }
 
 .text-actions {

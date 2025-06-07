@@ -56,7 +56,58 @@ export const routes = [
     meta: {
       title: '系统设置',
       requiresAuth: true
-    }
+    },
+    children: [
+      {
+        path: '',
+        redirect: '/settings/system'
+      },
+      {
+        path: 'system',
+        name: 'SystemSettings',
+        meta: {
+          title: '系统配置',
+          tab: 'system',
+          requiresAuth: true
+        }
+      },
+      {
+        path: 'mark',
+        name: 'MarkSettings',
+        meta: {
+          title: '标记配置',
+          tab: 'mark',
+          requiresAuth: true
+        }
+      },
+      {
+        path: 'ai',
+        name: 'AISettings',
+        meta: {
+          title: 'AI引擎配置',
+          tab: 'ai',
+          requiresAuth: true
+        }
+      },
+      {
+        path: 'translate',
+        name: 'TranslateSettings',
+        meta: {
+          title: '翻译配置',
+          tab: 'translate',
+          requiresAuth: true
+        }
+      },
+      {
+        path: 'lora',
+        name: 'LoraSettings',
+        meta: {
+          title: 'Lora训练配置',
+          tab: 'lora',
+          requiresAuth: true
+        }
+      }
+    ]
   }
 ]
 

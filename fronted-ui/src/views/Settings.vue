@@ -20,7 +20,7 @@
         :key="tab.key"
         class="tab-button" 
         :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
+        @click="router.push(`/settings/${tab.key}`)"
       >
         {{ tab.label }}
       </button>
@@ -345,7 +345,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { 
   ArrowDownTrayIcon, 
   XMarkIcon 
@@ -357,6 +357,10 @@ import message from '@/utils/message'
 import FileUploader from '@/components/common/FileUploader.vue'
 import KeyValueConfig from '@/components/common/KeyValueConfig.vue'
 import LoraTrainingParams from '@/components/common/LoraTrainingParams.vue'
+import { useRouter, useRoute } from 'vue-router'
+
+const router = useRouter()
+const route = useRoute()
 
 // 标签页定义
 const tabs = [
@@ -367,6 +371,42 @@ const tabs = [
   { key: 'lora', label: 'Lora训练配置' }
 ]
 const activeTab = ref('system')
+
+// 根据路由设置当前Tab
+const setTabFromRoute = () => {
+  // 从路由元数据中获取tab参数
+  const tabParam = route.meta.tab
+  
+  if (tabParam && tabs.some(tab => tab.key === tabParam)) {
+    activeTab.value = tabParam
+  } else if (route.path === '/settings') {
+    // 如果直接访问/settings路径，重定向到默认tab
+    router.replace('/settings/system')
+  } else {
+    // 尝试从路径中提取tab名称
+    const pathSegments = route.path.split('/')
+    const lastSegment = pathSegments[pathSegments.length - 1]
+    
+    if (tabs.some(tab => tab.key === lastSegment)) {
+      activeTab.value = lastSegment
+    } else {
+      // 如果无法匹配任何已知tab，设置为默认tab
+      activeTab.value = 'system'
+    }
+  }
+}
+
+// 监听activeTab变化，更新路由
+watch(activeTab, (newTab) => {
+  if (route.meta.tab !== newTab) {
+    router.push(`/settings/${newTab}`)
+  }
+})
+
+// 监听路由变化，更新当前Tab
+watch(() => route.path, () => {
+  setTabFromRoute()
+}, { immediate: true })
 
 // 表单数据
 const form = ref({
@@ -592,6 +632,7 @@ const testTranslate = async () => {
 
 onMounted(() => {
   fetchSettings()
+  setTabFromRoute() // 初始加载时设置Tab
 })
 </script>
 

@@ -17,6 +17,10 @@
       </div>
 
       <div class="right-section">
+        <button v-if="canViewTrainingDetails" class="mac-btn info" @click="showTrainingDetailsModal = true">
+          <ChartBarIcon class="btn-icon" />
+          训练详情
+        </button>
         <button v-if="canSubmitMarking" class="mac-btn primary" :disabled="isLoading" @click="handleSubmitMarking">
           <TagIcon class="btn-icon" />
           提交标记
@@ -152,7 +156,7 @@
         </div>
 
         <!-- 任务配置卡片 -->
-        <TaskConfigCard v-if="task" v-model:task="task" :can-edit="canEditConfig" @update:task="handleTaskUpdate" />
+        <TaskConfigCard v-if="task" :task="task" :can-edit="canEditConfig" @update:task="handleTaskUpdate" />
       </div>
     </div>
 
@@ -165,6 +169,25 @@
 
     <!-- 图片预览模态框 -->
     <ImageViewer v-model="showPreview" v-model:image="selectedImage" :images="task?.images || []" />
+    
+    <!-- 训练详情模态框 -->
+    <BaseModal 
+      v-model="showTrainingDetailsModal" 
+      title="训练详情" 
+      :width="70"
+      :loading="false" 
+      size="large"
+      :fullscreen-toggle="true"
+      :showFooter="false"
+    >
+      <template #body>
+        <TrainingDetails 
+          :taskId="taskId" 
+          :taskName="task?.name || ''" 
+          :isTraining="task?.status === 'TRAINING'"
+        />
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -179,7 +202,8 @@ import {
   ArrowPathIcon,
   StopIcon,
   TrashIcon,
-  PencilIcon
+  PencilIcon,
+  ChartBarIcon
 } from '@heroicons/vue/24/outline'
 import { tasksApi } from '@/api/tasks'
 import { formatDate } from '@/utils/datetime'
@@ -190,6 +214,7 @@ import ImageViewer from '@/components/tasks/ImageViewer.vue'
 import BaseModal from '@/components/common/Modal.vue'
 import TaskStatus from '@/components/tasks/TaskStatus.vue'
 import TaskConfigCard from '@/components/tasks/TaskConfigCard.vue'
+import TrainingDetails from '@/components/tasks/TrainingDetails.vue'
 import {
   getStatusText,
   getStatusClass,
@@ -221,6 +246,14 @@ const selectedImagesCount = ref(0)
 
 // 批量编辑相关
 const isBatchEditing = ref(false)
+
+// 训练详情相关
+const showTrainingDetailsModal = ref(false)
+
+// 计算是否可以查看训练详情
+const canViewTrainingDetails = computed(() => {
+  return ['TRAINING', 'COMPLETED'].includes(task.value?.status)
+})
 
 // 获取任务详情
 const fetchTask = async () => {
@@ -371,7 +404,7 @@ const canStartTraining = computed(() => {
 
 // 计算是否可以重启
 const canRestart = computed(() => {
-  return task.value?.status === 'ERROR'
+  return task.value?.status === 'ERROR' || task.value?.status === 'COMPLETED'
 })
 
 // 计算是否可以取消
@@ -1035,5 +1068,14 @@ onUnmounted(() => {
 .select-all-checkbox {
   margin-right: 6px;
   vertical-align: middle;
+}
+
+.mac-btn.info {
+  background-color: #EFF6FF;
+  color: #3B82F6;
+}
+
+.mac-btn.info:hover {
+  background-color: #DBEAFE;
 }
 </style>
