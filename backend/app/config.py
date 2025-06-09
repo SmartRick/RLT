@@ -120,8 +120,8 @@ class Config:
         'save_model_as': 'safetensors',
         'save_precision': 'fp16',
         'save_every_n_epochs': 2,
-        'max_train_epochs': 10,
-        'train_batch_size': 1,
+        'max_train_epochs': 1,
+        'train_batch_size': 2,
         'gradient_checkpointing': True,
         'gradient_accumulation_steps': 1,
         'network_train_unet_only': False,
@@ -158,7 +158,19 @@ class Config:
         'cache_text_encoder_outputs': True,
         'cache_text_encoder_outputs_to_disk': True,
         'persistent_data_loader_workers': True,
-        'repeat_num':10,
+        'repeat_num':5,
+        
+        # 预览图生成参数
+        'generate_preview':True,#是否生成预览图
+        'use_image_tags': False,           # 是否使用图片标签生成预览图
+        'max_image_tags': 5,               # 最多采用图片提示词数量
+        'positive_prompt': '1girl, solo',  # 正向提示词
+        'negative_prompt': 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry',  # 负面提示词
+        'preview_width': 512,              # 预览图宽度
+        'preview_height': 768,             # 预览图高度
+        'cfg_scale': 7,                    # CFG强度
+        'steps': 24,                       # 迭代步数
+        'seed': 1337,                      # 种子
     }
     
     # AI引擎配置

@@ -208,21 +208,3 @@ class MarkRequestHandler:
                     break
                     
         return error_info
-        
-    def get_status(self, prompt_id: str,mark_config: MarkConfig) -> Optional[Dict]:
-        """
-        获取任务状态信息（简化版）
-        :param prompt_id: 任务ID
-        :return: 状态信息字典或None（如果获取失败）
-        """
-        completed, success, info = self.check_status(prompt_id,mark_config)
-        if not info:
-            return None
-            
-        return {
-            "completed": completed,
-            "success": success,
-            "progress": info.get("progress", 0),
-            "status": info.get("status"),
-            "error_info": info.get("error_info", {})
-        } 

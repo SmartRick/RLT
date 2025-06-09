@@ -74,6 +74,52 @@ class TaskImage(Base):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
+class TaskExecutionHistory(Base):
+    """任务执行历史记录"""
+    __tablename__ = 'task_execution_history'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(Integer, ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False)
+    start_time = Column(DateTime, default=datetime.now, nullable=False)
+    end_time = Column(DateTime, nullable=True)
+    status = Column(String(20), nullable=False, default='RUNNING')  # RUNNING, COMPLETED, ERROR
+    
+    # 存储执行参数
+    mark_config = Column(JSON, comment='打标参数配置')
+    training_config = Column(JSON, comment='训练参数配置')
+    
+    # 存储路径信息
+    marked_images_path = Column(String(500), comment='打标后的图片文件路径')
+    training_output_path = Column(String(500), comment='训练输出文件路径')
+    
+    # 存储训练结果
+    training_results = Column(JSON, comment='训练结果，包括模型文件路径、预览图等')
+    loss_data = Column(JSON, comment='训练loss数据，用于绘制loss曲线')
+    
+    # 其他信息
+    description = Column(Text, nullable=True, comment='描述或备注')
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    # 关联关系
+    task = relationship('Task', back_populates='execution_history')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'start_time': self.start_time.isoformat() if self.start_time else None,
+            'end_time': self.end_time.isoformat() if self.end_time else None,
+            'status': self.status,
+            'mark_config': self.mark_config,
+            'training_config': self.training_config,
+            'training_results': self.training_results,
+            'loss_data': self.loss_data,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 class Task(Base):
     """训练任务模型"""
     __tablename__ = 'tasks'
@@ -107,8 +153,15 @@ class Task(Base):
 
     # 关联图片
     images = relationship('TaskImage', cascade='all, delete-orphan')
+    # 关联执行历史记录
+    execution_history = relationship('TaskExecutionHistory', back_populates='task', cascade='all, delete-orphan', order_by='TaskExecutionHistory.start_time.desc()')
     # 打标后的图片文件路径
     marked_images_path = Column(String(500), comment='打标后的图片文件路径')
+    # 训练输出路径
+    training_output_path = Column(String(500), comment='训练输出文件路径')
+    
+    # 当前执行历史ID
+    execution_history_id = Column(Integer, nullable=True, comment='当前关联的执行历史ID')
 
     # 添加开始时间和结束时间
     started_at = Column(DateTime, comment='任务开始时间')
@@ -264,10 +317,13 @@ class Task(Base):
             'status_history': status_history_dict,
             'images': [img.to_dict() for img in self.images],
             'marked_images_path': self.marked_images_path,
+            'training_output_path': self.training_output_path,
             'marking_asset': self.marking_asset.to_dict() if self.marking_asset else None,
             'training_asset': self.training_asset.to_dict() if self.training_asset else None,
             'mark_config': self.mark_config,
             'use_global_mark_config': self.use_global_mark_config,
             'training_config': self.training_config,
-            'use_global_training_config': self.use_global_training_config
+            'use_global_training_config': self.use_global_training_config,
+            'execution_history': [history.to_dict() for history in self.execution_history[:5]] if hasattr(self, 'execution_history') else [],
+            'execution_history_id': self.execution_history_id
         }

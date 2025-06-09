@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, send_from_directory
-from ..services.upload_service import UploadService
-from ..config import config
+from ...services.upload_service import UploadService
+from ...config import config
 import os
 
 upload_bp = Blueprint('upload', __name__)

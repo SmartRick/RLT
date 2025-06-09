@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from ..services.config_service import ConfigService
-from ..models.task import Task, TaskImage, TaskStatus, TaskStatusHistory, TaskStatusLog
+from ..models.task import Task, TaskImage, TaskStatus, TaskStatusHistory, TaskStatusLog, TaskExecutionHistory
 from ..utils.train_handler import TrainRequestHandler, TrainConfig
 from ..database import get_db
 from ..utils.logger import setup_logger
@@ -20,8 +20,14 @@ import json
 from ..config import Config
 from ..services.local_asset_service import LocalAssetService
 import traceback
+import re
 from ..services.asset_service import AssetService
 from ..utils.mark_handler import MarkConfig
+from ..utils.file_handler import *
+from ..services.common_service import CommonService
+# 导入ComfyUIAPI
+from task_scheduler.comfyui_api import ComfyUIAPI, ComfyUIConfig
+
 
 logger = setup_logger('task_service')
 
@@ -59,6 +65,18 @@ class TaskService:
         filtered_data = {k: v for k, v in task_data.items() if k in valid_fields}
         task = Task(**filtered_data)
         try:
+            # 将任务名称翻译为英文作为触发词
+            if 'name' in filtered_data and filtered_data['name']:
+                task_name = filtered_data['name']
+                # 调用翻译服务，将中文名称翻译为英文
+                translate_result = CommonService.translate_text(task_name, to_lang='en')
+                
+                if translate_result and translate_result['success'] and translate_result['result']:
+                    # 获取翻译结果
+                    english_name = translate_result['result'].strip()
+                    logger.info(f"翻译任务名称: {task_name} -> {english_name}")
+                    task.mark_config = {'trigger_words': english_name}
+                
             db.add(task)
             # 初始化状态为NEW并添加日志记录
             db.commit()
@@ -370,6 +388,13 @@ class TaskService:
             # 检查是否有图片
             if not task.images:
                 raise ValueError("任务没有上传任何图片")
+            
+            # 获取标记配置
+            mark_config = ConfigService.get_task_mark_config(task_id)
+            training_data_path = f"{mark_config.get('repeat_num',10)}_rick"
+            # 生成唯一的打标路径
+            marked_images_path = os.path.join(generate_unique_folder_path(Config.MARKED_DIR, task_id, 'mark'),training_data_path)
+            task.marked_images_path = marked_images_path
 
             # 更新任务状态为已提交，并传递数据库会话
             task.update_status(TaskStatus.SUBMITTED, '任务已提交', db=db)
@@ -416,10 +441,7 @@ class TaskService:
                 training_config = ConfigService.get_task_training_config(task.id)
                 # 准备输入输出目录
                 input_dir = os.path.join(Config.UPLOAD_DIR, str(task_id))
-                output_dir = os.path.join(Config.MARKED_DIR, str(task_id),f"{training_config.get('repeat_num',10)}_rick")
-                task.marked_images_path = output_dir
-
-                # 记录目录信息
+                output_dir = task.marked_images_path
                 task.add_log(f'输入目录: {input_dir}')
                 task.add_log(f'输出目录: {output_dir}')
 
@@ -596,8 +618,138 @@ class TaskService:
                         db.commit()
 
     @staticmethod
+    def _generate_sample_prompts(task_id: int, training_config: Dict) -> str:
+        """
+        根据任务配置生成sample_prompts
+        
+        Args:
+            task_id: 任务ID
+            training_config: 训练配置
+            
+        Returns:
+            生成的sample_prompts字符串
+        """
+        try:
+            # 获取配置参数
+            use_image_tags = training_config.get('use_image_tags', False)
+            max_image_tags = int(training_config.get('max_image_tags', 5))
+            positive_prompt = training_config.get('positive_prompt', '')
+            negative_prompt = training_config.get('negative_prompt', 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry')
+            preview_width = training_config.get('preview_width', 512)
+            preview_height = training_config.get('preview_height', 768)
+            cfg_scale = training_config.get('cfg_scale', 7)
+            steps = training_config.get('steps', 24)
+            seed = training_config.get('seed', 1337)
+            
+            # 构建基本的负面提示词部分
+            negative_part = f"--n {negative_prompt}"
+            
+            # 构建预览图参数部分
+            params_part = f" --w {preview_width} --h {preview_height} --l {cfg_scale} --s {steps} --d {seed}"
+            
+            # 如果使用图片标签
+            if use_image_tags:
+                with get_db() as db:
+                    # 获取任务的打标文本
+                    marked_texts = TaskService.get_marked_texts(db, task_id)
+                    
+                    if not marked_texts:
+                        # 如果没有打标文本，使用默认提示词
+                        return f"(masterpiece, best quality:1.2), 1girl, solo, {negative_part}{params_part}"
+                    
+                    # 构建多行提示词
+                    prompts = []
+                    count = 0
+                    
+                    for _, text in marked_texts.items():
+                        if count >= max_image_tags:
+                            break
+                        
+                        # 提取文本的第一行作为提示词
+                        first_line = text.strip().split('\n')[0] if text else ""
+                        if first_line:
+                            # 添加基本质量词
+                            prompt = f"(masterpiece, best quality:1.2), {first_line}, {negative_part}{params_part}"
+                            prompts.append(prompt)
+                            count += 1
+                    
+                    # 如果没有有效的提示词，使用默认提示词
+                    if not prompts:
+                        return f"(masterpiece, best quality:1.2), 1girl, solo, {negative_part}{params_part}"
+                    
+                    # 返回多行提示词
+                    return "\n".join(prompts)
+            else:
+                # 使用配置中的正向提示词
+                return f"(masterpiece, best quality:1.2), {positive_prompt}, {negative_part}{params_part}"
+        
+        except Exception as e:
+            logger.error(f"生成sample_prompts失败: {str(e)}", exc_info=True)
+            # 返回一个默认值
+            return "(masterpiece, best quality:1.2), 1girl, solo, --n lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry --w 512 --h 768 --l 7 --s 24 --d 1337"
+
+    @staticmethod
+    def _prepare_training_execution_history(task_id: int, db: Session):
+        """
+        准备训练执行历史记录和相关配置
+        
+        Args:
+            task_id: 任务ID
+            db: 数据库会话
+            
+        Returns:
+            Dictionary containing training configuration and output path
+        """
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise ValueError("任务不存在")
+
+        # 获取训练配置
+        mark_config = ConfigService.get_task_mark_config(task_id)
+        training_config = ConfigService.get_task_training_config(task_id)
+        
+        # 生成sample_prompts并更新到训练配置中
+        training_config['sample_prompts'] = TaskService._generate_sample_prompts(task_id, training_config)
+        
+        # 移除业务参数，避免传递给训练服务
+        business_params = ['use_image_tags', 'max_image_tags', 'positive_prompt', 
+                            'negative_prompt', 'preview_width', 'preview_height', 
+                            'cfg_scale', 'steps', 'seed']
+        for param in business_params:
+            if param in training_config:
+                training_config.pop(param)
+        
+        # 生成唯一的训练输出路径
+        training_output_path = generate_unique_folder_path(Config.OUTPUT_DIR, task_id, 'train')
+        task.training_output_path = training_output_path
+        
+        # 创建执行历史记录
+        execution_history = TaskExecutionHistory(
+            task_id=task_id,
+            status='RUNNING',
+            mark_config=mark_config,
+            training_config=training_config,
+            marked_images_path=task.marked_images_path,
+            training_output_path=training_output_path,
+            description=f"训练开始于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        db.add(execution_history)
+        db.commit()
+        db.refresh(execution_history)
+        
+        # 记录历史ID到任务的prompt_id字段，方便后续更新
+        task.execution_history_id = execution_history.id
+        db.commit()
+    
+        return {
+            "training_config": training_config,
+            "training_output_path": training_output_path,
+            "execution_history_id": execution_history.id
+        }
+
+    @staticmethod
     def start_training(db: Session, task_id: int) -> Optional[Dict]:
-        """开始训练"""
+        """启动训练流程"""
         try:
             task = db.query(Task).filter(Task.id == task_id).first()
             if not task:
@@ -606,7 +758,7 @@ class TaskService:
             if task.status != TaskStatus.MARKED:
                 raise ValueError(f"任务状态 {task.status} 不允许开始训练")
 
-            # 更新任务状态
+            # 只更新任务状态，不创建历史记录，历史记录将在_process_training中创建
             task.update_status(TaskStatus.TRAINING, '准备开始训练', db=db)
             
             return task.to_dict()
@@ -625,25 +777,221 @@ class TaskService:
             }
 
     @staticmethod
-    def stop_task(db: Session, task_id: int) -> bool:
-        """终止任务"""
+    def _rollback_task_state(db: Session, task: Task, target_status: TaskStatus, 
+                             delete_history: bool = True, clear_assets: bool = True,
+                             keep_marked_files: bool = False) -> bool:
+        """
+        将任务回滚到指定状态
+        
+        Args:
+            db: 数据库会话
+            task: 任务对象
+            target_status: 目标状态
+            delete_history: 是否删除历史记录
+            clear_assets: 是否清除资产关联
+            keep_marked_files: 如果为False且回滚到NEW状态，则删除标记文件
+            
+        Returns:
+            操作是否成功
+        """
+        try:
+            # 如果需要删除历史记录
+            if delete_history:
+                # 确定需要删除的状态历史记录
+                status_to_delete = []
+                if target_status == TaskStatus.NEW:
+                    # 回滚到新建状态，删除所有除NEW外的历史
+                    status_to_delete = [s.value for s in TaskStatus if s != TaskStatus.NEW]
+                elif target_status == TaskStatus.MARKED:
+                    # 回滚到已标记状态，删除ERROR和TRAINING状态
+                    status_to_delete = ['ERROR', 'TRAINING']
+
+                # 获取需要删除的历史记录
+                histories = db.query(TaskStatusHistory).filter(
+                    TaskStatusHistory.task_id == task.id,
+                    TaskStatusHistory.status.in_(status_to_delete)
+                ).all()
+                
+                # 获取需要删除的历史记录ID
+                history_ids = [h.id for h in histories]
+                
+                # 删除这些历史记录相关的日志
+                if history_ids:
+                    db.query(TaskStatusLog).filter(TaskStatusLog.history_id.in_(history_ids)).delete(synchronize_session=False)
+                
+                # 删除历史记录
+                for history in histories:
+                    db.delete(history)
+                    
+                db.commit()
+                
+            # 如果回滚到NEW状态且需要删除标记文件
+            if target_status == TaskStatus.NEW and not keep_marked_files and task.marked_images_path and os.path.exists(task.marked_images_path):
+                try:
+                    # 只删除目录下的文件，保留目录本身
+                    for filename in os.listdir(task.marked_images_path):
+                        file_path = os.path.join(task.marked_images_path, filename)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            logger.info(f"已删除标记文件: {file_path}")
+                except Exception as e:
+                    logger.error(f"删除标记文件失败: {str(e)}")
+            
+                # 清除执行历史ID，但保留执行历史记录
+                task.execution_history_id = None
+                
+            # 更新任务状态和重置进度
+            task.update_status(target_status, f'任务已回滚到{target_status.value}状态', db=db)
+            task.progress = 0
+            
+            # 清除当前阶段的prompt_id
+            if (target_status == TaskStatus.NEW and task.status == TaskStatus.MARKING) or \
+               (target_status == TaskStatus.MARKED and task.status == TaskStatus.TRAINING):
+                task.prompt_id = None
+                
+                # 清除资产关联
+            if clear_assets:
+                if target_status == TaskStatus.NEW and task.marking_asset:
+                    task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
+                task.marking_asset_id = None
+                
+                if task.training_asset:
+                    task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
+                task.training_asset_id = None
+                
+            db.commit()
+            return True
+        
+        except Exception as e:
+            logger.error(f"回滚任务状态失败: {str(e)}", exc_info=True)
+            db.rollback()
+            return False
+
+    @staticmethod
+    def stop_task(db: Session, task_id: int) -> Dict:
+        """
+        终止任务并回滚到前一个状态
+        
+        根据任务类型使用不同的终止逻辑：
+        - 对于训练中的任务，使用TrainHandler的cancel_training方法，回滚到MARKED状态
+        - 对于打标中的任务，使用ComfyUIAPI工具中的中断方法，回滚到NEW状态
+        
+        Returns:
+            包含操作结果的字典
+        """
         try:
             task = db.query(Task).filter(Task.id == task_id).first()
-            if not task or task.status not in [TaskStatus.MARKING, TaskStatus.TRAINING]:
-                return False
+            if not task:
+                return {"success": False, "message": "任务不存在"}
+                
+            if task.status not in [TaskStatus.MARKING, TaskStatus.TRAINING]:
+                return {"success": False, "message": f"任务状态为 {task.status}，不能终止"}
 
-            # 更新资产任务计数
-            if task.status == TaskStatus.MARKING and task.marking_asset:
-                task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
-            elif task.status == TaskStatus.TRAINING and task.training_asset:
-                task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
+            cancel_success = False
+            cancel_message = "任务已终止"
+            # 确定目标回滚状态
+            target_status = TaskStatus.NEW if task.status == TaskStatus.MARKING else TaskStatus.MARKED
 
-            task.update_status(TaskStatus.ERROR, '任务被手动终止', db=db)
-            return True
+            # 根据任务类型执行不同的终止逻辑
+            if task.status == TaskStatus.TRAINING and task.training_asset and task.prompt_id:
+                # 训练任务终止
+                logger.info(f"开始终止训练任务: {task_id}")
+                handler = TrainRequestHandler(
+                    asset_ip=task.training_asset.ip,
+                    training_port=task.training_asset.lora_training.get('port', 28000)
+                )
+                
+                # 调用训练处理器的取消任务方法
+                cancel_success = handler.cancel_training(task.prompt_id)
+                
+                if cancel_success:
+                    logger.info(f"成功终止训练任务 {task_id}")
+                    cancel_message = "训练任务已成功终止并回滚到MARKED状态"
+                else:
+                    logger.warning(f"终止训练任务 {task_id} 失败，但将继续回滚任务状态")
+                    cancel_message = "无法通过API终止训练任务，但已回滚任务状态"
+                
+            elif task.status == TaskStatus.MARKING and task.marking_asset and task.prompt_id:
+                # 打标任务终止
+                logger.info(f"开始终止打标任务: {task_id}")
+                
+                # 配置ComfyUI API客户端
+                comfy_config = ComfyUIConfig(
+                    host=f"http://{task.marking_asset.ip}",
+                    port=task.marking_asset.ai_engine.get('port', 8188),
+                    client_id="TASK_TERMINATOR"
+                )
+                api = ComfyUIAPI(comfy_config)
+                
+                # 首先获取队列信息，检查任务是否在运行状态
+                try:
+                    queue_info = api.get_queue()
+                    
+                    # 检查任务是否在运行队列中
+                    task_running = False
+                    if "queue_running" in queue_info and queue_info["queue_running"]:
+                        for item in queue_info["queue_running"]:
+                            if len(item) > 1 and item[1] == task.prompt_id:
+                                task_running = True
+                                break
+                    
+                    # 检查任务是否在等待队列中
+                    task_pending = False
+                    if "queue_pending" in queue_info and queue_info["queue_pending"]:
+                        for item in queue_info["queue_pending"]:
+                            if len(item) > 1 and item[1] == task.prompt_id:
+                                task_pending = True
+                                break
+                    
+                    # 只有当任务确实在运行或等待时才尝试终止
+                    if task_running or task_pending:
+                        interrupt_result = api.interrupt()
+                        cancel_success = interrupt_result.get("success", False)
+                        
+                        if cancel_success:
+                            logger.info(f"成功终止打标任务 {task_id}")
+                            cancel_message = "打标任务已成功终止并回滚到NEW状态"
+                        else:
+                            logger.warning(f"终止打标任务 {task_id} 失败: {interrupt_result}")
+                            cancel_message = "无法通过API终止打标任务，但已回滚任务状态"
+                    else:
+                        logger.info(f"打标任务 {task_id} 不在队列中，可能已经完成或被终止")
+                        cancel_success = True
+                        cancel_message = "打标任务不在执行队列中，已回滚任务状态"
+                except Exception as e:
+                    logger.error(f"获取队列信息或终止打标任务时出错: {str(e)}")
+                    cancel_message = f"终止打标任务时出错: {str(e)}，但已回滚任务状态"
+            
+            # 回滚任务状态
+            rollback_success = TaskService._rollback_task_state(
+                db=db,
+                task=task,
+                target_status=target_status,
+                delete_history=True,
+                clear_assets=True
+            )
+            
+            if not rollback_success:
+                logger.warning(f"回滚任务 {task_id} 状态失败")
+                cancel_message += "，但回滚状态失败"
+            
+            return {
+                "success": True,
+                "message": cancel_message,
+                "api_cancel_success": cancel_success,
+                "rollback_success": rollback_success,
+                "target_status": target_status.value,
+                "task": task.to_dict()
+            }
+            
         except Exception as e:
-            logger.error(f"终止任务失败: {e}")
+            logger.error(f"终止任务失败: {str(e)}", exc_info=True)
             db.rollback()
-            return False 
+            return {
+                "success": False,
+                "message": f"终止任务失败: {str(e)}",
+                "error": str(e)
+            }
 
     @staticmethod
     def restart_task(db: Session, task_id: int) -> Optional[Dict]:
@@ -654,77 +1002,38 @@ class TaskService:
                 raise ValueError("只有错误状态或完成状态的任务可以重启")
 
             # 根据上一次执行的阶段决定重启到哪个状态
+            target_status = None
             if task.status == TaskStatus.COMPLETED or (task.marking_asset_id and not task.training_asset_id):
                 # 完成状态的任务或者只有标记资产的任务（在标记阶段失败的），恢复到新建状态
-                # 清除任务历史状态和日志
-                # 首先获取所有与该任务相关的历史记录ID
-                history_ids = [h.id for h in db.query(TaskStatusHistory).filter(TaskStatusHistory.task_id == task_id).all()]
-                # 删除这些历史记录相关的日志
-                if history_ids:
-                    db.query(TaskStatusLog).filter(TaskStatusLog.history_id.in_(history_ids)).delete(synchronize_session=False)
-                # 删除历史记录
-                db.query(TaskStatusHistory).filter(TaskStatusHistory.task_id == task_id).delete()
-                db.commit()
-                
-                # 如果存在标记目录，删除目录下的文件
-                if task.marked_images_path and os.path.exists(task.marked_images_path):
-                    try:
-                        # 只删除目录下的文件，保留目录本身
-                        for filename in os.listdir(task.marked_images_path):
-                            file_path = os.path.join(task.marked_images_path, filename)
-                            if os.path.isfile(file_path):
-                                os.remove(file_path)
-                                logger.info(f"已删除标记文件: {file_path}")
-                    except Exception as e:
-                        logger.error(f"删除标记文件失败: {str(e)}")
-                
-                task.update_status(TaskStatus.NEW, '任务已重启', db=db)
-                task.progress = 0
-                task.prompt_id = None
-                
-                # 清除资产关联
-                if task.marking_asset:
-                    task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
-                task.marking_asset_id = None
-                
-                # 清除训练资产关联（如果有）
-                if task.training_asset:
-                    task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
-                task.training_asset_id = None
-                
+                target_status = TaskStatus.NEW
             elif task.training_asset_id:
                 # 如果有训练资产，说明是在训练阶段失败的
-                # 只清除ERROR和TRAINING状态的历史记录和日志
-                error_training_histories = db.query(TaskStatusHistory).filter(
-                    TaskStatusHistory.task_id == task_id,
-                    TaskStatusHistory.status.in_(['ERROR', 'TRAINING'])
-                ).all()
-                
-                # 获取需要删除的历史记录ID
-                history_ids = [h.id for h in error_training_histories]
-                
-                # 删除这些历史记录相关的日志
-                if history_ids:
-                    db.query(TaskStatusLog).filter(TaskStatusLog.history_id.in_(history_ids)).delete(synchronize_session=False)
-                
-                # 删除历史记录
-                for history in error_training_histories:
-                    db.delete(history)
-                
-                db.commit()
-                
-                task.update_status(TaskStatus.MARKED, '任务已重启', db=db)
-                task.progress = 0
-                
-                # 清除训练资产关联
-                if task.training_asset:
-                    task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
-                task.training_asset_id = None
-
-            return {
-                'success': True,
-                'task': task.to_dict()
-            }
+                target_status = TaskStatus.MARKED
+            else:
+                # 默认回到新建状态
+                target_status = TaskStatus.NEW
+            
+            # 使用公共回滚方法
+            rollback_success = TaskService._rollback_task_state(
+                db=db,
+                task=task,
+                target_status=target_status,
+                delete_history=True,
+                clear_assets=True
+            )
+            
+            if rollback_success:
+                return {
+                    'success': True,
+                        'message': f'任务已成功重启并回滚到{target_status.value}状态',
+                    'task': task.to_dict()
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': '回滚任务状态失败',
+                    'error_type': 'SYSTEM_ERROR'
+                }
 
         except ValueError as e:
             logger.warning(f"重启任务失败: {str(e)}")
@@ -1035,12 +1344,20 @@ class TaskService:
                 # 更新任务状态，记录开始处理训练
                 task.update_status(TaskStatus.TRAINING, f'开始处理训练任务，使用资产: {asset.name}', db=db)
 
+                # 准备训练执行历史记录和配置
+                execution_result = TaskService._prepare_training_execution_history(task_id, db)
+                training_config = execution_result["training_config"]
+                output_dir = execution_result["training_output_path"]
+                
+                # 记录执行历史ID
+                task.execution_history_id = execution_result["execution_history_id"]
+                db.commit()
+                
                 # 去掉最后一个路径部分
                 input_dir = os.path.dirname(task.marked_images_path)
                 # 检查输入目录是否存在
                 if not os.path.exists(input_dir):
                     raise ValueError(f"标记图片目录不存在: {input_dir}")
-                output_dir = os.path.join(Config.OUTPUT_DIR, str(task_id))
                 
                 # 确保输出目录存在
                 os.makedirs(output_dir, exist_ok=True)
@@ -1049,12 +1366,12 @@ class TaskService:
                 task.add_log(f'输入目录: {input_dir}', db=db)
                 task.add_log(f'输出目录: {output_dir}', db=db)
 
-                # 获取训练配置
-                training_config = ConfigService.get_task_training_config(task.id)
-                training_config['output_dir'] = output_dir
-
                 # 记录训练配置
                 task.add_log(f'训练配置: {json.dumps(training_config, indent=2, ensure_ascii=False)}', db=db)
+                
+                # 更新训练配置中的输入输出路径
+                training_config['train_data_dir'] = input_dir
+                training_config['output_dir'] = output_dir
                 
                 handler = TrainRequestHandler(asset.ip,asset.lora_training.get('port',28000))
                 
@@ -1148,40 +1465,89 @@ class TaskService:
                 poll_interval = ConfigService.get_value('train_poll_interval', 30)
                 last_progress = 0
                 error_count = 0
+                max_error_retries = 10  # 最大错误重试次数
                 
                 while True:
                     try:
-                        completed, success, task_info = handler.check_status(training_task_id)
-                        logger.info(f"检查训练任务状态: {completed}, {success}, {task_info}")
+                        # 获取训练状态
+                        status = handler.check_status(training_task_id)
+                        logger.info(f"检查训练任务状态: {status}")
                         
-                        # 获取进度信息
-                        current_progress = task_info.get("progress", 0)
-                        status_message = task_info.get("message", "")
+                        # 判断任务状态
+                        is_completed = False
+                        is_success = False
+                        
+                        if status == "FINISHED":
+                            is_completed = True
+                            is_success = True
+                        elif status in ["FAILED", "TERMINATED"]:
+                            is_completed = True
+                            is_success = False
                         
                         with get_db() as complete_db:
                             task = complete_db.query(Task).filter(Task.id == task_id).first()
-                            
                             # 可能在训练过程中取消了任务，不再继续监听
                             if task and task.status != TaskStatus.TRAINING:
                                 logger.info("监听训练过程中任务被取消")
+                                
+                                # 更新执行历史记录状态为ERROR
+                                if task.execution_history_id:
+                                    execution_history = complete_db.query(TaskExecutionHistory).filter(
+                                        TaskExecutionHistory.id == task.execution_history_id
+                                    ).first()
+                                    if execution_history:
+                                        execution_history.status = 'ERROR'
+                                        execution_history.end_time = datetime.now()
+                                        execution_history.description += f"\n任务被取消于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                                        complete_db.commit()
+                                
                                 break
                                 
                             # 更新进度
-                            if task and current_progress != last_progress:
-                                task.progress = current_progress
-                                task.add_log(f'训练进度: {current_progress}%, {status_message}', db=complete_db)
-                                last_progress = current_progress
+
                             
                             # 任务完成处理
-                            if completed and task:
-                                if success:
+                            if is_completed and task:
+                                # 获取执行历史记录
+                                execution_history = None
+                                if task.execution_history_id:
+                                    execution_history = complete_db.query(TaskExecutionHistory).filter(
+                                        TaskExecutionHistory.id == task.execution_history_id
+                                    ).first()
+                                
+                                if is_success:
                                     task.update_status(TaskStatus.COMPLETED, '训练完成', db=complete_db)
                                     task.progress = 100
                                     task.add_log('训练任务成功完成', db=complete_db)
                                     
                                     # 记录输出文件路径
-                                    output_dir = os.path.join(Config.OUTPUT_DIR, str(task_id))
+                                    output_dir = task.training_output_path
                                     task.add_log(f'训练输出目录: {output_dir}', db=complete_db)
+                                    
+                                    # 获取训练结果
+                                    training_results = TaskService.get_training_results(task_id)
+                                    
+                                    # 获取训练loss数据
+                                    try:
+                                        loss_result = TaskService.get_training_loss_data(task_id)
+                                        if loss_result and loss_result.get('success') and loss_result.get('series'):
+                                            loss_data = {'series': loss_result.get('series')}
+                                        else:
+                                            loss_data = None
+                                    except Exception as loss_err:
+                                        logger.error(f"获取训练loss数据失败: {str(loss_err)}")
+                                        loss_data = None
+                                    
+                                    # 如果有执行历史记录，更新其状态和结果
+                                    if execution_history:
+                                        execution_history.status = 'COMPLETED'
+                                        execution_history.end_time = datetime.now()
+                                        execution_history.training_results = training_results
+                                        # 保存loss数据
+                                        if loss_data:
+                                            execution_history.loss_data = loss_data
+                                        execution_history.description += f"\n训练成功完成于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                                        complete_db.commit()
                                     
                                     # 尝试找到生成的Lora文件
                                     try:
@@ -1196,18 +1562,19 @@ class TaskService:
                                     except Exception as e:
                                         logger.error(f"查找Lora文件失败: {str(e)}")
                                 else:
-                                    # 训练失败
-                                    error_message = {
-                                        "message": status_message,
-                                        "details": task_info.get("details", {})
-                                    }
-                                    error_json = json.dumps(error_message, indent=2)
+                                    
                                     task.update_status(
                                         TaskStatus.ERROR,
-                                        f'训练失败: {status_message}',
+                                        f'训练失败，任务状态为: {status}',
                                         db=complete_db
                                     )
-                                    task.add_log(error_json, db=complete_db)
+                                    
+                                    # 如果有执行历史记录，更新其状态为ERROR
+                                    if execution_history:
+                                        execution_history.status = 'ERROR'
+                                        execution_history.end_time = datetime.now()
+                                        execution_history.description += f"\n训练失败于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {message}"
+                                        complete_db.commit()
                                 
                                 # 更新资产任务计数
                                 if task.training_asset:
@@ -1216,27 +1583,46 @@ class TaskService:
                                 break
                         
                         # 重置错误计数
+                        if error_count > 0:
+                            logger.info(f"从错误状态恢复，重置错误计数器。之前错误次数: {error_count}")
                         error_count = 0
                         
                     except Exception as check_err:
                         # 捕获检查状态时的错误
                         error_count += 1
-                        logger.error(f"检查训练状态时出错 ({error_count}/3): {str(check_err)}")
+                        
+                        # 根据错误次数决定等待时间
+                        if error_count <= max_error_retries // 2:  # 前一半错误使用较短的等待
+                            wait_time = 5  # 短等待时间
+                            logger.error(f"检查训练状态时出错 ({error_count}/{max_error_retries}): {str(check_err)}, 将在{wait_time}秒后重试")
+                            time.sleep(wait_time)
+                        else:
+                            logger.error(f"检查训练状态时出错 ({error_count}/{max_error_retries}): {str(check_err)}, 将继续使用正常轮询间隔")
                         
                         with get_db() as err_db:
                             task = err_db.query(Task).filter(Task.id == task_id).first()
                             if task:
-                                task.add_log(f'检查训练状态出错 ({error_count}/3): {str(check_err)}', db=err_db)
-                            # 如果累计出错3次，停止监控并更新任务状态
-                            if error_count >= 3:
+                                task.add_log(f'检查任务状态出错 ({error_count}/{max_error_retries}): {str(check_err)}', db=err_db)
+                            
+                            # 如果累计出错达到最大重试次数，停止监控并更新任务状态
+                            if error_count >= max_error_retries:
                                 task = err_db.query(Task).filter(Task.id == task_id).first()
                                 if task:
-                                    task.update_status(TaskStatus.ERROR, f'连续3次检查状态失败，停止监控: {str(check_err)}', db=err_db)
+                                    task.update_status(
+                                        TaskStatus.ERROR, 
+                                        f'连续{max_error_retries}次检查状态失败，停止监控: {str(check_err)}', 
+                                        db=err_db
+                                    )
                                     if task.training_asset:
                                         task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
                                         err_db.commit()
                                 break
                     
+                        # 如果错误次数未达到阈值，继续正常轮询
+                        if error_count < max_error_retries:
+                            continue
+                    
+                    # 正常情况下等待轮询间隔
                     time.sleep(poll_interval)
 
         except Exception as e:
@@ -1256,7 +1642,7 @@ class TaskService:
                     task.add_log(error_json, db=db)
                     if task.training_asset:
                         task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
-                        db.commit() 
+                        db.commit()
 
     @staticmethod
     def get_training_results(task_id: int) -> Dict:
@@ -1264,22 +1650,21 @@ class TaskService:
         获取训练结果，包括模型文件和预览图的相对路径
         
         Args:
-            db: 数据库会话
             task_id: 任务ID
             
         Returns:
             包含训练结果的字典
         """
-        try:
-            with get_db() as db:
+        with get_db() as db:
                 task = db.query(Task).filter(Task.id == task_id).first()
                 if not task:
                     return {"success": False, "message": f"任务 {task_id} 不存在"}
                 
-                # 训练输出目录
-                output_dir = os.path.join(Config.OUTPUT_DIR, str(task_id))
-                if not os.path.exists(output_dir):
-                    return {"success": False, "message": f"训练输出目录不存在: {output_dir}"}
+                # 使用任务指定的训练输出目录
+                if not task.training_output_path or not os.path.exists(task.training_output_path):
+                    return {"success": False, "message": f"训练输出目录不存在: {task.training_output_path}"}
+                    
+                output_dir = task.training_output_path
                     
                 # 获取相对路径前缀（从/data开始）
                 output_data_path = output_dir.replace(config.PROJECT_ROOT, "")
@@ -1289,34 +1674,54 @@ class TaskService:
                 if not output_data_path.endswith("/"):
                     output_data_path += "/"
                     
-                # 查找模型文件和预览图
-                models = []
+                # 预先加载sample目录中的所有预览图及其修改时间
+                sample_dir = os.path.join(output_dir, "sample")
+                preview_images = {}
+                latest_preview = None
+                latest_time = 0
                 
-                # 遍历输出目录查找模型文件
+                if os.path.exists(sample_dir) and os.path.isdir(sample_dir):
+                    # 使用一次循环处理所有预览图
+                    for img_file in os.listdir(sample_dir):
+                        if img_file.endswith('.png'):
+                            img_path = os.path.join(sample_dir, img_file)
+                            mod_time = os.path.getmtime(img_path)
+                            
+                            # 记录最新的预览图
+                            if mod_time > latest_time:
+                                latest_time = mod_time
+                                latest_preview = img_file
+                            
+                            # 尝试从文件名中提取epoch数字
+                            
+                            epoch_match = re.search(r'_e(\d{6})_', img_file)
+                            if epoch_match:
+                                epoch_num = epoch_match.group(1)
+                                preview_images[epoch_num] = img_file
+                
+                # 查找所有模型文件
+                models = []
                 for filename in os.listdir(output_dir):
                     file_path = os.path.join(output_dir, filename)
                     if os.path.isfile(file_path) and (filename.endswith('.safetensors') or filename.endswith('.pt')):
-                        # 查找模型对应的预览图
-                        preview_image = ''
-                        sample_dir = os.path.join(output_dir, "sample")
-                        
-                        # 获取模型名称（不含扩展名）用于匹配预览图
+                        # 获取模型名称（不含扩展名）
                         model_name_base = os.path.splitext(filename)[0]
                         
-                        # 尝试从模型名称中提取轮次编号（通常是"-000002"这样的格式）
-                        model_epoch = None
-                        import re
-                        epoch_match = re.search(r'-(\d{6})', model_name_base)
-                        if epoch_match:
-                            model_epoch = epoch_match.group(1)
+                        # 初始化预览图为空
+                        preview_image = ''
                         
-                        # 查找预览图
-                        if os.path.exists(sample_dir) and os.path.isdir(sample_dir):
-                            for img_file in os.listdir(sample_dir):
-                                # 如果找到了轮次编号，则使用轮次精确匹配预览图
-                                if model_epoch and f"_e{model_epoch}_" in img_file and img_file.endswith('.png'):
-                                    preview_image = f"{output_data_path}sample/{img_file}"
-                                    break
+                        # 尝试从模型名称中提取轮次编号
+                        epoch_match = re.search(r'-(\d{6})', model_name_base)
+                        
+                        if epoch_match:
+                            # 如果是有轮次的模型，查找对应的预览图
+                            epoch_num = epoch_match.group(1)
+                            if epoch_num in preview_images:
+                                preview_image = f"{output_data_path}sample/{preview_images[epoch_num]}"
+                        else:
+                            # 如果是最后一轮模型（没有轮次数字），使用最新的预览图
+                            if latest_preview:
+                                preview_image = f"{output_data_path}sample/{latest_preview}"
                         
                         # 构建模型信息
                         model_info = {
@@ -1329,7 +1734,6 @@ class TaskService:
                         models.append(model_info)
                 
                 return {
-                    "success": True,
                     "task_id": task_id,
                     "task_name": task.name,
                     "output_dir": output_data_path,
@@ -1337,98 +1741,189 @@ class TaskService:
                     "total_models": len(models)
                 }
             
-        except Exception as e:
-            logger.error(f"获取训练结果失败: {str(e)}", exc_info=True)
-            return {"success": False, "message": f"获取训练结果失败: {str(e)}"} 
-            
     @staticmethod
-    def get_training_loss_data(task_id: int) -> Dict:
+    def get_training_loss_data(task_id: int, history_id: int = None) -> Dict:
         """
         获取训练loss曲线数据并计算训练进度
         
         Args:
             task_id: 任务ID
+            history_id: 历史记录ID（可选）
             
         Returns:
             包含loss曲线数据和训练进度的字典
         """
-        try:
-            with get_db() as db:
-                task = db.query(Task).filter(Task.id == task_id).first()
-                if not task:
-                    return {"success": False, "message": f"任务 {task_id} 不存在"}
-                
-                # 检查任务状态
-                if task.status not in [TaskStatus.TRAINING, TaskStatus.COMPLETED]:
-                    return {"success": False, "message": f"任务状态 {task.status} 不支持获取训练数据"}
-                
-                # 检查是否有训练资产和prompt_id
-                if not task.training_asset or not task.prompt_id:
-                    return {"success": False, "message": "任务没有关联的训练资产或训练ID"}
-                
-                # 获取训练配置
+        with get_db() as db:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                raise ValueError(f"任务 {task_id} 不存在")
+            
+            # 检查任务状态
+            if task.status not in [TaskStatus.TRAINING, TaskStatus.COMPLETED]:
+                raise ValueError(f"任务状态 {task.status} 不支持获取训练数据")
+            
+            # 检查是否有训练资产和prompt_id
+            if not task.training_asset or not task.prompt_id:
+                raise ValueError("任务没有关联的训练资产或训练ID")
+        
+            # 获取训练配置（从执行历史记录中获取）
+            training_config = None
+            
+            # 先确定要使用的历史记录ID
+            history_id_to_use = history_id if history_id else task.execution_history_id
+            
+            execution_history = db.query(TaskExecutionHistory).filter(
+                TaskExecutionHistory.id == history_id_to_use
+            ).first()
+            
+            if execution_history and execution_history.training_config:
+                training_config = execution_history.training_config
+                logger.info(f"从执行历史记录中获取训练配置: {execution_history.id}")
+            
+            # 如果从执行历史记录中没有获取到配置，则回退到使用ConfigService
+            if not training_config:
                 training_config = ConfigService.get_task_training_config(task_id)
-                if not training_config:
-                    return {"success": False, "message": "无法获取训练配置"}
+                logger.info("从ConfigService获取训练配置")
+            
+            if not training_config:
+                raise ValueError("无法获取训练配置")
+            
+            # 计算总步数
+            image_count = db.query(TaskImage).filter(TaskImage.task_id == task_id).count()
+            repeat_num = training_config.get('repeat_num', 10)  # 默认重复次数为10
+            max_epochs = training_config.get('max_train_epochs', 10)  # 默认训练轮次为10
+            train_batch_size = training_config.get('train_batch_size', 1)  # 默认训练batch size为1
+            total_steps = image_count * repeat_num * max_epochs / train_batch_size
+            
+            # 创建训练处理器并获取loss数据
+            handler = TrainRequestHandler(
+                asset_ip=task.training_asset.ip,
+                training_port=task.training_asset.lora_training.get('port', 28000)
+            )
+            
+            loss_data = handler.get_training_loss_data(task.prompt_id)
+            
+            # 如果获取失败，抛出异常
+            if not loss_data:
+                raise RuntimeError("获取训练loss数据失败")
+            
+            # 计算当前步数和进度
+            current_step = 0
+            series_data = None
+            
+            if loss_data and isinstance(loss_data, list) and len(loss_data) > 0:
+                run_to_series = loss_data[0].get('runToSeries', {})
                 
-                # 计算总步数
-                image_count = db.query(TaskImage).filter(TaskImage.task_id == task_id).count()
-                repeat_num = training_config.get('repeat_num', 10)  # 默认重复次数为10
-                max_epochs = training_config.get('max_train_epochs', 10)  # 默认训练轮次为10
-                train_batch_size = training_config.get('train_batch_size', 1)  # 默认训练batch size为1
-                total_steps = image_count * repeat_num * max_epochs / train_batch_size
-                
-                # 创建训练处理器并获取loss数据
-                handler = TrainRequestHandler(
-                    asset_ip=task.training_asset.ip,
-                    training_port=task.training_asset.lora_training.get('port', 28000)
-                )
-                
-                loss_data = handler.get_training_loss_data(task.prompt_id)
-                
-                # 如果获取失败，返回错误信息
-                if not loss_data:
-                    return {"success": False, "message": "获取训练loss数据失败"}
-                
-                # 计算当前步数和进度
-                current_step = 0
-                series_data = None
-                
-                if loss_data and isinstance(loss_data, list) and len(loss_data) > 0:
-                    run_to_series = loss_data[0].get('runToSeries', {})
+                # 由于我们已经在TrainRequestHandler中匹配了正确的key
+                # 所以这里run_to_series应该只有一个元素，直接获取其值
+                if run_to_series:
+                    # 获取第一个(唯一的)key对应的数据
+                    first_key = next(iter(run_to_series))
+                    series_data = run_to_series[first_key]
                     
-                    # 由于我们已经在TrainRequestHandler中匹配了正确的key
-                    # 所以这里run_to_series应该只有一个元素，直接获取其值
-                    if run_to_series:
-                        # 获取第一个(唯一的)key对应的数据
-                        first_key = next(iter(run_to_series))
-                        series_data = run_to_series[first_key]
-                        
-                        # 如果找到了数据系列，获取最后一个数据点的步数
-                        if series_data and len(series_data) > 0:
-                            current_step = series_data[-1].get('step', 0)
-                        else:
-                            logger.warning(f"训练数据系列为空")
+                    # 如果找到了数据系列，获取最后一个数据点的步数
+                    if series_data and len(series_data) > 0:
+                        current_step = series_data[-1].get('step', 0)
                     else:
-                        logger.warning(f"未找到任何训练数据系列")
-                        return {"success": False, "message": "未找到任何训练数据系列"}
+                        logger.warning(f"训练数据系列为空")
+                else:
+                    logger.warning(f"未找到任何训练数据系列")
+                    raise ValueError("未找到任何训练数据系列")
+            
+            # 计算进度百分比
+            progress = min(100, int((current_step / total_steps) * 100)) if total_steps > 0 else 0
+            
+            result = {
+                "series": series_data,  # 返回匹配到的数据系列
+                "training_progress": {
+                    "current_step": current_step,
+                    "total_steps": total_steps,
+                    "progress_percent": progress,
+                    "image_count": image_count,
+                    "repeat_num": repeat_num,
+                    "max_epochs": max_epochs
+                },
+                "source": "live"
+            }
+            
+            # 如果任务有执行历史记录ID，保存loss数据到历史记录
+            if task.execution_history_id:
+                execution_history = db.query(TaskExecutionHistory).filter(
+                    TaskExecutionHistory.id == task.execution_history_id
+                ).first()
                 
-                # 计算进度百分比
-                progress = min(100, int((current_step / total_steps) * 100)) if total_steps > 0 else 0
-                
-                return {
-                    "success": True,
-                    "series": series_data,  # 返回匹配到的数据系列
-                    "training_progress": {
-                        "current_step": current_step,
-                        "total_steps": total_steps,
-                        "progress_percent": progress,
-                        "image_count": image_count,
-                        "repeat_num": repeat_num,
-                        "max_epochs": max_epochs
-                    }
-                }
-                
+                if execution_history:
+                    execution_history.loss_data = {"series": series_data}
+                    db.commit()
+            
+            return result
+
+    @staticmethod
+    def get_execution_history(db: Session, task_id: int) -> List[Dict]:
+        """
+        获取任务的执行历史记录列表
+        
+        Args:
+            db: 数据库会话
+            task_id: 任务ID
+            
+        Returns:
+            执行历史记录列表
+        """
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return []
+            
+            # 获取所有执行历史记录
+            history_records = db.query(TaskExecutionHistory).filter(
+                TaskExecutionHistory.task_id == task_id
+            ).order_by(TaskExecutionHistory.start_time.desc()).all()
+            
+            return [record.to_dict() for record in history_records]
+            
         except Exception as e:
-            logger.error(f"获取训练loss数据失败: {str(e)}", exc_info=True)
-            return {"success": False, "message": f"获取训练loss数据失败: {str(e)}"}
+            logger.error(f"获取执行历史记录失败: {str(e)}", exc_info=True)
+            return []
+
+    @staticmethod
+    def update_execution_history_result(db: Session, execution_history_id: int, results: Dict, loss_data: Dict = None, status: str = 'COMPLETED') -> bool:
+        """
+        更新执行历史记录的结果
+        
+        Args:
+            db: 数据库会话
+            execution_history_id: 执行历史记录ID
+            results: 结果数据
+            loss_data: loss数据
+            status: 状态（COMPLETED或ERROR）
+            
+        Returns:
+            是否更新成功
+        """
+        try:
+            execution_history = db.query(TaskExecutionHistory).filter(TaskExecutionHistory.id == execution_history_id).first()
+            if not execution_history:
+                return False
+            
+            execution_history.training_results = results
+            
+            # 如果提供了loss数据，更新loss_data字段
+            if loss_data:
+                execution_history.loss_data = loss_data
+            
+            execution_history.status = status
+            execution_history.end_time = datetime.now()
+            
+            if status == 'COMPLETED':
+                execution_history.description += f"\n结果更新于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            else:
+                execution_history.description += f"\n失败状态更新于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            
+            db.commit()
+            return True
+            
+        except Exception as e:
+            logger.error(f"更新执行历史记录结果失败: {str(e)}", exc_info=True)
+            db.rollback()
+            return False

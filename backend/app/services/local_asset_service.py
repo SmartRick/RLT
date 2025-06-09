@@ -43,7 +43,7 @@ class LocalAssetService:
                 # 设置本地资产的能力
                 local_asset.lora_training = {
                     'enabled': True,
-                    'port': 8188,  # 假设ComfyUI默认端口
+                    'port': 28000, 
                     'config_path': '',
                     'params': {},  # 高级参数配置，可覆盖全局配置
                     'verified': False,
@@ -56,7 +56,7 @@ class LocalAssetService:
                 
                 local_asset.ai_engine = {
                     'enabled': True,
-                    'port': 8188,  # 假设使用相同端口
+                    'port': 8188,
                     'api_url': '',
                     'timeout': 300,
                     'headers': {  # 请求头配置

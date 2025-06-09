@@ -5,7 +5,7 @@ from .settings import settings_bp
 from .training import training_bp
 from .terminal import terminal_bp
 from .common import common_bp
-from ..upload import upload_bp
+from .upload import upload_bp
 
 api_v1 = Blueprint('api_v1', __name__, url_prefix='/api/v1')
 

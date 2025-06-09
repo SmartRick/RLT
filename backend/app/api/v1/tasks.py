@@ -312,8 +312,25 @@ def get_training_loss(task_id):
     获取任务的训练loss曲线数据和训练进度
     """
     try:
-        result = TaskService.get_training_loss_data(task_id)
+        history_id = request.args.get('history_id')
+        if history_id:
+            try:
+                history_id = int(history_id)
+            except ValueError:
+                return error_json(msg=f"无效的历史记录ID: {history_id}")
+                
+        result = TaskService.get_training_loss_data(task_id, history_id)
         return success_json(data=result)
     except Exception as e:
         logger.error(f"获取训练loss数据失败: {str(e)}")
         return error_json(msg=f"获取训练loss数据失败: {str(e)}")
+
+@tasks_bp.route('/<int:task_id>/execution-history', methods=['GET'])
+@exception_handler
+def get_execution_history(task_id):
+    """
+    获取任务的执行历史记录列表
+    """
+    with get_db() as db:
+        history_records = TaskService.get_execution_history(db, task_id)
+        return success_json(data=history_records)
