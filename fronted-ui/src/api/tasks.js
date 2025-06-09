@@ -149,15 +149,5 @@ export const tasksApi = {
    */
   async getTrainingLoss(taskId) {
     return request.get(`${BASE_URL}/${taskId}/training-loss`)
-  },
-  
-  /**
-   * 下载训练模型
-   * @param {number|string} taskId 任务ID
-   * @param {string} modelPath 模型路径
-   * @returns {string} 下载链接
-   */
-  getModelDownloadUrl(taskId, modelPath) {
-    return `${BASE_URL}/${taskId}/download-model?path=${encodeURIComponent(modelPath)}`
   }
 } 

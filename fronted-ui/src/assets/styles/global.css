@@ -67,12 +67,14 @@ body {
   backdrop-filter: blur(20px);
   transition: transform var(--transition-speed),
               box-shadow var(--transition-speed);
+  padding: 20px;
+  transition: all 0.3s ease;
 }
 
-.mac-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
+/* .mac-card:hover { */
+  /* transform: translateY(-2px); */
+  /* box-shadow: var(--shadow-md); */
+/* } */
 
 /* 按钮样式 */
 .mac-btn {

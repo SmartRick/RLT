@@ -7,7 +7,7 @@
     <!-- 工具栏 -->
     <div class="toolbar">
       <div class="image-info">
-        <span class="image-name">{{ currentImage?.filename }}</span>
+        <span class="image-name">{{ getImageName(currentImage) }}</span>
         <span class="image-index">{{ currentIndex + 1 }}/{{ images.length }}</span>
       </div>
       <div class="actions">
@@ -54,8 +54,8 @@
       @wheel="handleWheel"
     >
       <img 
-        :src="currentImage?.preview_url"
-        :alt="currentImage?.filename"
+        :src="currentImage"
+        :alt="getImageName(currentImage)"
         :style="{
           transform: `translate3d(${translateX}px, ${translateY}px, 0) 
                      scale(${scale}) 
@@ -81,7 +81,10 @@ import {
 
 const props = defineProps({
   modelValue: Boolean,
-  image: Object,
+  image: {
+    type: String,
+    default: ''
+  },
   images: {
     type: Array,
     default: () => []
@@ -101,9 +104,15 @@ const translateY = ref(0)
 const lastTranslateX = ref(0)
 const lastTranslateY = ref(0)
 
+// 从路径中获取图片名称
+const getImageName = (imagePath) => {
+  if (!imagePath) return ''
+  return imagePath.split('/').pop()
+}
+
 // 当前图片索引
 const currentIndex = computed(() => {
-  return props.images.findIndex(img => img.id === props.image?.id)
+  return props.images.indexOf(props.image)
 })
 
 // 当前显示的图片
@@ -252,7 +261,7 @@ onUnmounted(() => {
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.9);
-  z-index: 1000;
+  z-index: 1001;
   display: flex;
   align-items: center;
   justify-content: center;

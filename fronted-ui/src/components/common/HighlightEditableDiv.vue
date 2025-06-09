@@ -124,7 +124,7 @@ const extractTextFromHtml = (html) => {
 }
 
 // 处理输入事件
-const handleInput = (event) => {
+const handleInput = () => {
   if (isComposing.value) return
   
   // 插入临时标记来跟踪光标位置

@@ -1,7 +1,7 @@
 <template>
   <div class="training-details">
     <div class="details-header">
-      <h3 class="details-title">训练详情 - {{ taskName }}</h3>
+      <h3 class="details-title">任务 - {{ taskName }}</h3>
       <div class="header-info" v-if="trainingProgress">
         <div class="progress-info">
           <span class="progress-label">训练进度:</span>
@@ -20,7 +20,10 @@
     <div class="details-content">
       <!-- 左侧Loss曲线区域 -->
       <div class="loss-section">
-        <h4 class="section-title">训练Loss曲线</h4>
+        <h4 class="section-title">
+          训练Loss曲线
+          <span v-if="lastStepLoss" class="loss-value">(当前Loss: {{ lastStepLoss }})</span>
+        </h4>
         <div class="chart-container" ref="chartContainer" id="training-loss-chart">
           <div v-if="isLoadingLoss" class="loading-placeholder">加载中...</div>
           <div v-else-if="!hasLossData" class="empty-placeholder">
@@ -42,25 +45,28 @@
               :src="selectedModel.preview_image" 
               alt="模型预览" 
               class="large-preview-image"
+              @click="openImagePreview(selectedModel.preview_image)"
             />
             <div v-else class="no-preview-large">
               <div class="empty-icon">🖼️</div>
               <div class="empty-text">{{ selectedModel ? '无预览图' : '请选择模型查看预览' }}</div>
             </div>
-          </div>
-          
-          <div v-if="selectedModel" class="selected-model-info">
-            <div class="model-name" :title="selectedModel.name">{{ selectedModel.name }}</div>
-            <div class="model-meta">
-              <span class="model-size">{{ formatFileSize(selectedModel.size) }}</span>
-              <span class="model-date">{{ formatDate(selectedModel.modified_time) }}</span>
+            
+            <div v-if="selectedModel" class="selected-model-info">
+              <div class="model-info-left">
+                <div class="model-name" :title="selectedModel.name">{{ selectedModel.name }}</div>
+                <div class="model-meta">
+                  <span class="model-size">{{ formatFileSize(selectedModel.size) }}</span>
+                  <span class="model-date">{{ formatDate(selectedModel.modified_time) }}</span>
+                </div>
+              </div>
+              <button class="download-btn" @click="downloadModel(selectedModel)">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="download-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                下载
+              </button>
             </div>
-            <button class="download-btn" @click="downloadModel(selectedModel)">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="download-icon">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-              </svg>
-              下载模型
-            </button>
           </div>
         </div>
 
@@ -73,7 +79,7 @@
             <div class="empty-text">暂无训练模型</div>
             <div class="empty-desc" v-if="isTraining">训练进行中，模型将在训练过程中保存</div>
           </div>
-          <div v-else class="models-thumbnails">
+          <div v-else class="models-thumbnails" ref="thumbnailsContainer">
             <div 
               v-for="(model, index) in models" 
               :key="index" 
@@ -137,8 +143,15 @@ const props = defineProps({
   refreshInterval: {
     type: Number,
     default: 10000 // 默认10秒刷新一次
+  },
+  task: {
+    type: Object,
+    default: () => ({})
   }
 })
+
+// 添加自定义事件
+const emit = defineEmits(['preview-image', 'model-images-change'])
 
 // 状态变量
 const chartContainer = ref(null)
@@ -151,8 +164,25 @@ const isLoadingLoss = ref(false)
 const refreshTimer = ref(null)
 const selectedModel = ref(null)
 
+// 处理缩略图列表的横向滚动
+const thumbnailsContainer = ref(null)
+
 // 计算属性
 const hasLossData = computed(() => lossData.value && lossData.value.length > 0)
+const lastStepLoss = computed(() => {
+  if (lossData.value && lossData.value.length > 0) {
+    const lastLoss = lossData.value[lossData.value.length - 1]
+    return lastLoss.value.toFixed(4)
+  }
+  return null
+})
+
+// 计算模型的所有预览图片数组
+const modelPreviewImages = computed(() => {
+  return models.value
+    .filter(model => model.preview_image)
+    .map(model => model.preview_image)
+})
 
 // 获取训练结果
 const fetchTrainingResults = async () => {
@@ -188,10 +218,10 @@ const fetchTrainingLoss = async () => {
       lossData.value = data.series
       trainingProgress.value = data.training_progress
       
-      // 更新图表
-      if (lossData.value.length > 0) {
-        updateChart()
-      }
+      // 确保DOM已渲染后再初始化或更新图表
+      nextTick(() => {
+          updateChart()
+      })
     }
   } catch (error) {
     console.error('获取训练Loss数据失败:', error)
@@ -207,19 +237,19 @@ const selectModel = (model) => {
 
 // 初始化图表
 const initChart = () => {
-  if (!chartContainer.value) {
-    console.warn('Chart container not found')
-    return
-  }
-  
   try {
     // 销毁可能存在的旧图表实例
     if (chart.value) {
       chart.value.dispose()
     }
-    
     // 创建新图表实例
-    chart.value = echarts.init(chartContainer.value)
+    chart.value = echarts.init(chartContainer.value, null, {
+      renderer: 'canvas',
+      useDirtyRect: true,
+      // 添加passive选项解决事件监听器警告
+      useCoarsePointer: true,
+      pointerOptions: { passive: true }
+    })
     
     // 设置图表选项
     const option = {
@@ -286,16 +316,18 @@ const initChart = () => {
     chart.value.setOption(option)
     
     // 添加窗口大小变化时的自适应
-    window.addEventListener('resize', handleResize)
+    window.addEventListener('resize', handleResize, { passive: true })
+    
+    return true
   } catch (error) {
     console.error('初始化图表失败:', error)
+    return false
   }
 }
 
 // 更新图表数据
 const updateChart = () => {
   if (!chart.value) {
-    console.warn('Chart instance not available when updating data')
     // 如果图表实例不存在，尝试初始化
     nextTick(() => {
       if (chartContainer.value) {
@@ -343,7 +375,7 @@ const handleResize = () => {
 const downloadModel = (model) => {
   if (!model || !model.path) return
   
-  const downloadUrl = tasksApi.getModelDownloadUrl(props.taskId, model.path)
+  const downloadUrl = model.path
   window.open(downloadUrl, '_blank')
 }
 
@@ -410,6 +442,30 @@ watch(() => props.taskId, () => {
   fetchTrainingLoss()
 })
 
+// 监听鼠标滚轮事件实现横向滚动
+const handleThumbnailsScroll = (event) => {
+  if (!thumbnailsContainer.value) return
+  
+  // 阻止默认的垂直滚动
+  event.preventDefault()
+  
+  // 根据滚轮方向确定滚动方向和距离
+  const scrollAmount = event.deltaY || event.deltaX
+  thumbnailsContainer.value.scrollLeft += scrollAmount
+}
+
+// 修改图片预览方法，发送事件到父组件
+const openImagePreview = (imageUrl) => {
+  if (!imageUrl) return
+  // 触发父组件的预览事件
+  emit('preview-image', imageUrl)
+}
+
+// 添加对modelPreviewImages变化的监听，向父组件发送更新
+watch(modelPreviewImages, (images) => {
+  emit('model-images-change', images)
+}, { immediate: true })
+
 // 组件挂载时
 onMounted(async () => {
   // 先获取数据
@@ -420,36 +476,20 @@ onMounted(async () => {
   
   // 使用nextTick确保DOM已渲染
   nextTick(() => {
-    // 首先尝试通过ref获取DOM元素
-    if (chartContainer.value) {
-      initChart()
-    } else {
-      // 如果ref获取失败，尝试通过ID获取
-      console.warn('Chart container ref not available, trying by ID')
-      const container = document.getElementById('training-loss-chart')
-      if (container) {
-        // 手动设置ref值
-        chartContainer.value = container
-        initChart()
-      } else {
-        // 如果仍然失败，延迟尝试
-        console.warn('Chart container not found by ID, trying with delay')
-        setTimeout(() => {
-          const delayedContainer = document.getElementById('training-loss-chart')
-          if (delayedContainer) {
-            chartContainer.value = delayedContainer
-            initChart()
-          } else {
-            console.error('Failed to initialize chart: container not found')
-          }
-        }, 500)
-      }
+    // 如果已有数据，初始化图表并绘制
+    if (initChart() && lossData.value && lossData.value.length > 0) {
+      updateChart()
     }
   })
   
   // 如果是训练中状态，启动自动刷新
   if (props.isTraining) {
     startAutoRefresh()
+  }
+  
+  // 添加滚轮事件监听
+  if (thumbnailsContainer.value) {
+    thumbnailsContainer.value.addEventListener('wheel', handleThumbnailsScroll, { passive: false })
   }
 })
 
@@ -469,6 +509,11 @@ onUnmounted(() => {
     }
     chart.value = null
   }
+  
+  // 移除滚轮事件监听
+  if (thumbnailsContainer.value) {
+    thumbnailsContainer.value.removeEventListener('wheel', handleThumbnailsScroll)
+  }
 })
 </script>
 
@@ -478,6 +523,7 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* 添加overflow: hidden防止内容溢出 */
 }
 
 .details-header {
@@ -537,6 +583,7 @@ onUnmounted(() => {
   gap: 16px;
   font-size: 14px;
   color: var(--text-secondary);
+  max-height: calc(100% - 60px); /* 减去标题区域的高度 */
 }
 
 .details-content {
@@ -544,7 +591,7 @@ onUnmounted(() => {
   display: flex;
   gap: 24px;
   overflow: hidden;
-  min-height: 600px;
+  min-height: 0; /* 修改min-height为0，允许内容区域收缩 */
 }
 
 /* 左侧Loss曲线区域 */
@@ -552,15 +599,14 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* 确保flex项可以收缩 */
+  min-width: 0;
+  overflow: hidden;
 }
 
 .chart-container {
   flex: 1;
   position: relative;
-  min-height: 500px;
-  height: 500px; /* 添加明确的高度 */
-  width: 100%; /* 确保宽度为100% */
+  min-height: 0; 
   background-color: var(--background-secondary);
   border-radius: 8px;
 }
@@ -571,50 +617,114 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  min-width: 0; /* 确保flex项可以收缩 */
+  min-width: 0;
+  overflow: hidden;
 }
 
 .model-preview-area {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
+  overflow: hidden; 
+  position: relative;
 }
 
 .model-large-preview {
-  height: 300px;
+  height: 400px;
   background-color: var(--background-tertiary);
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  position: relative;
 }
 
 .large-preview-image {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  cursor: pointer;
 }
 
 .selected-model-info {
-  margin-top: 16px;
-  padding: 16px;
-  background-color: var(--background-secondary);
-  border-radius: 8px;
+  position: absolute; 
+  bottom: 0; 
+  left: 0;
+  right: 0;
+  padding: 12px;
+  background-color: rgba(0, 0, 0, 0.6); 
+  backdrop-filter: blur(8px); 
+  border-radius: 0 0 8px 8px; 
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 1;
+}
+
+.model-info-left {
+  flex: 1;
+  overflow: hidden;
+}
+
+.model-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.download-btn {
+  width: auto; /* 改为自适应宽度 */
+  padding: 6px 12px;
+  border: none;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 0.2s;
+  flex-shrink: 0; /* 防止按钮被压缩 */
+}
+
+.download-btn:hover {
+  background-color: var(--primary-color-dark);
+}
+
+.download-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .models-list-container {
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* 添加overflow: hidden */
 }
 
 .models-thumbnails {
   display: flex;
   gap: 12px;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 4px;
   padding-bottom: 12px;
+  flex-wrap: nowrap;
 }
 
 .model-thumbnail {
@@ -625,6 +735,10 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   background-color: var(--background-secondary);
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  max-height: 150px; /* 添加最大高度限制 */
 }
 
 .model-thumbnail.active {
@@ -637,12 +751,13 @@ onUnmounted(() => {
 }
 
 .thumbnail-preview {
-  height: 100px;
+  height: 150px;
   background-color: var(--background-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  flex: 1;
 }
 
 .thumbnail-preview img {
@@ -666,6 +781,13 @@ onUnmounted(() => {
   margin: 0 0 16px 0;
 }
 
+.section-title .loss-value {
+  font-size: 14px;
+  font-weight: normal;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
 .no-preview-large {
   display: flex;
   flex-direction: column;
@@ -683,46 +805,6 @@ onUnmounted(() => {
   height: 100%;
   font-size: 12px;
   color: var(--text-secondary);
-}
-
-.model-name {
-  font-size: 16px;
-  font-weight: 500;
-  margin-bottom: 8px;
-  word-break: break-all;
-}
-
-.model-meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-
-.download-btn {
-  width: 100%;
-  padding: 8px;
-  border: none;
-  background-color: var(--primary-color);
-  color: white;
-  border-radius: 4px;
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: background-color 0.2s;
-}
-
-.download-btn:hover {
-  background-color: var(--primary-color-dark);
-}
-
-.download-icon {
-  width: 16px;
-  height: 16px;
 }
 
 .loading-placeholder,

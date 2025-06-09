@@ -168,7 +168,11 @@
     </BaseModal>
 
     <!-- 图片预览模态框 -->
-    <ImageViewer v-model="showPreview" v-model:image="selectedImage" :images="task?.images || []" />
+    <ImageViewer 
+      v-model="showPreview" 
+      v-model:image="selectedImage" 
+      :images="previewSource === 'task' ? getTaskImagesUrls() : trainingModelImages" 
+    />
     
     <!-- 训练详情模态框 -->
     <BaseModal 
@@ -176,8 +180,6 @@
       title="训练详情" 
       :width="70"
       :loading="false" 
-      size="large"
-      :fullscreen-toggle="true"
       :showFooter="false"
     >
       <template #body>
@@ -185,6 +187,8 @@
           :taskId="taskId" 
           :taskName="task?.name || ''" 
           :isTraining="task?.status === 'TRAINING'"
+          @preview-image="handleTrainingPreviewImage"
+          @model-images-change="updateTrainingModelImages"
         />
       </template>
     </BaseModal>
@@ -192,6 +196,7 @@
 </template>
 
 <script setup>
+/* eslint-disable */
 import { ref, computed, onMounted, onUnmounted, watch, } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -249,6 +254,10 @@ const isBatchEditing = ref(false)
 
 // 训练详情相关
 const showTrainingDetailsModal = ref(false)
+
+// 图片预览相关
+const previewSource = ref('task') // 'task' 或 'training'
+const trainingModelImages = ref([]) // 训练模型预览图片数组
 
 // 计算是否可以查看训练详情
 const canViewTrainingDetails = computed(() => {
@@ -473,8 +482,8 @@ const handleDeleteImage = async (imageId) => {
 
 // 处理图片预览
 const handlePreview = (image) => {
-  console.log("image", image)
-  selectedImage.value = image
+  previewSource.value = 'task'
+  selectedImage.value = image.path
   showPreview.value = true
 }
 
@@ -748,6 +757,24 @@ const showBatchEditModal = () => {
   if (imageGridRef.value) {
     imageGridRef.value.showBatchEditModal = true
   }
+}
+
+// 处理训练详情预览
+const handleTrainingPreviewImage = (image) => {
+  previewSource.value = 'training'
+  selectedImage.value = image // 训练详情传递的已经是图片路径
+  showPreview.value = true
+}
+
+// 处理训练模型图片变化
+const updateTrainingModelImages = (images) => {
+  trainingModelImages.value = images // 这些已经是图片路径的数组
+}
+
+// 获取任务图片的URL数组
+const getTaskImagesUrls = () => {
+  if (!task.value?.images || task.value.images.length === 0) return []
+  return task.value.images.map(image => image.preview_url)
 }
 
 // 初始化

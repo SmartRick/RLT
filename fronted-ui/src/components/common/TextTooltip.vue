@@ -50,8 +50,8 @@
 </template>
 
 <script setup>
+/* eslint-disable */
 import { ref, defineProps, defineEmits, watch, onUnmounted, computed } from 'vue'
-import { Teleport, Transition } from 'vue'
 import message from '@/utils/message'
 import { stripHtml } from '@/utils/textFormatters'
 

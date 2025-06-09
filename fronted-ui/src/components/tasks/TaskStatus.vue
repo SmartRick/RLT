@@ -147,6 +147,7 @@
 </template>
 
 <script setup>
+/* eslint-disable */
 import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import {
   CheckCircleIcon,

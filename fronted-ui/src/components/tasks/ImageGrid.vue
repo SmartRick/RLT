@@ -62,7 +62,7 @@
             <img 
               :src="image.preview_url" 
               :alt="image.filename"
-              @click="handlePreview(image)"
+              @click="handlePreview(image.preview_url)"
             >
           </div>
           
@@ -235,6 +235,7 @@
 </template>
 
 <script setup>
+/* eslint-disable */
 import { computed, ref, watch, onUnmounted } from 'vue'
 import { Teleport, Transition } from 'vue'
 import { PhotoIcon, TrashIcon, PencilIcon, XMarkIcon, CloudArrowUpIcon as UploadIcon } from '@heroicons/vue/24/outline'

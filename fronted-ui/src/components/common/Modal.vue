@@ -277,7 +277,7 @@ export default {
 }
 
 .modal-header {
-  padding: var(--spacing-4) var(--spacing-6);
+  padding-bottom: var(--spacing-2);
   border-bottom: 1px solid var(--border-color-light);
   display: flex;
   align-items: center;

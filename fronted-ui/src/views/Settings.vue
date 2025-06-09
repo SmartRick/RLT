@@ -126,26 +126,12 @@
       <div class="form-row">
         <div class="form-group toggle-group">
           <div class="toggle-label">自动裁剪</div>
-          <div class="toggle-switch">
-            <input 
-              type="checkbox" 
-              id="auto_crop" 
-              v-model="form.mark_config.auto_crop"
-            >
-            <label for="auto_crop"></label>
-          </div>
+          <SwitchButton v-model="form.mark_config.auto_crop" />
         </div>
         
         <div class="form-group toggle-group">
           <div class="toggle-label">自动标签</div>
-          <div class="toggle-switch">
-            <input 
-              type="checkbox" 
-              id="auto_tag" 
-              v-model="form.mark_config.auto_tag"
-            >
-            <label for="auto_tag"></label>
-          </div>
+          <SwitchButton v-model="form.mark_config.auto_tag" />
         </div>
       </div>
       
@@ -357,6 +343,7 @@ import message from '@/utils/message'
 import FileUploader from '@/components/common/FileUploader.vue'
 import KeyValueConfig from '@/components/common/KeyValueConfig.vue'
 import LoraTrainingParams from '@/components/common/LoraTrainingParams.vue'
+import SwitchButton from '@/components/common/SwitchButton.vue'
 import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
@@ -735,51 +722,6 @@ onMounted(() => {
 .toggle-label {
   font-size: 14px;
   color: var(--text-secondary);
-}
-
-.toggle-switch {
-  position: relative;
-  width: 46px;
-  height: 24px;
-  margin-top: 4px;
-}
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-switch label {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: var(--background-tertiary);
-  border-radius: 24px;
-  cursor: pointer;
-  transition: 0.4s;
-}
-
-.toggle-switch label:before {
-  position: absolute;
-  content: "";
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  border-radius: 50%;
-  transition: 0.4s;
-}
-
-.toggle-switch input:checked + label {
-  background-color: var(--primary-color);
-}
-
-.toggle-switch input:checked + label:before {
-  transform: translateX(22px);
 }
 
 /* 工作流文件样式优化 */
