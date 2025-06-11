@@ -21,7 +21,6 @@
 import { defineProps, defineEmits, ref, watch, toRaw } from 'vue';
 import LoraParamAssetView from './LoraParamAssetView.vue';
 import LoraParamSettingsView from './LoraParamSettingsView.vue';
-import { useLoraParams } from '../../composables/useLoraParams';
 
 const props = defineProps({
   modelValue: {

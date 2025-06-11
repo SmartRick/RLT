@@ -238,10 +238,17 @@ const selectModel = (model) => {
 // 初始化图表
 const initChart = () => {
   try {
+    // 确保DOM元素已经存在
+    if (!chartContainer.value) {
+      console.warn('Chart container is not ready yet')
+      return false
+    }
+    
     // 销毁可能存在的旧图表实例
     if (chart.value) {
       chart.value.dispose()
     }
+    
     // 创建新图表实例
     chart.value = echarts.init(chartContainer.value, null, {
       renderer: 'canvas',
@@ -327,14 +334,19 @@ const initChart = () => {
 
 // 更新图表数据
 const updateChart = () => {
+  // 如果没有有效的图表容器元素，不进行任何操作
+  if (!chartContainer.value) {
+    console.warn('Chart container is not available')
+    return
+  }
+  
   if (!chart.value) {
     // 如果图表实例不存在，尝试初始化
-    nextTick(() => {
-      if (chartContainer.value) {
-        initChart()
-      }
-    })
-    return
+    const initialized = initChart()
+    if (!initialized) {
+      console.warn('Failed to initialize chart')
+      return
+    }
   }
   
   if (!lossData.value || lossData.value.length === 0) {
@@ -458,7 +470,7 @@ const handleThumbnailsScroll = (event) => {
 const openImagePreview = (imageUrl) => {
   if (!imageUrl) return
   // 触发父组件的预览事件
-  emit('preview-image', imageUrl)
+  emit('preview-image', 'train',imageUrl)
 }
 
 // 添加对modelPreviewImages变化的监听，向父组件发送更新
@@ -474,11 +486,17 @@ onMounted(async () => {
     fetchTrainingLoss()
   ])
   
-  // 使用nextTick确保DOM已渲染
+  // 确保DOM已完全渲染并且chartContainer元素存在
   nextTick(() => {
-    // 如果已有数据，初始化图表并绘制
-    if (initChart() && lossData.value && lossData.value.length > 0) {
-      updateChart()
+    // 确保DOM元素已存在
+    if (chartContainer.value) {
+      // 如果已有数据，初始化图表并绘制
+      const initialized = initChart()
+      if (initialized && lossData.value && lossData.value.length > 0) {
+        updateChart()
+      }
+    } else {
+      console.warn('Chart container not found in DOM')
     }
   })
   
@@ -487,7 +505,7 @@ onMounted(async () => {
     startAutoRefresh()
   }
   
-  // 添加滚轮事件监听
+  // 添加滚轮事件监听，确保DOM元素存在
   if (thumbnailsContainer.value) {
     thumbnailsContainer.value.addEventListener('wheel', handleThumbnailsScroll, { passive: false })
   }

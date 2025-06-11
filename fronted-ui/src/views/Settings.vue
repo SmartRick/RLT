@@ -361,8 +361,13 @@ const activeTab = ref('system')
 
 // 根据路由设置当前Tab
 const setTabFromRoute = () => {
+  // 如果当前路由不是设置页面，则不处理
+  if (!route.path.startsWith('/settings')) {
+    return
+  }
+  
   // 从路由元数据中获取tab参数
-  const tabParam = route.meta.tab
+  const tabParam = route.params.tab || route.meta.tab
   
   if (tabParam && tabs.some(tab => tab.key === tabParam)) {
     activeTab.value = tabParam
@@ -385,14 +390,18 @@ const setTabFromRoute = () => {
 
 // 监听activeTab变化，更新路由
 watch(activeTab, (newTab) => {
-  if (route.meta.tab !== newTab) {
+  // 只有在设置页面时才更新路由
+  if (route.path.startsWith('/settings') && route.params.tab !== newTab) {
     router.push(`/settings/${newTab}`)
   }
 })
 
 // 监听路由变化，更新当前Tab
 watch(() => route.path, () => {
-  setTabFromRoute()
+  // 只有当路径以/settings开头时才更新标签页
+  if (route.path.startsWith('/settings')) {
+    setTabFromRoute()
+  }
 }, { immediate: true })
 
 // 表单数据

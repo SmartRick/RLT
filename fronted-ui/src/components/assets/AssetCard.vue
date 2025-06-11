@@ -66,7 +66,12 @@
 
     <!-- 卡片操作栏 -->
     <div class="asset-card-actions">
-      <button class="mac-btn small terminal-btn" @click.stop="$emit('open-terminal', asset)">
+      <button 
+        class="mac-btn small terminal-btn" 
+        @click.stop="$emit('open-terminal', asset)"
+        :disabled="asset.status !== 'CONNECTED'"
+        :title="asset.status !== 'CONNECTED' ? '请先验证SSH连接' : '打开终端'"
+      >
         <TerminalIcon class="btn-icon" />
         <span>终端</span>
       </button>
@@ -170,13 +175,8 @@ const formatDate = (date) => {
   position: relative;
 }
 
-.asset-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
-}
-
 .asset-card.is-selected {
-  border: 2px solid var(--primary-color, #007AFF);
+  border: 1px solid var(--primary-color, #007AFF);
   box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
 }
 
@@ -395,8 +395,15 @@ const formatDate = (date) => {
   border: none;
 }
 
-.terminal-btn:hover {
+.terminal-btn:hover:not(:disabled) {
   background: #E0F2FE;
+}
+
+.terminal-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #F3F4F6;
+  color: #9CA3AF;
 }
 
 .btn-icon {

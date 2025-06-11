@@ -94,7 +94,7 @@
     />
 
     <!-- 添加终端弹窗组件 -->
-    <WebTerminal
+    <RemotePanel
       v-if="showTerminal"
       v-model="showTerminal"
       :asset="selectedTerminalAsset"
@@ -113,7 +113,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon
 } from '@heroicons/vue/24/outline'
-import WebTerminal from '@/components/terminal/WebTerminal.vue'
+import RemotePanel from '@/components/terminal/RemotePanel.vue'
 import AssetForm from '@/components/assets/AssetForm.vue'
 
 defineComponent({
@@ -222,8 +222,18 @@ const fetchAssets = async () => {
     const data = await assetApi.getAssets()
     assets.value = data.map(asset => ({
       ...asset,
-      isVerifying: false // 添加验证状态标记
+      isVerifying: false, // 添加验证状态标记
+      status: asset.status || 'PENDING' // 确保有默认状态
     }))
+    
+    // 对资产进行SSH连接验证
+    const sshVerifyPromises = assets.value
+      .filter(asset => asset.name !== "本地系统") // 排除本地系统资产
+      .map(asset => {
+        // 标记为正在验证中
+        asset.status = 'PENDING';
+        return verifySshConnection(asset)
+      })
     
     // 对已启用能力的资产进行自动验证
     const verifyPromises = assets.value
@@ -234,11 +244,28 @@ const fetchAssets = async () => {
       })
     
     // 并行执行所有验证
-    await Promise.all(verifyPromises)
+    await Promise.all([...sshVerifyPromises, ...verifyPromises])
     
   } catch (error) {
     console.error('获取资产列表失败:', error)
     message.error('获取资产列表失败')
+  }
+}
+
+// 验证SSH连接
+const verifySshConnection = async (asset) => {
+  if (!asset || asset.name === "本地系统") return // 跳过本地系统资产
+  
+  try {
+    console.log("verifySshConnection",asset)
+    // 调用API验证SSH连接
+    await assetApi.verifySshConnection(asset)
+    // 更新资产状态为已连接
+    asset.status = 'CONNECTED'
+  } catch (error) {
+    console.error('SSH连接验证失败:', error)
+    // 更新资产状态为连接错误
+    asset.status = 'CONNECTION_ERROR'
   }
 }
 

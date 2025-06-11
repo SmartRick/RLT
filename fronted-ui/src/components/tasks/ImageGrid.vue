@@ -389,7 +389,8 @@ const handleDrop = (event) => {
 
 // 处理预览
 const handlePreview = (image) => {
-  emit('preview', image)
+  console.log("显示图片",image)
+  emit('preview','task', image)
 }
 
 // 处理删除

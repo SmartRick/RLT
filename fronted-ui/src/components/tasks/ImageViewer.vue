@@ -112,6 +112,8 @@ const getImageName = (imagePath) => {
 
 // 当前图片索引
 const currentIndex = computed(() => {
+  console.log("需要显示的图片",props.image)
+  console.log("数组中的图片",props.images)
   return props.images.indexOf(props.image)
 })
 

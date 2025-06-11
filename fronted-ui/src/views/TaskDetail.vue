@@ -75,16 +75,8 @@
             </template>
             <!-- 全选按钮 -->
             <template v-if="task?.images?.length > 0">
-              <button 
-                class="mac-btn secondary" 
-                @click="toggleSelectAllImages" 
-                title="全选/取消全选"
-              >
-                <input 
-                  type="checkbox" 
-                  :checked="isAllImagesSelected" 
-                  class="select-all-checkbox"
-                />
+              <button class="mac-btn secondary" @click="toggleSelectAllImages" title="全选/取消全选">
+                <input type="checkbox" :checked="isAllImagesSelected" class="select-all-checkbox" />
                 <span>{{ isAllImagesSelected ? '取消全选' : '全选' }}</span>
               </button>
               <div class="action-divider"></div>
@@ -97,21 +89,11 @@
         </div>
 
         <!-- 图片网格 -->
-        <ImageGrid 
-          ref="imageGridRef"
-          :images="task?.images" 
-          :loading="isLoading" 
-          :status="task?.status" 
-          :marked-texts="markedTexts"
-          :task-id="taskId" 
-          @delete="handleDeleteImage" 
-          @preview="handlePreview"
-          @update:marked-text="handleUpdateMarkedText"
-          @batch-delete="handleBatchDeleteImages"
-          @batch-update-marked-text="handleBatchUpdateMarkedTexts"
-          @selection-change="handleSelectionChange"
-          @upload-files="handleDragUpload"
-        />
+        <ImageGrid ref="imageGridRef" :images="task?.images" :loading="isLoading" :status="task?.status"
+          :marked-texts="markedTexts" :task-id="taskId" @delete="handleDeleteImage" @preview="handlePreview"
+          @update:marked-text="handleUpdateMarkedText" @batch-delete="handleBatchDeleteImages"
+          @batch-update-marked-text="handleBatchUpdateMarkedTexts" @selection-change="handleSelectionChange"
+          @upload-files="handleDragUpload" />
       </div>
 
       <!-- 右侧信息区域 -->
@@ -134,16 +116,20 @@
               <div class="info-item">
                 <span class="label">标记资产</span>
                 <div class="asset-info" v-if="task?.marking_asset">
-                  <span class="asset-name">{{ task.marking_asset.name }}</span>
-                  <span class="asset-ip">({{ task.marking_asset.ip }})</span>
+                  <div class="asset-details">
+                    <div class="asset-name">{{ task.marking_asset.name }}</div>
+                    <div class="asset-ip">({{ task.marking_asset.ip }})</div>
+                  </div>
                 </div>
                 <span v-else class="no-asset">暂无</span>
               </div>
               <div class="info-item">
                 <span class="label">训练资产</span>
                 <div class="asset-info" v-if="task?.training_asset">
-                  <span class="asset-name">{{ task.training_asset.name }}</span>
-                  <span class="asset-ip">({{ task.training_asset.ip }})</span>
+                  <div class="asset-details">
+                    <div class="asset-name">{{ task.training_asset.name }}</div>
+                    <div class="asset-ip">({{ task.training_asset.ip }})</div>
+                  </div>
                 </div>
                 <span v-else class="no-asset">暂无</span>
               </div>
@@ -168,28 +154,14 @@
     </BaseModal>
 
     <!-- 图片预览模态框 -->
-    <ImageViewer 
-      v-model="showPreview" 
-      v-model:image="selectedImage" 
-      :images="previewSource === 'task' ? getTaskImagesUrls() : trainingModelImages" 
-    />
-    
+    <ImageViewer v-model="showPreview" v-model:image="selectedImage"
+      :images="previewSource === 'task' ? getTaskImagesUrls() : trainingModelImages" />
+
     <!-- 训练详情模态框 -->
-    <BaseModal 
-      v-model="showTrainingDetailsModal" 
-      title="训练详情" 
-      :width="70"
-      :loading="false" 
-      :showFooter="false"
-    >
+    <BaseModal v-model="showTrainingDetailsModal" title="训练详情" :width="70" :loading="false" :showFooter="false">
       <template #body>
-        <TrainingDetails 
-          :taskId="taskId" 
-          :taskName="task?.name || ''" 
-          :isTraining="task?.status === 'TRAINING'"
-          @preview-image="handleTrainingPreviewImage"
-          @model-images-change="updateTrainingModelImages"
-        />
+        <TrainingDetails :taskId="taskId" :taskName="task?.name || ''" :isTraining="task?.status === 'TRAINING'"
+          @preview-image="handlePreview" @model-images-change="updateTrainingModelImages" />
       </template>
     </BaseModal>
   </div>
@@ -281,7 +253,7 @@ const fetchTask = async () => {
         if (data.images && data.images.length > 0) {
           // 检查是否有对应的markedText路径
           const relativePaths = Object.keys(markedTexts.value);
-          
+
           data.images.forEach(image => {
             if (image.preview_url) {
               // 将图片URL后缀统一替换为png
@@ -289,7 +261,7 @@ const fetchTask = async () => {
                 const urlWithoutExtension = image.preview_url.substring(0, image.preview_url.lastIndexOf('.'));
                 image.preview_url = `${urlWithoutExtension}.png`;
               }
-              
+
               // 对于已标记的图片，直接使用相对路径作为URL
               if (['MARKED', 'TRAINING', 'COMPLETED'].includes(data.status)) {
                 const matchingPath = relativePaths.find(path => {
@@ -297,7 +269,7 @@ const fetchTask = async () => {
                   const pathFilename = path.split('/').pop();
                   return pathFilename === image.filename;
                 });
-                
+
                 if (matchingPath) {
                   // 使用完整的相对路径
                   image.preview_url = matchingPath.replace('.txt', '.png');
@@ -481,9 +453,9 @@ const handleDeleteImage = async (imageId) => {
 }
 
 // 处理图片预览
-const handlePreview = (image) => {
-  previewSource.value = 'task'
-  selectedImage.value = image.path
+const handlePreview = (source, image) => {
+  previewSource.value = source
+  selectedImage.value = image
   showPreview.value = true
 }
 
@@ -645,7 +617,7 @@ const handleTaskUpdate = async (updatedTask) => {
 // 处理批量删除图片
 const handleBatchDeleteImages = async (imageIds) => {
   if (!imageIds || imageIds.length === 0) return
-  
+
   try {
     isLoading.value = true
     await tasksApi.batchDeleteImages(taskId.value, imageIds)
@@ -662,12 +634,12 @@ const handleBatchDeleteImages = async (imageIds) => {
 // 处理批量更新打标文本
 const handleBatchUpdateMarkedTexts = async (updateData) => {
   if (!updateData || Object.keys(updateData).length === 0) return
-  
+
   try {
     isLoading.value = true
     await tasksApi.batchUpdateMarkedTexts(taskId.value, updateData)
     message.success('批量更新打标文本成功')
-    
+
     // 更新本地打标文本数据
     Object.entries(updateData).forEach(([filename, content]) => {
       markedTexts.value[filename] = content
@@ -710,16 +682,16 @@ const handleDragUpload = async (files) => {
     message.warning(`${getStatusText(task.value?.status)}状态不能上传图片`)
     return
   }
-  
+
   if (!files || files.length === 0) return
-  
+
   try {
     isLoading.value = true
     const formData = new FormData()
     files.forEach(file => {
       formData.append('files', file)
     })
-    
+
     await tasksApi.uploadImages(taskId.value, formData)
     message.success(`成功上传 ${files.length} 张图片`)
     await fetchTask() // 刷新任务数据
@@ -740,7 +712,7 @@ const isAllImagesSelected = computed(() => {
 // 全选/取消全选
 const toggleSelectAllImages = () => {
   if (!task.value?.images || task.value.images.length === 0) return
-  
+
   if (isAllImagesSelected.value) {
     // 取消全选
     clearImageSelection()
@@ -757,13 +729,6 @@ const showBatchEditModal = () => {
   if (imageGridRef.value) {
     imageGridRef.value.showBatchEditModal = true
   }
-}
-
-// 处理训练详情预览
-const handleTrainingPreviewImage = (image) => {
-  previewSource.value = 'training'
-  selectedImage.value = image // 训练详情传递的已经是图片路径
-  showPreview.value = true
 }
 
 // 处理训练模型图片变化
@@ -997,13 +962,20 @@ onUnmounted(() => {
 
 .asset-info {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  width: 100%;
+}
+
+.asset-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
 }
 
 .asset-name {
   font-weight: 500;
+  word-break: break-word;
 }
 
 .asset-ip {

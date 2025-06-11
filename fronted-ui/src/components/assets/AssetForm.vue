@@ -29,7 +29,8 @@
                   v-model="assetForm.ip" 
                   class="mac-input"
                   :class="{ 'is-error': formErrors.ip }"
-                  @blur="validateField('ip', assetForm.ip)"
+                  @blur="parseAndValidateIp"
+                  placeholder="IP地址或域名，也可粘贴SSH连接字符串"
                 >
                 <span class="error-message" v-if="formErrors.ip">{{ formErrors.ip }}</span>
               </div>
@@ -546,8 +547,20 @@ const formRules = {
     { min: 2, max: 50, message: '长度在 2 到 50 个字符' }
   ],
   ip: [
-    { required: true, message: '请输入IP地址' },
-    { pattern: /^(\d{1,3}\.){3}\d{1,3}$/, message: 'IP地址格式不正确' }
+    { required: true, message: '请输入IP地址或域名' },
+    { 
+      validator: (value) => {
+        // IP地址格式验证
+        const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+        // 域名格式验证（简化版，支持二级域名和顶级域名）
+        const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+        // 本地主机名验证
+        const localhostPattern = /^localhost$/i;
+        
+        return ipPattern.test(value) || domainPattern.test(value) || localhostPattern.test(value);
+      },
+      message: 'IP地址或域名格式不正确'
+    }
   ],
   ssh_port: [
     { required: true, message: '请输入SSH端口' },
@@ -594,6 +607,10 @@ const validateField = (field, value) => {
       formErrors.value[field] = rule.message
       return false
     }
+    if (rule.validator && !rule.validator(value)) {
+      formErrors.value[field] = rule.message
+      return false
+    }
     if (rule.type === 'number') {
       const num = Number(value)
       if (isNaN(num) || num < rule.min || num > rule.max) {
@@ -604,6 +621,47 @@ const validateField = (field, value) => {
   }
   delete formErrors.value[field]
   return true
+}
+
+// 解析SSH连接字符串并自动填充相关字段
+const parseAndValidateIp = () => {
+  const input = assetForm.value.ip.trim()
+  
+  // 检查是否是SSH连接字符串
+  if (input.startsWith('ssh ')) {
+    
+    // 用于提取端口的正则表达式
+    const portRegex = /-p\s+(\d+)/i
+    const portMatch = input.match(portRegex)
+    
+    // 提取端口（如果有）
+    if (portMatch && portMatch[1]) {
+      assetForm.value.ssh_port = parseInt(portMatch[1], 10)
+    }
+    
+    // 提取用户名和主机
+    const userHostRegex = /(\w+)@([\w.-]+\.\w+(?:\.\w+)*)/i
+    const userHostMatch = input.match(userHostRegex)
+    
+    if (userHostMatch) {
+      // 提取用户名
+      if (userHostMatch[1]) {
+        assetForm.value.ssh_username = userHostMatch[1]
+      }
+      
+      // 提取主机/域名
+      if (userHostMatch[2]) {
+        assetForm.value.ip = userHostMatch[2]
+      }
+      
+      message.success('已自动填充SSH连接信息')
+    } else {
+      message.warning('无法解析SSH连接字符串中的用户名和主机')
+    }
+  }
+  
+  // 无论是否是SSH连接字符串，都验证IP字段
+  return validateField('ip', assetForm.value.ip)
 }
 
 // 验证能力字段

@@ -2,13 +2,24 @@
   <div class="task-list-sidebar">
     <div class="sidebar-header">
       <h2 class="sidebar-title">任务列表</h2>
-      <button 
-        class="new-task-btn"
-        @click="$emit('create')"
-        title="新建任务"
-      >
-        <PlusIcon class="icon" />
-      </button>
+      <div class="header-actions">
+        <button 
+          v-if="selectedTaskIds.length > 0"
+          class="batch-action-btn danger"
+          @click="confirmBatchDelete"
+          title="批量删除选中的任务"
+        >
+          <TrashIcon class="icon" />
+          删除({{ selectedTaskIds.length }})
+        </button>
+        <button 
+          class="new-task-btn"
+          @click="$emit('create')"
+          title="新建任务"
+        >
+          <PlusIcon class="icon" />
+        </button>
+      </div>
     </div>
     
     <!-- 搜索和过滤区域 -->
@@ -53,7 +64,21 @@
       </div>
     </div>
     
-    <div class="task-count">共 {{ tasks.length }} 个任务</div>
+    <div class="task-count">
+      <div class="count-info">共 {{ tasks.length }} 个任务</div>
+      <div class="selection-actions" v-if="tasks.length > 0">
+        <label class="select-all-label">
+          <input 
+            type="checkbox" 
+            :checked="isAllSelected" 
+            :indeterminate="isIndeterminate"
+            @change="toggleSelectAll" 
+            class="select-all-checkbox"
+          />
+          <span>{{ isAllSelected ? '取消全选' : '全选' }}</span>
+        </label>
+      </div>
+    </div>
     
     <!-- 任务列表 -->
     <div class="task-list">
@@ -64,6 +89,14 @@
         :class="{ 'selected': selectedTaskId == task.id }"
         @click="selectTask(task)"
       >
+        <div class="task-checkbox">
+          <input 
+            type="checkbox" 
+            :checked="selectedTaskIds.includes(task.id)"
+            @click.stop="toggleTaskSelection(task)"
+            class="task-select-checkbox"
+          />
+        </div>
         <div class="task-icon">
           <component :is="getStatusIcon(task.status)" class="status-icon" />
         </div>
@@ -76,14 +109,24 @@
             <span class="task-date">{{ formatDate(task.created_at) }}</span>
           </div>
         </div>
-        <button 
-          v-if="canDeleteTask(task)"
-          class="delete-btn"
-          @click.stop="confirmDelete(task)"
-          title="删除任务"
-        >
-          <TrashIcon class="delete-icon" />
-        </button>
+        <div class="task-actions">
+          <button 
+            v-if="canEditTask(task)"
+            class="action-btn edit-btn"
+            @click.stop="openEditModal(task)"
+            title="编辑任务"
+          >
+            <PencilIcon class="action-icon" />
+          </button>
+          <button 
+            v-if="canDeleteTask(task)"
+            class="action-btn delete-btn"
+            @click.stop="confirmDelete(task)"
+            title="删除任务"
+          >
+            <TrashIcon class="action-icon" />
+          </button>
+        </div>
       </div>
       
       <!-- 无任务时显示提示 -->
@@ -91,6 +134,37 @@
         <p>暂无任务</p>
       </div>
     </div>
+
+    <!-- 编辑任务模态框 -->
+    <BaseModal
+      v-model="showEditModal"
+      title="编辑任务"
+      :loading="isEditing"
+      @confirm="handleEditTask"
+    >
+      <template #body>
+        <div class="form-group">
+          <label for="editTaskName">任务名称</label>
+          <input
+            id="editTaskName"
+            v-model="editingTask.name"
+            type="text"
+            placeholder="输入任务名称"
+            class="form-input"
+          />
+        </div>
+        <div class="form-group">
+          <label for="editTaskDescription">任务描述 (可选)</label>
+          <textarea
+            id="editTaskDescription"
+            v-model="editingTask.description"
+            placeholder="输入任务描述"
+            class="form-textarea"
+            rows="3"
+          ></textarea>
+        </div>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -107,7 +181,8 @@ import {
   TagIcon,
   XCircleIcon,
   TrashIcon,
-  ArrowUpCircleIcon
+  ArrowUpCircleIcon,
+  PencilIcon
 } from '@heroicons/vue/24/outline'
 import { tasksApi } from '@/api/tasks'
 import { formatDate } from '@/utils/datetime'
@@ -118,6 +193,7 @@ import {
   canDeleteTask as canDelete,
   statusDetailColorMap
 } from '@/utils/taskStatus'
+import BaseModal from '@/components/common/Modal.vue'
 
 const route = useRoute()
 
@@ -135,10 +211,16 @@ const tasks = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
 const dateFilter = ref('')
+const selectedTaskIds = ref([]) // 多选模式下选中的任务ID
+const showEditModal = ref(false) // 编辑模态框显示状态
+const editingTask = ref({ name: '', description: '' }) // 当前编辑的任务
+const isEditing = ref(false) // 编辑中状态
+
 // 判断当前是否在任务相关页面
 const isTasksRoute = computed(() => {
   return route.path === '/tasks' || route.path.startsWith('/tasks/')
 })
+
 // 获取任务列表
 const fetchTasks = async () => {
   // 只有在任务相关路由下才获取任务列表
@@ -157,6 +239,11 @@ const fetchTasks = async () => {
     if (tasks.value.length > 0 && !props.selectedTaskId && isTasksRoute.value) {
       selectTask(tasks.value[0])
     }
+
+    // 过滤选中任务ID，确保它们都存在于当前任务列表中
+    selectedTaskIds.value = selectedTaskIds.value.filter(id => 
+      tasks.value.some(task => task.id === id)
+    )
   } catch (error) {
     message.error('获取任务列表失败')
   }
@@ -190,8 +277,35 @@ const handleDeleteTask = async (taskId) => {
     if (props.selectedTaskId === taskId) {
       emit('select', null)
     }
+
+    // 从选中列表中移除
+    selectedTaskIds.value = selectedTaskIds.value.filter(id => id !== taskId)
   } catch (error) {
     message.error('删除任务失败')
+  }
+}
+
+// 批量删除任务
+const handleBatchDeleteTasks = async () => {
+  if (selectedTaskIds.value.length === 0) return
+  
+  try {
+    // 调用API批量删除任务
+    await Promise.all(selectedTaskIds.value.map(id => tasksApi.deleteTask(id)))
+    message.success(`成功删除 ${selectedTaskIds.value.length} 个任务`)
+    
+    // 如果当前查看的任务被删除，发送null通知父组件
+    if (selectedTaskIds.value.includes(props.selectedTaskId)) {
+      emit('select', null)
+    }
+    
+    // 清空选中列表
+    selectedTaskIds.value = []
+    
+    // 刷新任务列表
+    fetchTasks()
+  } catch (error) {
+    message.error('批量删除任务失败')
   }
 }
 
@@ -224,10 +338,93 @@ const canDeleteTask = (task) => {
   return canDelete(task)
 }
 
+// 判断任务是否可以编辑
+const canEditTask = (task) => {
+  // 只有NEW状态的任务才能编辑
+  return task.status === 'NEW'
+}
+
 // 确认删除任务
 const confirmDelete = (task) => {
   if (confirm(`确定要删除任务 "${task.name}" 吗？`)) {
     handleDeleteTask(task.id)
+  }
+}
+
+// 确认批量删除任务
+const confirmBatchDelete = () => {
+  if (selectedTaskIds.value.length === 0) return
+  
+  if (confirm(`确定要删除选中的 ${selectedTaskIds.value.length} 个任务吗？`)) {
+    handleBatchDeleteTasks()
+  }
+}
+
+// 切换选择单个任务
+const toggleTaskSelection = (task) => {
+  const index = selectedTaskIds.value.indexOf(task.id)
+  if (index === -1) {
+    selectedTaskIds.value.push(task.id)
+  } else {
+    selectedTaskIds.value.splice(index, 1)
+  }
+}
+
+// 全选计算属性
+const isAllSelected = computed(() => {
+  return tasks.value.length > 0 && selectedTaskIds.value.length === tasks.value.length
+})
+
+// 部分选择计算属性
+const isIndeterminate = computed(() => {
+  return selectedTaskIds.value.length > 0 && selectedTaskIds.value.length < tasks.value.length
+})
+
+// 切换全选/取消全选
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    selectedTaskIds.value = [] // 取消全选
+  } else {
+    selectedTaskIds.value = tasks.value.map(task => task.id) // 全选
+  }
+}
+
+// 打开编辑任务模态框
+const openEditModal = (task) => {
+  editingTask.value = { 
+    id: task.id,
+    name: task.name, 
+    description: task.description || ''
+  }
+  showEditModal.value = true
+}
+
+// 处理编辑任务提交
+const handleEditTask = async () => {
+  if (!editingTask.value.name) {
+    message.warning('请输入任务名称')
+    return
+  }
+
+  try {
+    isEditing.value = true
+    
+    // 调用API更新任务
+    await tasksApi.updateTask(editingTask.value.id, {
+      name: editingTask.value.name,
+      description: editingTask.value.description
+    })
+    
+    message.success('任务已更新')
+    showEditModal.value = false
+    
+    // 刷新任务列表
+    fetchTasks()
+  } catch (error) {
+    console.error('编辑任务失败:', error)
+    message.error('编辑任务失败')
+  } finally {
+    isEditing.value = false
   }
 }
 
@@ -280,6 +477,11 @@ defineExpose({
   font-weight: 600;
 }
 
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .new-task-btn {
   width: 32px;
   height: 32px;
@@ -298,9 +500,32 @@ defineExpose({
   background: color-mix(in srgb, var(--primary-color) 80%, white);
 }
 
-.new-task-btn .icon {
-  width: 18px;
-  height: 18px;
+.batch-action-btn {
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  padding: 0 10px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.batch-action-btn.danger {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.batch-action-btn.danger:hover {
+  background-color: #fecaca;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
 }
 
 .search-filter-area {
@@ -372,6 +597,27 @@ defineExpose({
   font-size: 12px;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.selection-actions {
+  display: flex;
+  align-items: center;
+}
+
+.select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.select-all-checkbox {
+  cursor: pointer;
 }
 
 .task-list {
@@ -394,6 +640,10 @@ defineExpose({
   background: var(--background-secondary);
 }
 
+.task-list-item:hover .task-actions {
+  opacity: 1;
+}
+
 .task-list-item.selected {
   background: color-mix(in srgb, var(--primary-color) 15%, transparent);
   border-left: 3px solid var(--primary-color);
@@ -401,20 +651,30 @@ defineExpose({
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+.task-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-select-checkbox {
+  cursor: pointer;
+}
+
 .task-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--background-secondary);
 }
 
 .status-icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .task-item-content {
@@ -483,17 +743,16 @@ defineExpose({
   color: var(--text-tertiary);
 }
 
-.empty-list {
+.task-actions {
   display: flex;
-  justify-content: center;
-  padding: 30px 0;
-  color: var(--text-tertiary);
-  font-size: 13px;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.delete-btn {
-  width: 28px;
-  height: 28px;
+.action-btn {
+  width: 24px;
+  height: 24px;
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -501,20 +760,37 @@ defineExpose({
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #EF4444;
-  opacity: 0.6;
   transition: all 0.2s ease;
+}
+
+.edit-btn {
+  color: #3B82F6;
+}
+
+.edit-btn:hover {
+  background: #EFF6FF;
+}
+
+.delete-btn {
+  color: #EF4444;
 }
 
 .delete-btn:hover {
   background: #FEE2E2;
   color: #DC2626;
-  opacity: 1;
 }
 
-.delete-icon {
-  width: 16px;
-  height: 16px;
+.action-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.empty-list {
+  display: flex;
+  justify-content: center;
+  padding: 30px 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
 }
 
 /* 滚动条样式 */
@@ -539,5 +815,40 @@ defineExpose({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--background-secondary);
+  transition: all 0.3s ease;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  background: var(--background-primary);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
 }
 </style> 

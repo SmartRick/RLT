@@ -40,7 +40,6 @@ service.interceptors.response.use(
   response => {
     // 适配统一的响应格式 {code, data, msg}
     const res = response.data
-    
     // 如果响应中包含统一格式字段
     if (res.code !== undefined) {
       // 业务成功

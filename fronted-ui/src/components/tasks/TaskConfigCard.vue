@@ -348,6 +348,142 @@
                 <option value="fp16">fp16</option>
               </select>
             </div>
+            <div class="form-group">
+              <label>图片重复次数</label>
+              <input 
+                type="number" 
+                v-model.number="localConfig.trainingConfig.repeat_num" 
+                min="1"
+                placeholder="1"
+                class="mac-input"
+                :disabled="!canEdit"
+              />
+            </div>
+          </div>
+          
+          <!-- 采样相关设置 -->
+          <div class="section-divider">
+            <h4>采样预览设置</h4>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label>生成预览图</label>
+              <div class="switch-wrapper">
+                <input 
+                  type="checkbox" 
+                  id="generate_preview" 
+                  v-model="localConfig.trainingConfig.generate_preview"
+                  class="toggle-checkbox"
+                  :disabled="!canEdit"
+                />
+                <label for="generate_preview" class="toggle-label"></label>
+              </div>
+            </div>
+            <div class="form-group" v-if="localConfig.trainingConfig.generate_preview">
+              <label>使用图片标签</label>
+              <div class="switch-wrapper">
+                <input 
+                  type="checkbox" 
+                  id="use_image_tags" 
+                  v-model="localConfig.trainingConfig.use_image_tags"
+                  class="toggle-checkbox"
+                  :disabled="!canEdit"
+                />
+                <label for="use_image_tags" class="toggle-label"></label>
+              </div>
+            </div>
+          </div>
+          
+          <div v-if="localConfig.trainingConfig.generate_preview">
+            <div class="form-row" v-if="localConfig.trainingConfig.use_image_tags">
+              <div class="form-group">
+                <label>最多采用图片提示词数量</label>
+                <input 
+                  type="number" 
+                  v-model.number="localConfig.trainingConfig.max_image_tags" 
+                  min="0"
+                  placeholder="5"
+                  class="mac-input"
+                  :disabled="!canEdit"
+                />
+              </div>
+            </div>
+            
+            <div class="form-group full-width">
+              <label>正向提示词</label>
+              <textarea
+                v-model="localConfig.trainingConfig.positive_prompt"
+                placeholder="输入正向提示词"
+                rows="2"
+                class="mac-textarea"
+                :disabled="!canEdit"
+              ></textarea>
+            </div>
+            
+            <div class="form-group full-width">
+              <label>负向提示词</label>
+              <textarea
+                v-model="localConfig.trainingConfig.negative_prompt"
+                placeholder="输入负向提示词"
+                rows="2"
+                class="mac-textarea"
+                :disabled="!canEdit"
+              ></textarea>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label>预览图宽度</label>
+                <input 
+                  type="number" 
+                  v-model.number="localConfig.trainingConfig.preview_width" 
+                  min="64"
+                  step="8"
+                  placeholder="512"
+                  class="mac-input"
+                  :disabled="!canEdit"
+                />
+              </div>
+              <div class="form-group">
+                <label>预览图高度</label>
+                <input 
+                  type="number" 
+                  v-model.number="localConfig.trainingConfig.preview_height" 
+                  min="64"
+                  step="8"
+                  placeholder="768"
+                  class="mac-input"
+                  :disabled="!canEdit"
+                />
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label>CFG强度</label>
+                <input 
+                  type="number" 
+                  v-model.number="localConfig.trainingConfig.cfg_scale" 
+                  min="1"
+                  step="0.5"
+                  placeholder="7"
+                  class="mac-input"
+                  :disabled="!canEdit"
+                />
+              </div>
+              <div class="form-group">
+                <label>迭代步数</label>
+                <input 
+                  type="number" 
+                  v-model.number="localConfig.trainingConfig.steps" 
+                  min="1"
+                  placeholder="24"
+                  class="mac-input"
+                  :disabled="!canEdit"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -377,7 +513,17 @@ const defaultTrainingConfig = {
   clip_skip: 1,
   seed: 42,
   mixed_precision: 'bf16',
-  optimizer_type: 'AdamW8bit'
+  optimizer_type: 'AdamW8bit',
+  repeat_num: 1,
+  generate_preview: true,
+  use_image_tags: false,
+  max_image_tags: 5,
+  positive_prompt: '1girl, solo',
+  negative_prompt: 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry',
+  preview_width: 512,
+  preview_height: 768,
+  cfg_scale: 7,
+  steps: 24
 };
 
 // 打标配置默认值
@@ -766,6 +912,18 @@ watch(localConfig, () => {
   margin-top: 8px;
   margin-bottom: 16px;
   padding: 0 16px;
+}
+
+.section-divider {
+  margin: 16px 0;
+  border-top: 1px solid #E5E7EB;
+  padding-top: 16px;
+}
+
+.section-divider h4 {
+  font-size: 14px;
+  color: #4B5563;
+  margin: 0 0 12px 0;
 }
 
 @media (max-width: 768px) {

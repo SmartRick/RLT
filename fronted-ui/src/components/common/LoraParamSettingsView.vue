@@ -219,7 +219,7 @@ const getSubsections = (section) => {
 .settings-item {
   display: inline-block;
   vertical-align: top;
-  width: 280px;
+  width: 290px;
   margin-right: 16px;
   margin-bottom: 16px;
 }
