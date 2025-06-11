@@ -5,7 +5,11 @@ from ..schemas.asset import AssetCreate, AssetUpdate, Asset
 from ..database import get_db
 from ..utils.logger import setup_logger
 from ..utils.ssh import execute_command
+from ..utils.common import copy_attributes, generate_domain_url
 import paramiko
+from ..services.terminal_service import TerminalService
+from ..models.constants import DOMAIN_ACCESS_CONFIG
+import socket
 
 logger = setup_logger('asset_service')
 
@@ -31,6 +35,13 @@ class AssetService:
 
                 asset = AssetModel(**asset_data.dict())
                 
+                # 自动检测是否为域名访问模式
+                if DOMAIN_ACCESS_CONFIG['SSH_DOMAIN_SUFFIX'] in asset.ip:
+                    asset.port_access_mode = 'DOMAIN'
+                    logger.info(f"检测到SSH域名格式，设置为域名访问模式: {asset.ip}")
+                else:
+                    asset.port_access_mode = 'DIRECT'
+                
                 # 设置初始状态为 PENDING
                 asset.status = 'PENDING'
                 
@@ -40,10 +51,12 @@ class AssetService:
                 else:
                     # 验证SSH连接
                     try:
-                        if AssetService._verify_ssh_connection(asset_data.dict()):
+                        success, message = TerminalService.verify_asset_ssh_connection(asset)
+                        if success:
                             asset.status = 'CONNECTED'
                         else:
                             asset.status = 'CONNECTION_ERROR'
+                            logger.error(f"SSH connection verification failed: {message}")
                     except Exception as e:
                         logger.error(f"SSH connection verification failed: {str(e)}")
                         asset.status = 'CONNECTION_ERROR'
@@ -77,8 +90,15 @@ class AssetService:
                 
                 # 更新资产数据
                 update_dict = update_data.dict(exclude_unset=True)
-                for key, value in update_dict.items():
-                    setattr(asset, key, value)
+                copy_attributes(update_dict, asset)
+                
+                # 如果IP被更新，自动检测是否为域名访问模式
+                if 'ip' in update_dict:
+                    if DOMAIN_ACCESS_CONFIG['SSH_DOMAIN_SUFFIX'] in asset.ip:
+                        asset.port_access_mode = 'DOMAIN'
+                        logger.info(f"检测到SSH域名格式，设置为域名访问模式: {asset.ip}")
+                    else:
+                        asset.port_access_mode = 'DIRECT'
                 
                 # 如果是本地资产，无需验证SSH连接
                 if asset.is_local:
@@ -86,10 +106,12 @@ class AssetService:
                 # 如果不是本地资产且更新了连接信息，重新验证SSH连接
                 elif any(key in update_dict for key in ['ip', 'ssh_port', 'ssh_username', 'ssh_key_path']):
                     try:
-                        if AssetService._verify_ssh_connection(asset.__dict__):
+                        success, message = TerminalService.verify_asset_ssh_connection(asset)
+                        if success:
                             asset.status = 'CONNECTED'
                         else:
                             asset.status = 'CONNECTION_ERROR'
+                            logger.error(f"SSH connection verification failed: {message}")
                     except Exception as e:
                         logger.error(f"SSH connection verification failed: {str(e)}")
                         asset.status = 'CONNECTION_ERROR'
@@ -144,87 +166,142 @@ class AssetService:
                 # 验证Lora训练能力
                 if (capability_type is None or capability_type == 'lora_training') and asset.lora_training.get('enabled'):
                     try:
+                        # 准备连接参数
+                        port = asset.lora_training.get('port')
+                        
+                        # 如果是域名访问模式，尝试使用特殊域名格式
+                        domain_url = None
+                        if asset.port_access_mode == 'DOMAIN' and port:
+                            domain_url = generate_domain_url(asset.ip, port)
+                        
                         # 对于本地资产，始终使用127.0.0.1
                         url = '127.0.0.1' if asset.is_local else asset.ip
-                        port = asset.lora_training.get('port')
                         
                         logger.info(f"验证Lora训练能力: {url}:{port}")
                         
                         if port:
-                            import socket
-                            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            sock.settimeout(5)
+                            # 如果是域名访问模式，先尝试连接特殊域名
+                            if asset.port_access_mode == 'DOMAIN' and domain_url:
+                                try:
+                                    logger.info(f"尝试通过域名连接: {domain_url}")
+                                    # 从域名URL中提取主机名
+                                    hostname = domain_url.replace('https://', '').replace('http://', '').split('/')[0]
+                                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                    sock.settimeout(5)
+                                    sock.connect((hostname, 80))  # 使用HTTP默认端口
+                                    results['lora_training'] = True
+                                    asset.lora_training = {
+                                        **asset.lora_training,
+                                        'verified': True,
+                                    }
+                                    logger.info(f"Lora训练服务通过域名连接成功: {domain_url}")
+                                    sock.close()
+                                except Exception as e:
+                                    logger.error(f"域名连接失败: {domain_url}, 错误: {str(e)}")
+                                    sock.close()
                             
-                            try:
-                                sock.connect((url, int(port)))
-                                results['lora_training'] = True
-                                asset.lora_training = {
-                                    **asset.lora_training,
-                                    'verified': True
-                                }
-                                logger.info(f"Lora训练服务连接成功: {url}:{port}")
-                            except Exception as e:
-                                logger.error(f"Lora训练服务连接失败: {url}:{port}, 错误: {str(e)}")
-                                asset.lora_training = {
-                                    **asset.lora_training,
-                                    'verified': False
-                                }
-                            finally:
-                                sock.close()
+                            # 如果域名模式连接失败或不是域名模式，尝试直接连接
+                            if not results['lora_training']:
+                                try:
+                                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                    sock.settimeout(5)
+                                    sock.connect((url, int(port)))
+                                    results['lora_training'] = True
+                                    asset.lora_training = {
+                                        **asset.lora_training,
+                                        'verified': True
+                                    }
+                                    logger.info(f"Lora训练服务直接连接成功: {url}:{port}")
+                                except Exception as e:
+                                    logger.error(f"Lora训练服务连接失败: {url}:{port}, 错误: {str(e)}")
+                                    asset.lora_training = {
+                                        **asset.lora_training,
+                                        'verified': False,
+                                    }
+                                finally:
+                                    sock.close()
                         else:
                             logger.error(f"Lora训练验证失败: 未配置端口")
                             asset.lora_training = {
                                 **asset.lora_training,
-                                'verified': False
+                                'verified': False,
                             }
                     except Exception as e:
                         logger.error(f"Lora训练验证失败: {str(e)}")
                         asset.lora_training = {
                             **asset.lora_training,
-                            'verified': False
+                            'verified': False,
                         }
 
                 # 验证AI引擎能力
                 if (capability_type is None or capability_type == 'ai_engine') and asset.ai_engine.get('enabled'):
                     try:
+                        # 准备连接参数
+                        port = asset.ai_engine.get('port')
+                        
+                        # 如果是域名访问模式，尝试使用特殊域名格式
+                        domain_url = []
+                        if asset.port_access_mode == 'DOMAIN' and port:
+                            domain_url = generate_domain_url(asset.ip, port)
+                        
                         # 对于本地资产，始终使用127.0.0.1
                         url = '127.0.0.1' if asset.is_local else asset.ip
-                        port = asset.ai_engine.get('port')
                         
                         logger.info(f"验证AI引擎能力: {url}:{port}")
                         
                         if port:
-                            import socket
-                            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            sock.settimeout(5)
+                            # 如果是域名访问模式，先尝试连接特殊域名
+                            if asset.port_access_mode == 'DOMAIN' and domain_url:
+                                try:
+                                    logger.info(f"尝试通过域名连接: {domain_url}")
+                                    # 从域名URL中提取主机名
+                                    hostname = domain_url.replace('https://', '').replace('http://', '').split('/')[0]
+                                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                    sock.settimeout(5)
+                                    sock.connect((hostname, 80))  # 使用HTTP默认端口
+                                    results['ai_engine'] = True
+                                    asset.ai_engine = {
+                                        **asset.ai_engine,
+                                        'verified': True,
+                                    }
+                                    logger.info(f"AI引擎服务通过域名连接成功: {domain_url}")
+                                    sock.close()
+                                except Exception as e:
+                                    logger.error(f"域名连接失败: {domain_url}, 错误: {str(e)}")
+                                    sock.close()
                             
-                            try:
-                                sock.connect((url, int(port)))
-                                results['ai_engine'] = True
-                                asset.ai_engine = {
-                                    **asset.ai_engine,
-                                    'verified': True
-                                }
-                                logger.info(f"AI引擎服务连接成功: {url}:{port}")
-                            except Exception as e:
-                                logger.error(f"AI引擎服务连接失败: {url}:{port}, 错误: {str(e)}")
-                                asset.ai_engine = {
-                                    **asset.ai_engine,
-                                    'verified': False
-                                }
-                            finally:
-                                sock.close()
+                            # 如果域名模式连接失败或不是域名模式，尝试直接连接
+                            if not results['ai_engine']:
+                                try:
+                                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                    sock.settimeout(5)
+                                    sock.connect((url, int(port)))
+                                    results['ai_engine'] = True
+                                    asset.ai_engine = {
+                                        **asset.ai_engine,
+                                        'verified': True,
+                                        'domain_url': None  # 清除域名URL
+                                    }
+                                    logger.info(f"AI引擎服务直接连接成功: {url}:{port}")
+                                except Exception as e:
+                                    logger.error(f"AI引擎服务连接失败: {url}:{port}, 错误: {str(e)}")
+                                    asset.ai_engine = {
+                                        **asset.ai_engine,
+                                        'verified': False,
+                                    }
+                                finally:
+                                    sock.close()
                         else:
                             logger.error(f"AI引擎验证失败: 未配置端口")
                             asset.ai_engine = {
                                 **asset.ai_engine,
-                                'verified': False
+                                'verified': False,
                             }
                     except Exception as e:
                         logger.error(f"AI引擎验证失败: {str(e)}")
                         asset.ai_engine = {
                             **asset.ai_engine,
-                            'verified': False
+                            'verified': False,
                         }
 
                 # 提交所有变更
@@ -280,174 +357,6 @@ class AssetService:
             return []
 
     @staticmethod
-    def _verify_ssh_connection(asset: dict) -> bool:
-        """验证SSH连接"""
-        try:
-            logger.debug(f"开始SSH连接测试: {asset['ip']}:{asset['ssh_port']}")
-            result = execute_command(
-                hostname=asset['ip'],
-                port=asset['ssh_port'],
-                username=asset['ssh_username'],
-                key_path=asset.get('ssh_key_path'),
-                command='echo "Connection test"'
-            )
-            
-            # 根据返回码更新状态
-            if result.returncode == 0:
-                logger.info(f"SSH连接测试成功: {asset['ip']}:{asset['ssh_port']}")
-                return True
-            else:
-                logger.warning(f"SSH连接测试失败: {asset['ip']}:{asset['ssh_port']}, 错误信息: {result.stderr}")
-                return False
-            
-        except Exception as e:
-            error_msg = str(e)
-            if "Authentication failed" in error_msg:
-                logger.error(f"SSH认证失败: {asset['ip']}:{asset['ssh_port']}, 请检查用户名和密钥")
-            elif "Connection refused" in error_msg:
-                logger.error(f"SSH连接被拒绝: {asset['ip']}:{asset['ssh_port']}, 请检查IP地址和端口")
-            elif "No such file" in error_msg:
-                logger.error(f"SSH密钥文件不存在: {asset.get('ssh_key_path')}")
-            else:
-                logger.error(f"SSH连接测试异常: {asset['ip']}:{asset['ssh_port']}, 错误: {error_msg}", exc_info=True)
-            return False 
-
-    @staticmethod
-    def verify_ssh_connection(data: Dict[str, Any]) -> bool:
-        """
-        验证SSH连接
-        
-        Args:
-            data: SSH连接参数
-                {
-                    'ip': str,
-                    'ssh_port': int,
-                    'ssh_username': str,
-                    'ssh_auth_type': str,
-                    'ssh_password': str,
-                    'ssh_key_path': str
-                }
-        
-        Returns:
-            bool: 连接是否成功
-            
-        Raises:
-            Exception: SSH连接失败时抛出异常
-        """
-        try:
-            # 创建SSH客户端
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-            # 准备连接参数
-            connect_params = {
-                'hostname': data['ip'],
-                'port': int(data['ssh_port']),
-                'username': data['ssh_username'],
-                'timeout': 10  # 设置超时时间
-            }
-
-            # 根据认证类型设置认证参数
-            if data['ssh_auth_type'] == 'PASSWORD':
-                if not data.get('ssh_password'):
-                    raise ValueError('密码认证方式下必须提供密码')
-                connect_params['password'] = data['ssh_password']
-            else:
-                if not data.get('ssh_key_path'):
-                    raise ValueError('密钥认证方式下必须提供密钥路径')
-                connect_params['key_filename'] = data['ssh_key_path']
-
-            logger.debug(f"尝试SSH连接: {data['ip']}:{data['ssh_port']}")
-            
-            # 尝试建立连接
-            ssh.connect(**connect_params)
-            
-            # 执行简单命令测试连接
-            stdin, stdout, stderr = ssh.exec_command('echo "SSH connection test"')
-            exit_status = stdout.channel.recv_exit_status()
-            
-            if exit_status != 0:
-                error = stderr.read().decode().strip()
-                raise Exception(f"命令执行失败: {error}")
-
-            logger.info(f"SSH连接成功: {data['ip']}:{data['ssh_port']}")
-
-            # 更新资产状态
-            try:
-                with get_db() as db:
-                    # 通过 IP 和端口查找资产
-                    asset = db.query(AssetModel).filter(
-                        AssetModel.ip == data['ip'],
-                        AssetModel.ssh_port == data['ssh_port']
-                    ).first()
-                    
-                    if asset:
-                        asset.status = 'CONNECTED'
-                        db.commit()
-                        logger.info(f"已更新资产状态为已连接: {data['ip']}:{data['ssh_port']}")
-
-            except Exception as e:
-                logger.error(f"更新资产状态失败: {str(e)}")
-                # 不影响验证结果返回
-                pass
-
-            return True
-
-        except paramiko.AuthenticationException:
-            logger.error(f"SSH认证失败: {data['ip']}:{data['ssh_port']}")
-            # 更新状态为连接错误
-            try:
-                with get_db() as db:
-                    asset = db.query(AssetModel).filter(
-                        AssetModel.ip == data['ip'],
-                        AssetModel.ssh_port == data['ssh_port']
-                    ).first()
-                    if asset:
-                        asset.status = 'CONNECTION_ERROR'
-                        db.commit()
-            except Exception as e:
-                logger.error(f"更新资产状态失败: {str(e)}")
-            raise Exception("SSH认证失败，请检查用户名和密码/密钥")
-            
-        except paramiko.SSHException as e:
-            logger.error(f"SSH连接异常: {str(e)}")
-            # 更新状态为连接错误
-            try:
-                with get_db() as db:
-                    asset = db.query(AssetModel).filter(
-                        AssetModel.ip == data['ip'],
-                        AssetModel.ssh_port == data['ssh_port']
-                    ).first()
-                    if asset:
-                        asset.status = 'CONNECTION_ERROR'
-                        db.commit()
-            except Exception as db_error:
-                logger.error(f"更新资产状态失败: {str(db_error)}")
-            raise Exception(f"SSH连接异常: {str(e)}")
-            
-        except Exception as e:
-            logger.error(f"SSH连接失败: {str(e)}")
-            # 更新状态为连接错误
-            try:
-                with get_db() as db:
-                    asset = db.query(AssetModel).filter(
-                        AssetModel.ip == data['ip'],
-                        AssetModel.ssh_port == data['ssh_port']
-                    ).first()
-                    if asset:
-                        asset.status = 'CONNECTION_ERROR'
-                        db.commit()
-            except Exception as db_error:
-                logger.error(f"更新资产状态失败: {str(db_error)}")
-            raise Exception(f"SSH连接失败: {str(e)}")
-            
-        finally:
-            try:
-                ssh.close()
-            except:
-                pass 
-
-    @staticmethod
     def get_asset(asset_id: int) -> Optional[Asset]:
         """获取单个资产"""
         try:
@@ -458,4 +367,4 @@ class AssetService:
                 return None
         except Exception as e:
             logger.error(f"获取资产失败: {str(e)}")
-            return None 
+            return None

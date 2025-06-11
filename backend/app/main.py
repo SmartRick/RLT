@@ -7,9 +7,11 @@ from .middleware.error_handler import ErrorHandler
 from .database import init_db
 from .api.v1.terminal import sock  # 确保导入 sock
 from .services.config_service import ConfigService  # 添加这行
-from .services.scheduler_service import scheduler
+from .services.task_service import TaskService
 from .utils.json_encoder import CustomJSONEncoder
+from .utils.ssh import close_ssh_connection_pool
 import os
+import atexit
 
 logger = setup_logger('main')
 
@@ -77,8 +79,13 @@ def create_app():
         logger.info(f"Serving file: {filename} from {directory}")
         return send_from_directory(directory, filename)
     
-    # 启动任务调度器
-    scheduler.start()
+    # 初始化任务服务和调度器
+    TaskService.init_service()
+    logger.info("任务服务已启动")
+    
+    # 注册应用关闭处理函数
+    atexit.register(close_ssh_connection_pool)
+    logger.info("注册了SSH连接池关闭函数")
     
     return app
 

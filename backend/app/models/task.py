@@ -146,6 +146,9 @@ class Task(Base):
     training_config = Column(JSON, comment='训练参数配置，包含可能需要修改的参数')
     use_global_training_config = Column(Boolean, default=True, comment='是否使用全局训练配置')
     
+    # 自动训练标志
+    auto_training = Column(Boolean, default=True, comment='标记完成后是否自动开始训练')
+    
     # 关联关系
     marking_asset = relationship('Asset', foreign_keys=[marking_asset_id])
     training_asset = relationship('Asset', foreign_keys=[training_asset_id])

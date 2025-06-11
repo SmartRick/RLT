@@ -334,3 +334,25 @@ def get_execution_history(task_id):
     with get_db() as db:
         history_records = TaskService.get_execution_history(db, task_id)
         return success_json(data=history_records)
+
+@tasks_bp.route('/batch/mark', methods=['POST'])
+@exception_handler
+def batch_start_marking():
+    """批量提交任务进行标记"""
+    data = request.get_json()
+    if not data or 'task_ids' not in data or not isinstance(data['task_ids'], list):
+        return response_template("bad_request", msg="请提供有效的任务ID列表")
+        
+    task_ids = data['task_ids']
+    if not task_ids:
+        return response_template("bad_request", msg="任务ID列表不能为空")
+    
+    with get_db() as db:
+        try:
+            succeeded_ids = TaskService.batch_start_marking(db, task_ids)
+            return success_json({"task_ids": succeeded_ids}, "批量提交标记成功")
+        except ValueError as e:
+            return error_json(1002, str(e))
+        except Exception as e:
+            logger.error(f"批量提交标记失败: {str(e)}", exc_info=True)
+            return error_json(2003, f"系统错误: {str(e)}")

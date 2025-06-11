@@ -67,3 +67,25 @@ FLUX_LORA_PARAMS = {
     'gradient_checkpointing': '梯度检查点',
     'gradient_accumulation_steps': '梯度累积步数',
 } 
+
+# 域名访问模式配置
+DOMAIN_ACCESS_CONFIG = {
+    # 域名访问模式
+    'PORT_ACCESS_MODES': {
+        'DIRECT': '直连模式',  # 直接使用IP:PORT访问
+        'DOMAIN': '域名模式',  # 使用域名方式访问
+    },
+    
+    # SSH域名后缀，例如：mq1xrkw51rq0vj8w.ssh.x-gpu.com
+    'SSH_DOMAIN_SUFFIX': '.ssh.x-gpu.com',
+    
+    # 服务容器域名格式，例如：mq1xrkw51rq0vj8w-80.container.x-gpu.com
+    # 格式为：{hostname}-{port}.container.x-gpu.com
+    'CONTAINER_DOMAIN_FORMAT': '{hostname}-{port}.container.x-gpu.com',
+    
+    # 容器域名后缀
+    'CONTAINER_DOMAIN_SUFFIX': '.container.x-gpu.com',
+    
+    # 默认协议前缀，可以是http或https
+    'DEFAULT_PROTOCOL': 'https://'
+} 

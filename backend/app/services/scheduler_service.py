@@ -10,6 +10,7 @@ from .config_service import ConfigService
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 from ..models.asset import Asset
+from app.models.task import TaskStatusLog
 
 logger = setup_logger('scheduler')
 
@@ -168,7 +169,6 @@ class TaskScheduler:
         """训练任务调度循环"""
         while self._running:
             try:
-                logger.info("训练任务调度器开始调度")
                 with get_db() as db:
                     count = self._process_training_tasks(db)
                     if count:
@@ -314,12 +314,16 @@ class TaskScheduler:
 
     def _process_training_tasks(self, db) -> int:
         """处理待训练任务"""
-        tasks = db.query(Task).filter(Task.status == TaskStatus.MARKED).all()
+        # 只获取状态为TRAINING且尚未分配训练资产的任务
+        tasks = db.query(Task).filter(
+            Task.status == TaskStatus.TRAINING,
+            Task.training_asset_id == None  # 确保training_asset_id为空
+        ).all()
 
         if not tasks:
             return 0
 
-        logger.info(f"发现 {len(tasks)} 个待训练任务")
+        logger.info(f"发现 {len(tasks)} 个待分配资产的训练任务")
         available_assets = TaskService.get_available_training_assets()
         
         if not available_assets:
@@ -353,8 +357,6 @@ class TaskScheduler:
                     
                     # 如果找到现有日志，则更新它
                     if existing_log_id:
-                        # 直接在数据库中更新日志消息
-                        from app.models.task import TaskStatusLog
                         db.query(TaskStatusLog).filter(TaskStatusLog.id == existing_log_id).update(
                             {"message": log_message}
                         )
@@ -391,8 +393,8 @@ class TaskScheduler:
                 try:
                     # 重新检查任务状态（可能在等待锁期间被其他进程修改）
                     task = db.query(Task).filter(Task.id == task.id).first()
-                    if not task or task.status != TaskStatus.MARKED:
-                        logger.warning(f"任务 {task.id} 状态已改变，跳过处理")
+                    if not task or task.status != TaskStatus.TRAINING or task.training_asset_id is not None:
+                        logger.warning(f"任务 {task.id} 状态已改变或已被分配资产，跳过处理")
                         continue
 
                     # 更新任务状态和资产计数

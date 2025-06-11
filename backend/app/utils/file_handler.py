@@ -1,5 +1,6 @@
 import json
 import os
+import hashlib
 from typing import Dict, List, Any
 from ..utils.logger import setup_logger
 
@@ -26,6 +27,26 @@ def save_json(file_path: str, data: Any) -> bool:
         logger.error(f"保存文件失败 {file_path}: {e}")
         return False 
     
+def calculate_md5(file_path: str) -> str:
+    """
+    计算文件MD5哈希值
+    
+    Args:
+        file_path: 文件路径
+        
+    Returns:
+        文件的MD5哈希值(十六进制字符串)
+    """
+    try:
+        md5_hash = hashlib.md5()
+        with open(file_path, "rb") as f:
+            # 分块读取文件以处理大文件
+            for chunk in iter(lambda: f.read(4096), b""):
+                md5_hash.update(chunk)
+        return md5_hash.hexdigest()
+    except Exception as e:
+        logger.error(f"计算文件MD5失败 {file_path}: {e}")
+        return ""
 
 def generate_unique_folder_path(base_dir: str, task_id: int, path_type: str) -> str:
     """

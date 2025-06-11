@@ -10,6 +10,11 @@ class Config:
     MARKED_DIR = os.path.join(DATA_DIR, 'marked')
     OUTPUT_DIR = os.path.join(DATA_DIR, 'output')
 
+    REMOTE_DATA_DIR = "/home/rick_lora/"
+    REMOTE_UPLOAD_DIR = os.path.join(REMOTE_DATA_DIR, 'uploads')
+    REMOTE_MARKED_DIR = os.path.join(REMOTE_DATA_DIR, 'marked')
+    REMOTE_OUTPUT_DIR = os.path.join(REMOTE_DATA_DIR, 'output')
+
     # 确保必要的目录存在
     for dir_path in [DATA_DIR, LOGS_DIR, UPLOAD_DIR, MARKED_DIR]:
         os.makedirs(dir_path, exist_ok=True)

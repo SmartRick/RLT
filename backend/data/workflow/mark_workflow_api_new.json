@@ -293,7 +293,7 @@
     },
     "207": {
         "inputs": {
-            "seed": 398009
+            "seed": 7219
         },
         "class_type": "easy seed",
         "_meta": {
@@ -328,7 +328,7 @@
     },
     "210": {
         "inputs": {
-            "string": ""
+            "string": "Pink Dragon Baby"
         },
         "class_type": "Simple String",
         "_meta": {

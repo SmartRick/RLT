@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
+import re
 
 class LoraTrainingConfig(BaseModel):
     enabled: bool = False
@@ -42,7 +43,7 @@ class AIEngineConfig(BaseModel):
 
 class AssetCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=50)
-    ip: str = Field(..., regex=r'^(\d{1,3}\.){3}\d{1,3}$')
+    ip: str = Field(...)
     ssh_port: int = Field(..., gt=0, lt=65536)
     ssh_username: str
     ssh_auth_type: str = Field(default='KEY')
@@ -51,6 +52,17 @@ class AssetCreate(BaseModel):
     lora_training: LoraTrainingConfig
     ai_engine: AIEngineConfig
     is_local: bool = Field(default=False, description="是否为本地系统资产")
+
+    @validator('ip')
+    def validate_ip(cls, v):
+        # IPv4地址正则
+        ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+        # 域名正则 (简化版)
+        domain_pattern = r'^[a-zA-Z0-9][-a-zA-Z0-9.]{0,253}[a-zA-Z0-9](:[0-9]{1,5})?$'
+        
+        if not (re.match(ipv4_pattern, v) or re.match(domain_pattern, v)):
+            raise ValueError('IP必须是有效的IPv4地址或域名格式')
+        return v
 
     @validator('ssh_auth_type')
     def validate_auth_type(cls, v):
@@ -118,7 +130,7 @@ class Asset(BaseModel):
 
 class AssetUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=50)
-    ip: Optional[str] = Field(None, regex=r'^(\d{1,3}\.){3}\d{1,3}$')
+    ip: Optional[str] = Field(None)
     ssh_port: Optional[int] = Field(None, gt=0, lt=65536)
     ssh_username: Optional[str] = None
     ssh_auth_type: Optional[str] = None
@@ -127,6 +139,20 @@ class AssetUpdate(BaseModel):
     lora_training: Optional[LoraTrainingConfig] = None
     ai_engine: Optional[AIEngineConfig] = None
     is_local: Optional[bool] = None
+
+    @validator('ip')
+    def validate_ip(cls, v):
+        if v is None:
+            return v
+            
+        # IPv4地址正则
+        ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+        # 域名正则 (简化版)
+        domain_pattern = r'^[a-zA-Z0-9][-a-zA-Z0-9.]{0,253}[a-zA-Z0-9](:[0-9]{1,5})?$'
+        
+        if not (re.match(ipv4_pattern, v) or re.match(domain_pattern, v)):
+            raise ValueError('IP必须是有效的IPv4地址或域名格式')
+        return v
 
     @validator('ssh_password')
     def validate_update_password(cls, v, values):
@@ -166,12 +192,25 @@ class AssetUpdate(BaseModel):
 
 class SshVerifyRequest(BaseModel):
     """SSH连接验证请求模型"""
-    ip: str = Field(..., description="SSH服务器IP地址")
+    id:Optional[int] = Field(None, description="资产ID")
+    ip: str = Field(..., description="SSH服务器IP地址或域名")
     ssh_port: int = Field(default=22, ge=1, le=65535, description="SSH端口")
     ssh_username: str = Field(..., description="SSH用户名")
     ssh_auth_type: str = Field(..., description="认证类型: PASSWORD/KEY")
     ssh_password: Optional[str] = Field(None, description="SSH密码")
     ssh_key_path: Optional[str] = Field(None, description="SSH密钥路径")
+    is_local: bool = Field(default=False, description="是否为本地系统")
+
+    @validator('ip')
+    def validate_ip(cls, v):
+        # IPv4地址正则
+        ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+        # 域名正则 (简化版)
+        domain_pattern = r'^[a-zA-Z0-9][-a-zA-Z0-9.]{0,253}[a-zA-Z0-9](:[0-9]{1,5})?$'
+        
+        if not (re.match(ipv4_pattern, v) or re.match(domain_pattern, v)):
+            raise ValueError('IP必须是有效的IPv4地址或域名格式')
+        return v
 
     @validator('ssh_auth_type')
     def validate_auth_type(cls, v):

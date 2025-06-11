@@ -7,7 +7,7 @@ class Asset(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(50), nullable=False)
-    ip = Column(String(15), nullable=False)
+    ip = Column(String(255), nullable=False, comment='IP地址或域名')
     ssh_port = Column(Integer, default=22)
     ssh_username = Column(String(50), nullable=False)
     ssh_password = Column(String(255))
@@ -15,6 +15,7 @@ class Asset(Base):
     ssh_auth_type = Column(String(20), default='KEY')
     status = Column(String(20), default='PENDING')
     is_local = Column(Boolean, default=False, comment='是否为本地系统资产')
+    port_access_mode = Column(String(20), default='DIRECT', comment='端口访问模式: DIRECT直连模式, DOMAIN域名模式')
     
     # 存储为JSON字段，包含高级配置参数
     lora_training = Column(JSON, default={
@@ -60,6 +61,7 @@ class Asset(Base):
             'ssh_username': self.ssh_username,
             'ssh_auth_type': self.ssh_auth_type,
             'status': self.status,
+            'port_access_mode': self.port_access_mode,
             'lora_training': self.lora_training,
             'ai_engine': self.ai_engine,
             'created_at': self.created_at.isoformat() if self.created_at else None,

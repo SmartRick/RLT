@@ -86,3 +86,38 @@ def copy_attributes(source, target, attributes=None, ignore=None):
             setattr(target, attr, value)
     
     return target
+
+def generate_domain_url(hostname: str, port: int) -> str:
+    """
+    根据主机名和端口生成域名URL
+    
+    Args:
+        hostname: 主机名（SSH域名）
+        port: 服务端口
+        
+    Returns:
+        str: 生成的域名URL，如果无法解析则返回None
+    """
+    from ..models.constants import DOMAIN_ACCESS_CONFIG
+    
+    try:
+        # 检查是否是SSH域名格式
+        if DOMAIN_ACCESS_CONFIG['SSH_DOMAIN_SUFFIX'] in hostname:
+            # 提取主机名部分（移除SSH域名后缀）
+            base_hostname = hostname.replace(DOMAIN_ACCESS_CONFIG['SSH_DOMAIN_SUFFIX'], '')
+            
+            # 根据域名格式模板生成容器访问域名
+            container_domain = DOMAIN_ACCESS_CONFIG['CONTAINER_DOMAIN_FORMAT'].format(
+                hostname=base_hostname,
+                port=port
+            )
+            
+            # 添加协议前缀
+            full_url = f"{DOMAIN_ACCESS_CONFIG['DEFAULT_PROTOCOL']}{container_domain}"
+            return full_url
+        
+        return None
+    except Exception as e:
+        import logging
+        logging.error(f"生成域名URL失败: {str(e)}")
+        return None

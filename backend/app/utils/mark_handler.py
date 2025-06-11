@@ -1,11 +1,11 @@
 import json
-import requests
 import os
 import random
 from typing import Tuple, Dict, Optional, Any
 from ..utils.logger import setup_logger
 from ..config import Config
 from dataclasses import dataclass
+from task_scheduler.comfyui_api import ComfyUIAPI, ComfyUIConfig
 
 logger = setup_logger('mark_handler')
 
@@ -22,15 +22,50 @@ class MarkConfig:
     trigger_words: str = ''
 
 class MarkRequestHandler:
-    def __init__(self,  asset_ip: str = None,mark_port:int = 8188):
+    def __init__(self, asset=None):
         """
         初始化标记处理器
-        :param asset_config: 资产配置信息，包含AI引擎端口等
-        :param asset_ip: 资产IP地址，如果不提供则使用127.0.0.1
+        :param asset: 资产对象，如果不提供则使用本地地址127.0.0.1:8188
         """
-        self.asset_ip = asset_ip or '127.0.0.1'
-        self.mark_port = mark_port
-        self.api_base_url = f"http://{self.asset_ip}:{self.mark_port}"
+        self.mark_port = 8188  # 默认端口
+        self.asset_ip = '127.0.0.1'  # 默认IP
+        
+        if asset:
+            # 根据资产的访问模式选择连接方式
+            self.mark_port = asset.ai_engine.get('port', 8188)
+            
+            if asset.is_local:
+                # 本地资产使用127.0.0.1
+                self.asset_ip = '127.0.0.1'
+            elif asset.port_access_mode == 'DOMAIN':
+                # 域名访问模式
+                from ..utils.common import generate_domain_url
+                domain_url = generate_domain_url(asset.ip, self.mark_port)
+                if domain_url:
+                    # 使用域名格式访问，端口设置为80
+                    self.asset_ip = domain_url.replace('https://', '').replace('http://', '')
+                    self.mark_port = 80
+                else:
+                    # 如果无法生成域名URL，使用IP
+                    self.asset_ip = asset.ip
+            else:
+                # 直连模式
+                self.asset_ip = asset.ip
+        
+        # 构建API基础URL
+        if self.mark_port == 80 or self.mark_port == 443:
+            # 标准HTTP/HTTPS端口无需在URL中指定
+            self.api_base_url = f"http://{self.asset_ip}"
+        else:
+            self.api_base_url = f"http://{self.asset_ip}:{self.mark_port}"
+            
+        # 创建ComfyUIConfig和ComfyUIAPI实例
+        self.comfy_config = ComfyUIConfig(
+            host=self.api_base_url,
+            port=None,  # 端口已包含在api_base_url中
+            client_id="lora_tool"
+        )
+        self.api = ComfyUIAPI(self.comfy_config)
 
     def load_workflow_api(self) -> Dict:
         """加载标记工作流配置"""
@@ -68,21 +103,12 @@ class MarkRequestHandler:
             with open(workflow_new_file, 'w', encoding='utf-8') as f:
                 json.dump(workflow, f, ensure_ascii=False, indent=4)
 
-            # 构建请求
-            url = f"{self.api_base_url}/prompt"
-            payload = {
-                "prompt": workflow,
-                "client_id": "lora_tool"
-            }
-
-            logger.debug(f"发送标记请求到 {url}")
+            logger.debug(f"发送标记请求到 {self.api_base_url}")
             
-            # 发送请求
-            response = requests.post(url, json=payload, timeout=30)
-            response.raise_for_status()
+            # 使用ComfyUIAPI提交任务
+            response = self.api.submit_prompt(workflow)
             
-            data = response.json()
-            prompt_id = data.get("prompt_id")
+            prompt_id = response.get("prompt_id")
             
             if not prompt_id:
                 raise ValueError("API返回成功但未获取到prompt_id")
@@ -90,21 +116,8 @@ class MarkRequestHandler:
             logger.info(f"标记请求发送成功，prompt_id: {prompt_id}")
             return prompt_id
 
-        except requests.exceptions.RequestException as e:
-            error_msg, error_detail = self._parse_request_error(e)
-            logger.error(f"发送标记请求失败: {error_msg}", exc_info=True)
-            
-            # 构建结构化错误信息
-            error_info = {
-                "message": error_msg,
-                "detail": error_detail,
-                "type": "REQUEST_ERROR"
-            }
-            
-            raise ValueError(json.dumps(error_info))
-            
         except Exception as e:
-            logger.error(f"发送标记请求时发生未知错误: {str(e)}", exc_info=True)
+            logger.error(f"发送标记请求失败: {str(e)}", exc_info=True)
             
             # 构建结构化错误信息
             error_info = {
@@ -114,79 +127,51 @@ class MarkRequestHandler:
             
             raise ValueError(json.dumps(error_info))
             
-    def _parse_request_error(self, exception: requests.exceptions.RequestException) -> Tuple[str, str]:
-        """解析请求异常，提取有用的错误信息"""
-        error_msg = str(exception)
-        error_detail = ""
-        
-        try:
-            if hasattr(exception, 'response') and exception.response is not None:
-                status_code = exception.response.status_code
-                error_msg = f"HTTP {status_code}"
-                
-                # 尝试解析JSON响应
-                try:
-                    error_data = exception.response.json()
-                    if isinstance(error_data, dict):
-                        api_error = error_data.get('error', '')
-                        api_detail = error_data.get('detail', '')
-                        
-                        if api_error:
-                            error_msg = api_error
-                        if api_detail:
-                            error_detail = api_detail
-                except ValueError:
-                    # 响应不是有效的JSON
-                    error_detail = exception.response.text[:200]  # 只取前200个字符
-        except Exception:
-            # 解析过程中出现异常，返回原始错误
-            pass
-            
-        return error_msg, error_detail
-
-    def check_status(self, prompt_id: str,mark_config: MarkConfig) -> Tuple[bool, bool, Dict[str, Any]]:
+    def check_status(self, prompt_id: str, mark_config: MarkConfig) -> Tuple[bool, bool, Dict[str, Any]]:
         """
         检查标记任务状态
         :param prompt_id: 任务ID
+        :param mark_config: 标记配置参数
         :return: (is_completed, is_success, task_info)
         """
-        url = f"{self.api_base_url}/history/{prompt_id}"
-        logger.debug(f"检查任务状态: {url}")
-        
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # 检查响应是否为空
-        if not data or data == {}:
-            logger.debug(f"任务 {prompt_id} 执行中...")
-            return False, False, {"status": "processing", "progress": 0}
-
-        # 获取任务状态
-        task_info = data.get(prompt_id, {}).get("status", {})
-        status = task_info.get("status_str")
-
-        # 提取错误信息
-        error_info = self._extract_error_info(task_info)
-
-        result_info = {
-            "status": status,
-            "progress": task_info.get("progress", 0),
-            "execution_time": task_info.get("exec_time", 0),
-            "error_info": error_info
-        }
-
-        if status == "success":
-            logger.info(f"任务 {prompt_id} 完成")
-            return True, True, result_info
-        elif status == "error":
-            error_msg = error_info.get("error_message", "未知错误")
-            logger.error(f"任务 {prompt_id} 失败: {error_msg}")
-            return True, False, result_info
-        else:
-            logger.debug(f"任务 {prompt_id} 状态: {status}, 进度: {result_info['progress']}%")
-            return False, False, result_info
+        try:
+            # 使用ComfyUIAPI获取任务历史
+            history_data = self.api.get_history_by_id(prompt_id)
+            
+            # 检查响应是否为空
+            if not history_data or not isinstance(history_data, dict) or prompt_id not in history_data:
+                logger.debug(f"任务 {prompt_id} 执行中...")
+                return False, False, {"status": "processing", "progress": 0}
+    
+            # 获取任务状态
+            task_info = history_data.get(prompt_id, {}).get("status", {})
+            status = task_info.get("status_str")
+    
+            # 提取错误信息
+            error_info = self._extract_error_info(task_info)
+    
+            result_info = {
+                "status": status,
+                "progress": task_info.get("progress", 0),
+                "execution_time": task_info.get("exec_time", 0),
+                "error_info": error_info
+            }
+    
+            if status == "success":
+                logger.info(f"任务 {prompt_id} 完成")
+                return True, True, result_info
+            elif status == "error":
+                error_msg = error_info.get("error_message", "未知错误")
+                logger.error(f"任务 {prompt_id} 失败: {error_msg}")
+                return True, False, result_info
+            else:
+                logger.debug(f"任务 {prompt_id} 状态: {status}, 进度: {result_info['progress']}%")
+                return False, False, result_info
+                
+        except Exception as e:
+            logger.error(f"检查任务状态出错: {str(e)}", exc_info=True)
+            # 返回处理中状态，允许后续重试
+            return False, False, {"status": "error_checking", "error": str(e), "progress": 0}
             
     def _extract_error_info(self, task_info: Dict) -> Dict:
         """从任务状态中提取错误信息"""
@@ -208,3 +193,17 @@ class MarkRequestHandler:
                     break
                     
         return error_info
+        
+    def interrupt(self) -> bool:
+        """
+        中断正在进行的标记任务
+        
+        Returns:
+            操作是否成功
+        """
+        try:
+            result = self.api.interrupt()
+            return result.get("success", False)
+        except Exception as e:
+            logger.error(f"中断任务失败: {str(e)}")
+            return False

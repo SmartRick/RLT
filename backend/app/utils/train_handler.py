@@ -91,15 +91,44 @@ class TrainConfig:
     extra_params: Dict[str, Any] = field(default_factory=dict)
 
 class TrainRequestHandler:
-    def __init__(self, asset_ip: str = None,training_port:int = 28000):
+    def __init__(self, asset=None, asset_ip=None, training_port=None):
         """
         初始化训练处理器
-        :param asset_config: 资产配置信息，包含Lora训练端口等
-        :param asset_ip: 资产IP地址，如果不提供则使用127.0.0.1
+        :param asset: 资产对象，如果提供则从资产获取连接信息
+        :param asset_ip: 资产IP地址，如果同时提供asset和asset_ip，优先使用asset_ip
+        :param training_port: 训练端口，如果同时提供asset和training_port，优先使用training_port
         """
-        self.asset_ip = asset_ip or '127.0.0.1'
-        self.training_port = training_port
-        self.api_base_url = f"http://{self.asset_ip}:{self.training_port}/api"
+        self.training_port = training_port or 28000  # 默认端口
+        self.asset_ip = asset_ip or '127.0.0.1'  # 默认IP
+        
+        if asset and not asset_ip:
+            # 根据资产的访问模式选择连接方式
+            self.training_port = asset.lora_training.get('port', 28000)
+            
+            if asset.is_local:
+                # 本地资产使用127.0.0.1
+                self.asset_ip = '127.0.0.1'
+            elif asset.port_access_mode == 'DOMAIN':
+                # 域名访问模式
+                from ..utils.common import generate_domain_url
+                domain_url = generate_domain_url(asset.ip, self.training_port)
+                if domain_url:
+                    # 使用域名格式访问，端口设置为80
+                    self.asset_ip = domain_url.replace('https://', '').replace('http://', '')
+                    self.training_port = 80
+                else:
+                    # 如果无法生成域名URL，使用IP
+                    self.asset_ip = asset.ip
+            else:
+                # 直连模式
+                self.asset_ip = asset.ip
+        
+        # 构建API基础URL
+        if self.training_port == 80:
+            # HTTP标准端口无需在URL中指定
+            self.api_base_url = f"http://{self.asset_ip}/api"
+        else:
+            self.api_base_url = f"http://{self.asset_ip}:{self.training_port}/api"
 
     def train_request(self, train_config: TrainConfig) -> str:
         """

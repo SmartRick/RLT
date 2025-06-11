@@ -3,8 +3,10 @@ from ...services.asset_service import AssetService
 from ...services.config_service import ConfigService
 from ...utils.logger import setup_logger
 from ...utils.validators import validate_asset_create
-from ...schemas.asset import AssetCreate, AssetUpdate, SshVerifyRequest
+from ...schemas.asset import SshVerifyRequest,AssetCreate, AssetUpdate
 from ...utils.response import success_json, error_json, exception_handler, response_template
+from ...models.asset import Asset as AssetModel
+from ...utils.common import copy_attributes
 
 logger = setup_logger('assets_api')
 assets_bp = Blueprint('assets', __name__)
@@ -78,12 +80,22 @@ def verify_capabilities(asset_id):
 def verify_ssh_connection():
     """验证SSH连接"""
     # 验证请求数据
-    data = SshVerifyRequest(**request.json)
+    asset_data = SshVerifyRequest(**request.json)
+    
+    # 创建临时资产对象用于验证
+    asset = AssetModel()
+    
+    # 使用copy_attributes工具函数拷贝属性
+    copy_attributes(asset_data, asset)
     
     # 执行SSH连接验证
-    AssetService.verify_ssh_connection(data.dict())
+    from ...services.terminal_service import TerminalService
+    success, message = TerminalService.verify_asset_ssh_connection(asset)
     
-    return success_json(None, "SSH连接验证成功")
+    if success:
+        return success_json(None, message)
+    else:
+        return error_json(4001, message)
 
 @assets_bp.route('/<int:asset_id>/configs/lora', methods=['GET'])
 @exception_handler

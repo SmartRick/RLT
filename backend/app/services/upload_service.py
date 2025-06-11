@@ -7,6 +7,7 @@ from ..database import get_db
 from ..models.upload_file import UploadFile
 from ..config import config
 from ..utils.logger import setup_logger
+from ..utils.file_handler import calculate_md5
 
 logger = setup_logger('upload_service')
 
@@ -56,7 +57,7 @@ class UploadService:
             file_size = os.path.getsize(file_path) / 1024  # 转换为KB
             
             # 计算MD5
-            md5 = UploadService.calculate_md5(file_path)
+            md5 = calculate_md5(file_path)
             
             # 记录到数据库
             with get_db() as db:
@@ -79,16 +80,6 @@ class UploadService:
         except Exception as e:
             logger.error(f"文件上传失败: {str(e)}")
             return None
-    
-    @staticmethod
-    def calculate_md5(file_path: str) -> str:
-        """计算文件MD5"""
-        md5_hash = hashlib.md5()
-        with open(file_path, "rb") as f:
-            # 分块读取文件以处理大文件
-            for chunk in iter(lambda: f.read(4096), b""):
-                md5_hash.update(chunk)
-        return md5_hash.hexdigest()
     
     @staticmethod
     def get_file_by_id(file_id: int) -> Optional[Dict[str, Any]]:
