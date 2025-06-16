@@ -1,14 +1,16 @@
 <template>
   <div 
     class="asset-card mac-card"
-    :class="{ 'is-selected': isSelected }"
+    :class="{ 'is-selected': isSelected, 'is-local': asset.is_local }"
     @click="$emit('select', asset)"
   >
     <!-- 卡片头部 -->
     <div class="asset-card-header">
       <div class="asset-title">
-        <ServerIcon class="asset-icon" />
+        <ServerIcon v-if="!asset.is_local" class="asset-icon" />
+        <ComputerDesktopIcon v-else class="asset-icon local" />
         <span class="asset-name text-ellipsis">{{ asset.name }}</span>
+        <span v-if="asset.is_local" class="local-badge">本地</span>
       </div>
       <div class="asset-status-badge" :class="getStatusClass(asset.status)">
         {{ getStatusText(asset.status) }}
@@ -21,15 +23,20 @@
       <div class="info-section">
         <h4 class="section-label">基础信息</h4>
         <div class="info-grid">
-          <div class="info-item">
+          <div class="info-item" v-if="!asset.is_local">
             <ComputerDesktopIcon class="info-icon" />
             <span class="info-label">IP地址:</span>
             <span class="info-text text-ellipsis">{{ asset.ip }}:{{ asset.ssh_port }}</span>
           </div>
-          <div class="info-item">
+          <div class="info-item" v-if="!asset.is_local">
             <UserIcon class="info-icon" />
             <span class="info-label">用户名:</span>
             <span class="info-text text-ellipsis">{{ asset.ssh_username }}</span>
+          </div>
+          <div class="info-item" v-if="asset.is_local">
+            <ComputerDesktopIcon class="info-icon" />
+            <span class="info-label">类型:</span>
+            <span class="info-text text-ellipsis">本地资产</span>
           </div>
           <div class="info-item">
             <ClockIcon class="info-icon" />
@@ -69,8 +76,8 @@
       <button 
         class="mac-btn small terminal-btn" 
         @click.stop="$emit('open-terminal', asset)"
-        :disabled="asset.status !== 'CONNECTED'"
-        :title="asset.status !== 'CONNECTED' ? '请先验证SSH连接' : '打开终端'"
+        :disabled="asset.status !== 'CONNECTED' || asset.is_local"
+        :title="getTerminalBtnTitle(asset)"
       >
         <TerminalIcon class="btn-icon" />
         <span>终端</span>
@@ -149,6 +156,13 @@ const getStatusClass = (status) => {
   return statusClassMap[status] || ''
 }
 
+// 获取终端按钮标题
+const getTerminalBtnTitle = (asset) => {
+  if (asset.is_local) return '本地资产不支持终端操作'
+  if (asset.status !== 'CONNECTED') return '请先验证SSH连接'
+  return '打开终端'
+}
+
 // 格式化日期
 const formatDate = (date) => {
   if (!date) return ''
@@ -178,6 +192,11 @@ const formatDate = (date) => {
 .asset-card.is-selected {
   border: 1px solid var(--primary-color, #007AFF);
   box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+}
+
+.asset-card.is-local {
+  background: linear-gradient(to bottom, #FFFFFF, #F8FDFF);
+  border: 1px solid #E1F5FE;
 }
 
 .asset-card-header {
@@ -230,6 +249,12 @@ const formatDate = (date) => {
 .asset-status-badge.connection-error {
   background: #FFEBEE;
   color: #C62828;
+}
+
+/* 本地资产状态 */
+.asset-status-badge.local {
+  background: #E1F5FE;
+  color: #0277BD;
 }
 
 .asset-card-content {
@@ -439,5 +464,19 @@ const formatDate = (date) => {
   .asset-card-actions {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+.local-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  background-color: #E1F5FE;
+  color: #0277BD;
+  border-radius: 4px;
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+.asset-icon.local {
+  color: #0277BD;
 }
 </style> 

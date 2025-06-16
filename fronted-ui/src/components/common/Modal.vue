@@ -154,6 +154,11 @@ export default {
     defaultActiveTab: {
       type: Number,
       default: 0
+    },
+    // 是否阻止ESC键关闭，对于嵌套需要ESC关闭的组件如ImageViewer很有用
+    preventKeydownClose: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['update:modelValue', 'confirm', 'fullscreen-change', 'update:fullscreen', 'tab-change'],
@@ -251,7 +256,7 @@ export default {
     
     // 监听键盘事件
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !props.preventKeydownClose) {
         close()
       } else if (event.key === 'F11' && props.fullscreenToggle) {
         // 按F11键切换全屏

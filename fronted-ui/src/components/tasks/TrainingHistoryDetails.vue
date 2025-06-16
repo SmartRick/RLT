@@ -55,6 +55,28 @@
                   <div class="value">{{ trainingDuration }}</div>
                 </div>
               </div>
+              
+              <!-- 添加打标资产信息 -->
+              <div class="info-item" v-if="historyRecord.marking_asset_id">
+                <div class="info-icon">
+                  <TagIcon />
+                </div>
+                <div class="info-content">
+                  <div class="label">打标资产</div>
+                  <div class="value">{{ historyRecord.marking_asset_name || `ID: ${historyRecord.marking_asset_id}` }}</div>
+                </div>
+              </div>
+              
+              <!-- 添加训练资产信息 -->
+              <div class="info-item" v-if="historyRecord.training_asset_id">
+                <div class="info-icon">
+                  <CpuChipIcon />
+                </div>
+                <div class="info-content">
+                  <div class="label">训练资产</div>
+                  <div class="value">{{ historyRecord.training_asset_name || `ID: ${historyRecord.training_asset_id}` }}</div>
+                </div>
+              </div>
             </div>
             
             <div class="description-container" v-if="historyRecord.description">

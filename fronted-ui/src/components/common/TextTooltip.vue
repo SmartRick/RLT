@@ -51,7 +51,7 @@
 
 <script setup>
 /* eslint-disable */
-import { ref, defineProps, defineEmits, watch, onUnmounted, computed } from 'vue'
+import { ref, defineProps, defineEmits, watch, onUnmounted, computed, nextTick } from 'vue'
 import message from '@/utils/message'
 import { stripHtml } from '@/utils/textFormatters'
 
@@ -134,6 +134,14 @@ const computedTooltipStyle = computed(() => {
   return calculatePosition()
 })
 
+// 获取实际提示框高度（如果可用）
+const getTooltipHeight = () => {
+  if (tooltipRef.value) {
+    return tooltipRef.value.offsetHeight
+  }
+  return props.estimatedHeight
+}
+
 // 获取元素的位置信息
 const getElementRect = (element) => {
   if (!element) return null
@@ -168,7 +176,7 @@ const calculatePosition = () => {
   
   // 设置提示框的尺寸
   const maxWidth = props.maxWidth
-  const estimatedHeight = props.estimatedHeight
+  const tooltipHeight = getTooltipHeight()
   
   // 初始位置计算（默认在元素下方）
   let top = triggerRect.bottom + scrollY + 10 // 元素底部 + 间距
@@ -179,11 +187,11 @@ const calculatePosition = () => {
   let arrowTransform = 'translateY(50%) rotate(45deg)' // 默认箭头变换
   
   // 检查是否有足够的向下空间
-  const hasEnoughSpaceBelow = (windowHeight - triggerRect.bottom) > (estimatedHeight + 20)
+  const hasEnoughSpaceBelow = (windowHeight - triggerRect.bottom) > (tooltipHeight + 20)
   
   // 如果下方空间不足，则将提示框显示在元素上方
   if (!hasEnoughSpaceBelow) {
-    top = triggerRect.top + scrollY - estimatedHeight - 10 // 元素顶部 - 提示框高度 - 间距
+    top = triggerRect.top + scrollY - tooltipHeight - 10 // 使用实际高度
     arrowTop = 'auto' // 箭头不在顶部
     arrowBottom = '-8px' // 箭头在底部
     arrowPosition = '20px' // 重置箭头水平位置

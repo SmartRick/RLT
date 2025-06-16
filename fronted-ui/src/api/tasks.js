@@ -170,5 +170,24 @@ export const tasksApi = {
   async getTrainingHistoryDetails(historyId) {
     const response = await request.get(`${BASE_URL}/execution-history/${historyId}`)
     return response
+  },
+  
+  /**
+   * 获取任务配置
+   * @param {number|string} taskId 任务ID
+   * @returns {Promise<Object>} 任务配置，包含打标和训练配置
+   */
+  async getTaskConfig(taskId) {
+    return request.get(`${BASE_URL}/${taskId}/config`)
+  },
+  
+  /**
+   * 更新任务配置
+   * @param {number|string} taskId 任务ID
+   * @param {Object} configData 配置数据
+   * @returns {Promise<Object>} 更新后的配置信息
+   */
+  async updateTaskConfig(taskId, configData) {
+    return request.put(`${BASE_URL}/${taskId}/config`, configData)
   }
 } 

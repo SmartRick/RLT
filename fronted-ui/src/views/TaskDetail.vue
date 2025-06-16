@@ -163,7 +163,11 @@
         </div>
 
         <!-- 任务配置卡片 -->
-        <TaskConfigCard v-if="task" :task="task" :can-edit="canEditConfig" @update:task="handleTaskUpdate" />
+        <TaskConfigCard 
+          v-if="task" 
+          :task-id="taskId" 
+          :can-edit="canEditConfig" 
+        />
       </div>
     </div>
 
@@ -179,7 +183,7 @@
       :images="previewSource === 'task' ? getTaskImagesUrls() : trainingModelImages" />
 
     <!-- 训练详情模态框 -->
-    <BaseModal v-model="showTrainingDetailsModal" title="训练详情" :width="70" :loading="false" :showFooter="false">
+    <BaseModal v-model="showTrainingDetailsModal" :width="70" :loading="false" :showFooter="false" :preventKeydownClose="showPreview">
       <template #body>
         <TrainingDetails :taskId="taskId" :taskName="task?.name || ''" :isTraining="task?.status === 'TRAINING'"
           @preview-image="handlePreview" @model-images-change="updateTrainingModelImages" />
@@ -187,7 +191,7 @@
     </BaseModal>
 
     <!-- 训练历史详情模态框 -->
-    <BaseModal v-model="showHistoryDetailsModal" :width="75" :loading="false" :showFooter="false">
+    <BaseModal v-model="showHistoryDetailsModal" :width="70" :loading="false" :showFooter="false" :preventKeydownClose="showPreview">
       <template #body>
         <TrainingHistoryDetails 
           v-if="selectedHistoryRecord"
@@ -235,7 +239,6 @@ import {
   isTaskActive as checkTaskActive,
   statusDetailColorMap
 } from '@/utils/taskStatus'
-import { Teleport } from 'vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -258,9 +261,6 @@ const markedTexts = ref({}) // 打标文本数据
 // 图片网格引用和批量操作相关
 const imageGridRef = ref(null)
 const selectedImagesCount = ref(0)
-
-// 批量编辑相关
-const isBatchEditing = ref(false)
 
 // 训练详情相关
 const showTrainingDetailsModal = ref(false)
@@ -389,7 +389,7 @@ const updateTaskStatus = async () => {
         task.value.status_history = statusData.status_history
 
         // 如果状态变为完成或错误，获取完整任务信息
-        if (['COMPLETED', 'ERROR'].includes(statusData.status)) {
+        if (['COMPLETED', 'ERROR', 'MARKED'].includes(statusData.status)) {
           await fetchTask()
         }
       }
@@ -641,40 +641,6 @@ const canEditConfig = computed(() => {
   return ['NEW'].includes(task.value?.status);
 });
 
-// 处理任务更新
-const handleTaskUpdate = async (updatedTask) => {
-  try {
-    isLoading.value = true;
-
-    // 创建包含需要更新字段的对象
-    const updateData = {
-      use_global_mark_config: updatedTask.use_global_mark_config,
-      use_global_training_config: updatedTask.use_global_training_config
-    };
-
-    // 根据全局配置状态决定是否包含配置
-    if (!updatedTask.use_global_mark_config) {
-      updateData.mark_config = updatedTask.mark_config;
-    }
-
-    if (!updatedTask.use_global_training_config) {
-      updateData.training_config = updatedTask.training_config;
-    }
-
-    // 调用API更新任务配置
-    const result = await tasksApi.updateTask(taskId.value, updateData);
-
-    // 更新本地任务数据
-    task.value = result;
-    message.success('任务配置已更新');
-  } catch (error) {
-    console.error('更新任务配置失败', error);
-    message.error('更新任务配置失败');
-  } finally {
-    isLoading.value = false;
-  }
-};
-
 // 处理批量删除图片
 const handleBatchDeleteImages = async (imageIds) => {
   if (!imageIds || imageIds.length === 0) return
@@ -870,32 +836,6 @@ const openHistoryDetails = (record) => {
   showHistoryDetailsModal.value = true;
   showHistoryDropdown.value = false;
   document.removeEventListener('click', handleClickOutside);
-};
-
-// 格式化短日期
-const formatShortDate = (dateStr) => {
-  if (!dateStr) return '';
-  
-  const date = new Date(dateStr);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-};
-
-// 获取历史记录的训练时长
-const getHistoryDuration = (record) => {
-  if (!record.start_time || !record.end_time) return '进行中';
-  
-  const start = new Date(record.start_time);
-  const end = new Date(record.end_time);
-  const duration = end - start;
-  
-  const minutes = Math.floor((duration / 1000 / 60) % 60);
-  const hours = Math.floor((duration / 1000 / 60 / 60));
-  
-  if (hours > 0) {
-    return `${hours}小时${minutes}分钟`;
-  } else {
-    return `${minutes}分钟`;
-  }
 };
 
 // 监听窗口大小变化，更新下拉菜单位置

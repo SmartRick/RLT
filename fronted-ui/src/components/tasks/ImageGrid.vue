@@ -48,6 +48,14 @@
               <span class="checkbox-custom"></span>
             </label>
             
+            <!-- 图片分辨率显示 -->
+            <div 
+              class="image-resolution" 
+              v-if="image.width && image.height"
+            >
+              {{ image.width }}×{{ image.height }}
+            </div>
+            
             <!-- 删除按钮 -->
             <button 
               v-if="canDelete"
@@ -63,6 +71,7 @@
               :src="image.preview_url" 
               :alt="image.filename"
               @click="handlePreview(image.preview_url)"
+              @load="handleImageLoad($event, image)"
             >
           </div>
           
@@ -76,7 +85,6 @@
             <div v-if="showMarkedText" class="marked-text-container">
               <div 
                 class="marked-text" 
-                @click="showFullTextTooltip($event, image.filename)"
                 v-html="highlightMarkedText(getMarkedTextContent(image.filename))"
                 @mouseenter="showFullTextTooltip($event, image.filename)"
                 @mouseleave="hideTooltipWithDelay"
@@ -282,6 +290,9 @@ const emit = defineEmits([
 
 const gridContainer = ref(null) // 添加网格容器引用
 const textTooltipRef = ref(null) // 添加对TextTooltip的引用
+
+// 图片分辨率缓存
+const imageResolutionCache = new Map()
 
 // 是否可以删除图片
 const canDelete = computed(() => {
@@ -858,6 +869,43 @@ const copyMarkedText = (filename) => {
     message.warning('没有可复制的提示词')
   }
 }
+
+// 处理图片加载事件，获取图片的实际尺寸
+const handleImageLoad = (event, image) => {
+  // 如果已经有宽高信息，则跳过
+  if (image.width && image.height) return
+  
+  const img = event.target
+  if (img.naturalWidth && img.naturalHeight) {
+    // 设置图片宽高属性
+    image.width = img.naturalWidth
+    image.height = img.naturalHeight
+    
+    // 缓存分辨率信息
+    imageResolutionCache.set(image.id, {
+      width: img.naturalWidth,
+      height: img.naturalHeight
+    })
+  }
+}
+
+// 监听图片列表变化，恢复分辨率信息
+watch(() => props.images, (newImages) => {
+  if (!newImages || newImages.length === 0) return
+  
+  // 遍历图片列表，从缓存中恢复分辨率信息
+  newImages.forEach(image => {
+    // 如果图片已有分辨率信息，则跳过
+    if (image.width && image.height) return
+    
+    // 从缓存中获取分辨率信息
+    const cachedResolution = imageResolutionCache.get(image.id)
+    if (cachedResolution) {
+      image.width = cachedResolution.width
+      image.height = cachedResolution.height
+    }
+  })
+}, { immediate: true, deep: true })
 </script>
 
 <style scoped>
@@ -1097,6 +1145,9 @@ const copyMarkedText = (filename) => {
   color: var(--text-primary);
   margin-bottom: 4px;
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 打标文本样式 */
@@ -1111,7 +1162,7 @@ const copyMarkedText = (filename) => {
   line-height: 1.5;
   color: var(--text-secondary);
   background: var(--background-tertiary);
-  padding: 6px;
+  padding: 0 6px;
   border-radius: 4px;
   overflow: hidden;
   display: -webkit-box;
@@ -1331,5 +1382,20 @@ const copyMarkedText = (filename) => {
 
 .error-icon {
   color: #dc2626;
+}
+
+.image-resolution {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 2;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 </style> 

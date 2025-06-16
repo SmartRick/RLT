@@ -6,9 +6,9 @@
         <div class="progress-info">
           <span class="progress-label">训练进度:</span>
           <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: `${trainingProgress.progress_percent}%` }"></div>
+            <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
           </div>
-          <span class="progress-text">{{ trainingProgress.progress_percent }}%</span>
+          <span class="progress-text">{{ progressPercent }}%</span>
         </div>
         <div class="step-info">
           <span>步数: {{ trainingProgress.current_step }}/{{ trainingProgress.total_steps }}</span>
@@ -22,7 +22,11 @@
       <div class="loss-section">
         <h4 class="section-title">
           训练Loss曲线
-          <span v-if="lastStepLoss" class="loss-value">(当前Loss: {{ lastStepLoss }})</span>
+          <span v-if="firstStepLoss && lastStepLoss" class="loss-values">
+            <span class="initial-loss" title="初始Loss值">初始: {{ firstStepLoss }}</span>
+            <span class="loss-arrow">→</span>
+            <span class="current-loss" title="当前Loss值">当前: {{ lastStepLoss }}</span>
+          </span>
         </h4>
         <div class="chart-container" ref="chartContainer" id="training-loss-chart">
           <div v-if="isLoadingLoss" class="loading-placeholder">加载中...</div>
@@ -211,12 +215,27 @@ const currentImageIndex = ref(0)
 
 // 计算属性
 const hasLossData = computed(() => lossData.value && lossData.value.length > 0)
+const firstStepLoss = computed(() => {
+  if (lossData.value && lossData.value.length > 0) {
+    const firstLoss = lossData.value[0]
+    return firstLoss.value.toFixed(4)
+  }
+  return null
+})
 const lastStepLoss = computed(() => {
   if (lossData.value && lossData.value.length > 0) {
     const lastLoss = lossData.value[lossData.value.length - 1]
     return lastLoss.value.toFixed(4)
   }
   return null
+})
+
+// 计算训练进度百分比
+const progressPercent = computed(() => {
+  if (!trainingProgress.value || !trainingProgress.value.total_steps) return 0
+  
+  const percent = Math.floor((trainingProgress.value.current_step / trainingProgress.value.total_steps) * 100)
+  return Math.min(100, Math.max(0, percent)) // 确保百分比在0-100之间
 })
 
 // 获取预览图片
@@ -940,11 +959,28 @@ onUnmounted(() => {
   margin: 0 0 16px 0;
 }
 
-.section-title .loss-value {
+.section-title .loss-values {
   font-size: 14px;
   font-weight: normal;
   color: var(--text-secondary);
-  margin-left: 8px;
+  margin-left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title .initial-loss {
+  color: #e67e22;
+}
+
+.section-title .loss-arrow {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.section-title .current-loss {
+  color: #2ecc71;
+  font-weight: 500;
 }
 
 .no-preview-large {

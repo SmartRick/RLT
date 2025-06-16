@@ -3,6 +3,7 @@
     v-if="modelValue"
     class="image-viewer-overlay"
     @click.self="handleClose"
+    @keydown.stop
   >
     <!-- 工具栏 -->
     <div class="toolbar">
@@ -240,6 +241,7 @@ const handleKeydown = (e) => {
       showNext()
       break
     case 'Escape':
+      e.stopPropagation()
       handleClose()
       break
   }

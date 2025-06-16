@@ -1,22 +1,14 @@
 <template>
   <div class="task-config-card mac-card">
     <div class="tabs">
-      <button 
-        class="tab-button" 
-        :class="{ active: activeTab === 'mark' }" 
-        @click="activeTab = 'mark'"
-      >
+      <button class="tab-button" :class="{ active: activeTab === 'mark' }" @click="activeTab = 'mark'">
         打标配置
       </button>
-      <button 
-        class="tab-button" 
-        :class="{ active: activeTab === 'training' }" 
-        @click="activeTab = 'training'"
-      >
+      <button class="tab-button" :class="{ active: activeTab === 'training' }" @click="activeTab = 'training'">
         训练参数
       </button>
     </div>
-    
+
     <!-- 打标配置 -->
     <div v-if="activeTab === 'mark'" class="config-section">
       <div class="card-header">
@@ -24,30 +16,24 @@
         <div class="toggle-switch-container">
           <span class="toggle-switch-label">使用全局配置</span>
           <div class="toggle-switch">
-            <input 
-              type="checkbox" 
-              id="use_global_mark_config" 
-              v-model="localConfig.useGlobalMarkConfig"
-              :disabled="!canEdit"
-            >
+            <input type="checkbox" id="use_global_mark_config" v-model="config.use_global_mark_config"
+              :disabled="!canEdit">
             <label for="use_global_mark_config"></label>
           </div>
         </div>
       </div>
-      
+
       <!-- 触发词配置，不受全局配置开关影响，始终显示 -->
       <div class="form-group full-width trigger-words-section">
-        <label>触发词</label>
-        <textarea
-          v-model="localConfig.markConfig.trigger_words"
-          placeholder="输入触发词，用逗号分隔"
-          rows="3"
-          class="mac-textarea"
-          :disabled="!canEdit"
-        ></textarea>
+        <label>
+          <span class="label-text">触发词</span>
+          <span class="label-en">trigger_words</span>
+        </label>
+        <textarea v-model="config.mark_config.trigger_words" placeholder="输入触发词，用逗号分隔" rows="3" class="mac-textarea"
+          :disabled="!canEdit"></textarea>
       </div>
-      
-      <div v-if="localConfig.useGlobalMarkConfig" class="global-config-message">
+
+      <div v-if="config.use_global_mark_config" class="global-config-message">
         使用系统全局打标配置
       </div>
       <div v-else class="marking-config">
@@ -55,58 +41,48 @@
           <!-- 打标配置表单内容 -->
           <div class="form-row">
             <div class="form-group">
-              <label>自动裁剪图片</label>
+              <label>
+                <span class="label-text">自动裁剪图片</span>
+                <span class="label-en">auto_crop</span>
+              </label>
               <div class="switch-wrapper">
-                <input 
-                  type="checkbox" 
-                  id="auto_crop" 
-                  v-model="localConfig.markConfig.auto_crop"
-                  class="toggle-checkbox"
-                  :disabled="!canEdit"
-                />
+                <input type="checkbox" id="auto_crop" v-model="config.mark_config.auto_crop" class="toggle-checkbox"
+                  :disabled="!canEdit" />
                 <label for="auto_crop" class="toggle-label"></label>
               </div>
             </div>
             <div class="form-group">
-              <label>默认裁剪比例</label>
-              <select 
-                v-model="localConfig.markConfig.default_crop_ratio" 
-                class="mac-input"
-                :disabled="!canEdit"
-              >
-                <option v-for="ratio in localConfig.markConfig.crop_ratios" :key="ratio" :value="ratio">{{ ratio }}</option>
+              <label>
+                <span class="label-text">默认裁剪比例</span>
+                <span class="label-en">default_crop_ratio</span>
+              </label>
+              <select v-model="config.mark_config.default_crop_ratio" class="mac-input" :disabled="!canEdit">
+                <option v-for="ratio in config.mark_config.crop_ratios" :key="ratio" :value="ratio">{{ ratio }}</option>
               </select>
             </div>
           </div>
-          
-            <div class="form-group">
-              <label>自动标签最小置信度</label>
-              <input 
-                type="range" 
-                v-model.number="localConfig.markConfig.min_confidence" 
-                min="0" 
-                max="1" 
-                step="0.01" 
-                class="mac-slider"
-                :disabled="!canEdit"
-              />
-              <div class="slider-value">{{ localConfig.markConfig.min_confidence }}</div>
-            </div>
-            <div class="form-group">
-              <label>最大标签数量</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.markConfig.max_tags" 
-                min="1" 
-                max="100" 
-                class="mac-input"
-                :disabled="!canEdit"
-              />
-            </div>
+
+          <div class="form-group">
+            <label>
+              <span class="label-text">自动标签最小置信度</span>
+              <span class="label-en">min_confidence</span>
+            </label>
+            <input type="range" v-model.number="config.mark_config.min_confidence" min="0" max="1" step="0.01"
+              class="mac-slider" :disabled="!canEdit" />
+            <div class="slider-value">{{ config.mark_config.min_confidence }}</div>
+          </div>
+          <div class="form-group">
+            <label>
+              <span class="label-text">最大标签数量</span>
+              <span class="label-en">max_tags</span>
+            </label>
+            <input type="number" v-model.number="config.mark_config.max_tags" min="1" max="100" class="mac-input"
+              :disabled="!canEdit" />
+          </div>
         </div>
       </div>
     </div>
-    
+
     <!-- 训练参数 -->
     <div v-if="activeTab === 'training'" class="config-section">
       <div class="card-header">
@@ -114,18 +90,14 @@
         <div class="toggle-switch-container">
           <span class="toggle-switch-label">使用全局配置</span>
           <div class="toggle-switch">
-            <input 
-              type="checkbox" 
-              id="use_global_training_config" 
-              v-model="localConfig.useGlobalTrainingConfig"
-              :disabled="!canEdit"
-            >
+            <input type="checkbox" id="use_global_training_config" v-model="config.use_global_training_config"
+              :disabled="!canEdit">
             <label for="use_global_training_config"></label>
           </div>
         </div>
       </div>
-      
-      <div v-if="localConfig.useGlobalTrainingConfig" class="global-config-message">
+
+      <div v-if="config.use_global_training_config" class="global-config-message">
         使用系统全局训练参数配置
       </div>
       <div v-else class="training-config">
@@ -133,357 +105,297 @@
           <!-- 基础训练参数 -->
           <div class="form-row">
             <div class="form-group">
-              <label>最大训练轮次</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.max_train_epochs" 
-                min="1"
-                placeholder="10"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">最大训练轮次</span>
+                <span class="label-en">max_train_epochs</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.max_train_epochs" min="1" placeholder="10"
+                class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
-              <label>批量大小</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.train_batch_size" 
-                min="1"
-                placeholder="1"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">批量大小</span>
+                <span class="label-en">train_batch_size</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.train_batch_size" min="1" placeholder="1"
+                class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
-              <label>网络维度 (Dim)</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.network_dim" 
-                min="1"
-                placeholder="64"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">网络维度 (Dim)</span>
+                <span class="label-en">network_dim</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.network_dim" min="1" placeholder="64"
+                class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
-              <label>网络Alpha值</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.network_alpha" 
-                min="1"
-                placeholder="32"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">网络Alpha值</span>
+                <span class="label-en">network_alpha</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.network_alpha" min="1" placeholder="32"
+                class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
-              <label>基础学习率</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.learning_rate" 
-                step="0.0001"
-                min="0"
-                placeholder="0.0001"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">基础学习率</span>
+                <span class="label-en">learning_rate</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.learning_rate" step="0.0001" min="0"
+                placeholder="0.0001" class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
-              <label>分辨率</label>
-              <input 
-                v-model="localConfig.trainingConfig.resolution" 
-                placeholder="512,512"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">分辨率</span>
+                <span class="label-en">resolution</span>
+              </label>
+              <input v-model="config.training_config.resolution" placeholder="512,512" class="mac-input"
+                :disabled="!canEdit" />
             </div>
           </div>
-          
-            <div class="form-group">
-              <label>Unet学习率</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.unet_lr" 
-                step="0.0001"
-                min="0"
-                placeholder="0.0005"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
-            </div>
-            <div class="form-group">
-              <label>文本编码器学习率</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.text_encoder_lr" 
-                step="0.00001"
-                min="0"
-                placeholder="0.00001"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
-            </div>
-          
-            <div class="form-group">
-              <label>学习率调度器</label>
-              <select 
-                v-model="localConfig.trainingConfig.lr_scheduler" 
-                class="mac-input"
-                :disabled="!canEdit"
-              >
-                <option value="cosine_with_restarts">余弦退火(cosine_with_restarts)</option>
-                <option value="constant">恒定(constant)</option>
-                <option value="constant_with_warmup">预热恒定(constant_with_warmup)</option>
-                <option value="cosine">余弦(cosine)</option>
-                <option value="linear">线性(linear)</option>
-                <option value="polynomial">多项式(polynomial)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>优化器类型</label>
-              <select 
-                v-model="localConfig.trainingConfig.optimizer_type" 
-                class="mac-input"
-                :disabled="!canEdit"
-              >
-                <option value="AdamW8bit">AdamW8bit (推荐)</option>
-                <option value="AdamW">AdamW</option>
-                <option value="Lion">Lion</option>
-                <option value="SGDNesterov">SGDNesterov</option>
-                <option value="SGDNesterov8bit">SGDNesterov8bit</option>
-              </select>
-            </div>
-          
+
+          <div class="form-group">
+            <label>
+              <span class="label-text">Unet学习率</span>
+              <span class="label-en">unet_lr</span>
+            </label>
+            <input type="number" v-model.number="config.training_config.unet_lr" step="0.0001" min="0"
+              placeholder="0.0005" class="mac-input" :disabled="!canEdit" />
+          </div>
+          <div class="form-group">
+            <label>
+              <span class="label-text">文本编码器学习率</span>
+              <span class="label-en">text_encoder_lr</span>
+            </label>
+            <input type="number" v-model.number="config.training_config.text_encoder_lr" step="0.00001" min="0"
+              placeholder="0.00001" class="mac-input" :disabled="!canEdit" />
+          </div>
+
+          <div class="form-group">
+            <label>
+              <span class="label-text">学习率调度器</span>
+              <span class="label-en">lr_scheduler</span>
+            </label>
+            <select v-model="config.training_config.lr_scheduler" class="mac-input" :disabled="!canEdit">
+              <option value="cosine_with_restarts">余弦退火(cosine_with_restarts)</option>
+              <option value="constant">恒定(constant)</option>
+              <option value="constant_with_warmup">预热恒定(constant_with_warmup)</option>
+              <option value="cosine">余弦(cosine)</option>
+              <option value="linear">线性(linear)</option>
+              <option value="polynomial">多项式(polynomial)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>
+              <span class="label-text">优化器类型</span>
+              <span class="label-en">optimizer_type</span>
+            </label>
+            <select v-model="config.training_config.optimizer_type" class="mac-input" :disabled="!canEdit">
+              <option value="AdamW8bit">AdamW8bit (推荐)</option>
+              <option value="AdamW">AdamW</option>
+              <option value="Lion">Lion</option>
+              <option value="SGDNesterov">SGDNesterov</option>
+              <option value="SGDNesterov8bit">SGDNesterov8bit</option>
+            </select>
+          </div>
+
           <div class="form-row">
             <div class="form-group">
-              <label>预热步数</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.lr_warmup_steps" 
-                min="0"
-                placeholder="0"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">预热步数</span>
+                <span class="label-en">lr_warmup_steps</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.lr_warmup_steps" min="0" placeholder="0"
+                class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
-              <label>学习率循环次数</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.lr_scheduler_num_cycles" 
-                min="1"
-                placeholder="1"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">学习率循环次数</span>
+                <span class="label-en">lr_scheduler_num_cycles</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.lr_scheduler_num_cycles" min="1"
+                placeholder="1" class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
-              <label>每N轮保存一次</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.save_every_n_epochs" 
-                min="1"
-                placeholder="1"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">每N轮保存一次</span>
+                <span class="label-en">save_every_n_epochs</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.save_every_n_epochs" min="1" placeholder="1"
+                class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
-              <label>每N轮采样一次</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.sample_every_n_epochs" 
-                min="1"
-                placeholder="1"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">每N轮采样一次</span>
+                <span class="label-en">sample_every_n_epochs</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.sample_every_n_epochs" min="1" placeholder="1"
+                class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
-              <label>CLIP跳过层数</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.clip_skip" 
-                min="1"
-                max="12"
-                placeholder="1"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">CLIP跳过层数</span>
+                <span class="label-en">clip_skip</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.clip_skip" min="1" max="12" placeholder="1"
+                class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
-              <label>随机种子</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.seed" 
-                placeholder="42"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">随机种子</span>
+                <span class="label-en">seed</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.seed" placeholder="42" class="mac-input"
+                :disabled="!canEdit" />
             </div>
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
-              <label>混合精度</label>
-              <select 
-                v-model="localConfig.trainingConfig.mixed_precision" 
-                class="mac-input"
-                :disabled="!canEdit"
-              >
+              <label>
+                <span class="label-text">混合精度</span>
+                <span class="label-en">mixed_precision</span>
+              </label>
+              <select v-model="config.training_config.mixed_precision" class="mac-input" :disabled="!canEdit">
                 <option value="bf16">bf16 (推荐)</option>
                 <option value="no">不使用(no)</option>
                 <option value="fp16">fp16</option>
               </select>
             </div>
             <div class="form-group">
-              <label>图片重复次数</label>
-              <input 
-                type="number" 
-                v-model.number="localConfig.trainingConfig.repeat_num" 
-                min="1"
-                placeholder="1"
-                class="mac-input"
-                :disabled="!canEdit"
-              />
+              <label>
+                <span class="label-text">图片重复次数</span>
+                <span class="label-en">repeat_num</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.repeat_num" min="1" placeholder="1"
+                class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
-          
+
           <!-- 采样相关设置 -->
           <div class="section-divider">
             <h4>采样预览设置</h4>
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
-              <label>生成预览图</label>
+              <label>
+                <span class="label-text">生成预览图</span>
+                <span class="label-en">generate_preview</span>
+              </label>
               <div class="switch-wrapper">
-                <input 
-                  type="checkbox" 
-                  id="generate_preview" 
-                  v-model="localConfig.trainingConfig.generate_preview"
-                  class="toggle-checkbox"
-                  :disabled="!canEdit"
-                />
+                <input type="checkbox" id="generate_preview" v-model="config.training_config.generate_preview"
+                  class="toggle-checkbox" :disabled="!canEdit" />
                 <label for="generate_preview" class="toggle-label"></label>
               </div>
             </div>
-            <div class="form-group" v-if="localConfig.trainingConfig.generate_preview">
-              <label>使用图片标签</label>
+            <div class="form-group" v-if="config.training_config.generate_preview">
+              <label>
+                <span class="label-text">使用图片标签</span>
+                <span class="label-en">use_image_tags</span>
+              </label>
               <div class="switch-wrapper">
-                <input 
-                  type="checkbox" 
-                  id="use_image_tags" 
-                  v-model="localConfig.trainingConfig.use_image_tags"
-                  class="toggle-checkbox"
-                  :disabled="!canEdit"
-                />
+                <input type="checkbox" id="use_image_tags" v-model="config.training_config.use_image_tags"
+                  class="toggle-checkbox" :disabled="!canEdit" />
                 <label for="use_image_tags" class="toggle-label"></label>
               </div>
             </div>
           </div>
-          
-          <div v-if="localConfig.trainingConfig.generate_preview">
-            <div class="form-row" v-if="localConfig.trainingConfig.use_image_tags">
+
+          <div v-if="config.training_config.generate_preview" class="config-form">
+            <div class="form-row" v-if="config.training_config.use_image_tags">
               <div class="form-group">
-                <label>最多采用图片提示词数量</label>
-                <input 
-                  type="number" 
-                  v-model.number="localConfig.trainingConfig.max_image_tags" 
-                  min="0"
-                  placeholder="5"
-                  class="mac-input"
-                  :disabled="!canEdit"
-                />
+                <label>
+                  <span class="label-text">最多采用图片提示词数量</span>
+                  <span class="label-en">max_image_tags</span>
+                </label>
+                <input type="number" v-model.number="config.training_config.max_image_tags" min="0" placeholder="5"
+                  class="mac-input" :disabled="!canEdit" />
               </div>
             </div>
-            
+
             <div class="form-group full-width">
-              <label>正向提示词</label>
-              <textarea
-                v-model="localConfig.trainingConfig.positive_prompt"
-                placeholder="输入正向提示词"
-                rows="2"
-                class="mac-textarea"
-                :disabled="!canEdit"
-              ></textarea>
+              <label>
+                <span class="label-text">正向提示词</span>
+                <span class="label-en">positive_prompt</span>
+              </label>
+              <textarea v-model="config.training_config.positive_prompt" placeholder="输入正向提示词" rows="2"
+                class="mac-textarea" :disabled="!canEdit"></textarea>
             </div>
-            
+
             <div class="form-group full-width">
-              <label>负向提示词</label>
-              <textarea
-                v-model="localConfig.trainingConfig.negative_prompt"
-                placeholder="输入负向提示词"
-                rows="2"
-                class="mac-textarea"
-                :disabled="!canEdit"
-              ></textarea>
+              <label>
+                <span class="label-text">负向提示词</span>
+                <span class="label-en">negative_prompt</span>
+              </label>
+              <textarea v-model="config.training_config.negative_prompt" placeholder="输入负向提示词" rows="2"
+                class="mac-textarea" :disabled="!canEdit"></textarea>
             </div>
-            
+            <div class="form-group">
+              <label>
+                <span class="label-text">采样器</span>
+                <span class="label-en">sample_sampler</span>
+              </label>
+              <select v-model="config.training_config.sample_sampler" class="mac-input" :disabled="!canEdit">
+                <option value="euler_a">euler_a</option>
+                <option value="euler">euler</option>
+                <option value="ddpm">ddpm</option>
+                <option value="ddim">ddim</option>
+                <option value="dpm++_2m">dpm++_2m</option>
+                <option value="dpm++_sde">dpm++_sde</option>
+              </select>
+            </div>
             <div class="form-row">
               <div class="form-group">
-                <label>预览图宽度</label>
-                <input 
-                  type="number" 
-                  v-model.number="localConfig.trainingConfig.preview_width" 
-                  min="64"
-                  step="8"
-                  placeholder="512"
-                  class="mac-input"
-                  :disabled="!canEdit"
-                />
+                <label>
+                  <span class="label-text">预览图宽度</span>
+                  <span class="label-en">preview_width</span>
+                </label>
+                <input type="number" v-model.number="config.training_config.preview_width" min="64" step="8"
+                  placeholder="512" class="mac-input" :disabled="!canEdit" />
               </div>
               <div class="form-group">
-                <label>预览图高度</label>
-                <input 
-                  type="number" 
-                  v-model.number="localConfig.trainingConfig.preview_height" 
-                  min="64"
-                  step="8"
-                  placeholder="768"
-                  class="mac-input"
-                  :disabled="!canEdit"
-                />
+                <label>
+                  <span class="label-text">预览图高度</span>
+                  <span class="label-en">preview_height</span>
+                </label>
+                <input type="number" v-model.number="config.training_config.preview_height" min="64" step="8"
+                  placeholder="768" class="mac-input" :disabled="!canEdit" />
               </div>
             </div>
-            
+
             <div class="form-row">
               <div class="form-group">
-                <label>CFG强度</label>
-                <input 
-                  type="number" 
-                  v-model.number="localConfig.trainingConfig.cfg_scale" 
-                  min="1"
-                  step="0.5"
-                  placeholder="7"
-                  class="mac-input"
-                  :disabled="!canEdit"
-                />
+                <label>
+                  <span class="label-text">CFG强度</span>
+                  <span class="label-en">cfg_scale</span>
+                </label>
+                <input type="number" v-model.number="config.training_config.cfg_scale" min="1" step="0.5"
+                  placeholder="7" class="mac-input" :disabled="!canEdit" />
               </div>
               <div class="form-group">
-                <label>迭代步数</label>
-                <input 
-                  type="number" 
-                  v-model.number="localConfig.trainingConfig.steps" 
-                  min="1"
-                  placeholder="24"
-                  class="mac-input"
-                  :disabled="!canEdit"
-                />
+                <label>
+                  <span class="label-text">迭代步数</span>
+                  <span class="label-en">steps</span>
+                </label>
+                <input type="number" v-model.number="config.training_config.steps" min="1" placeholder="24"
+                  class="mac-input" :disabled="!canEdit" />
               </div>
             </div>
+
+
           </div>
         </div>
       </div>
@@ -492,8 +404,8 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, defineProps, defineEmits } from 'vue';
-import deepEqual from '@/utils/object';
+import { ref, onMounted, watch } from 'vue';
+import { tasksApi } from '@/api/tasks'; // 导入任务API
 
 // 训练参数默认值
 const defaultTrainingConfig = {
@@ -523,7 +435,8 @@ const defaultTrainingConfig = {
   preview_width: 512,
   preview_height: 768,
   cfg_scale: 7,
-  steps: 24
+  steps: 24,
+  sample_sampler: 'euler_a'
 };
 
 // 打标配置默认值
@@ -537,8 +450,8 @@ const defaultMarkConfig = {
 };
 
 const props = defineProps({
-  task: {
-    type: Object,
+  taskId: {
+    type: [Number, String],
     required: true
   },
   canEdit: {
@@ -547,96 +460,88 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['update:task']);
+// 组件状态
+const isLoading = ref(false);
+const saveConfigTimer = ref(null);
+const config = ref({
+  task_id: null,
+  task_name: '',
+  use_global_mark_config: true,
+  use_global_training_config: true,
+  mark_config: { ...defaultMarkConfig },
+  training_config: { ...defaultTrainingConfig }
+});
 
 // 激活的选项卡
 const activeTab = ref('mark');
 
-// 创建一个包含所有配置的本地对象
-const localConfig = ref({
-  useGlobalMarkConfig: props.task.use_global_mark_config !== false,
-  useGlobalTrainingConfig: props.task.use_global_training_config !== false,
-  markConfig: structuredClone({...defaultMarkConfig, ...props.task.mark_config || {}}),
-  trainingConfig: structuredClone({...defaultTrainingConfig, ...props.task.training_config || {}})
-});
+// 获取任务配置
+const fetchConfig = async () => {
+  if (!props.taskId) return;
 
-// 监听外部任务变化
-watch(() => props.task, (newTask) => {
-  // 使用structuredClone避免引用问题
-  const updatedConfig = structuredClone(localConfig.value);
-  let hasChanged = false;
-  
-  // 检查全局配置是否有变化
-  if (updatedConfig.useGlobalMarkConfig !== (newTask.use_global_mark_config !== false)) {
-    updatedConfig.useGlobalMarkConfig = newTask.use_global_mark_config !== false;
-    hasChanged = true;
-  }
-  
-  if (updatedConfig.useGlobalTrainingConfig !== (newTask.use_global_training_config !== false)) {
-    updatedConfig.useGlobalTrainingConfig = newTask.use_global_training_config !== false;
-    hasChanged = true;
-  }
-  
-  // 只在真正有变化时更新本地配置
-  if (!deepEqual(newTask.mark_config, updatedConfig.markConfig)) {
-    updatedConfig.markConfig = {...defaultMarkConfig, ...newTask.mark_config || {}};
-    hasChanged = true;
-  }
-  
-  if (!deepEqual(newTask.training_config, updatedConfig.trainingConfig)) {
-    updatedConfig.trainingConfig = {...defaultTrainingConfig, ...newTask.training_config || {}};
-    hasChanged = true;
-  }
-  
-  // 只有在配置确实发生变化时才更新
-  if (hasChanged) {
-    localConfig.value = updatedConfig;
-  }
-}, { deep: true });
-
-// 使用一个函数来处理配置更改并同步到父组件
-const syncConfigChanges = () => {
-  console.log("syncConfigChanges",localConfig.value)
-  const updatedTask = { ...props.task };
-  let hasChanged = false;
-  
-  // 检查全局配置是否有变化
-  if (updatedTask.use_global_mark_config !== localConfig.value.useGlobalMarkConfig) {
-    updatedTask.use_global_mark_config = localConfig.value.useGlobalMarkConfig;
-    hasChanged = true;
-  }
-  
-  if (updatedTask.use_global_training_config !== localConfig.value.useGlobalTrainingConfig) {
-    updatedTask.use_global_training_config = localConfig.value.useGlobalTrainingConfig;
-    hasChanged = true;
-  }
-
-  // 仅当不使用全局配置且配置有变化时才同步具体配置
-  if (!localConfig.value.useGlobalMarkConfig) {
-    if (!deepEqual(updatedTask.mark_config, localConfig.value.markConfig)) {
-      updatedTask.mark_config = structuredClone(localConfig.value.markConfig);
-      hasChanged = true;
+  try {
+    isLoading.value = true;
+    const data = await tasksApi.getTaskConfig(props.taskId);
+    if (data) {
+      config.value = data
     }
-  }
-  
-  if (!localConfig.value.useGlobalTrainingConfig) {
-    if (!deepEqual(updatedTask.training_config, localConfig.value.trainingConfig)) {
-      updatedTask.training_config = structuredClone(localConfig.value.trainingConfig);
-      hasChanged = true;
-    }
-  }
-  
-  // 只有在配置确实发生变化时才发送更新
-  if (hasChanged) {
-    emit('update:task', updatedTask);
+  } catch (error) {
+    console.error('获取任务配置失败:', error);
+  } finally {
+    isLoading.value = false;
   }
 };
 
-// 监听本地配置变化，使用深度监听，但避免直接在watch中触发emit
-watch(localConfig, () => {
-  syncConfigChanges();
-}, { deep: true });
+// 保存配置到后端
+const saveConfig = () => {
+  if (!props.taskId || !props.canEdit) return;
 
+  // 避免频繁请求，使用防抖处理
+  if (saveConfigTimer.value) {
+    clearTimeout(saveConfigTimer.value);
+  }
+
+  saveConfigTimer.value = setTimeout(async () => {
+    try {
+      isLoading.value = true;
+
+      // 创建要发送的配置对象
+      const updateData = {
+        use_global_mark_config: config.value.use_global_mark_config,
+        use_global_training_config: config.value.use_global_training_config
+      };
+
+      // 根据全局配置标志决定是否发送详细配置
+      if (!config.value.use_global_mark_config) {
+        updateData.mark_config = config.value.mark_config;
+      } else if (config.value.mark_config?.trigger_words !== undefined) {
+        // 特殊处理触发词：即使使用全局配置，也保留触发词设置
+        updateData.mark_config = { trigger_words: config.value.mark_config.trigger_words };
+      }
+
+      if (!config.value.use_global_training_config) {
+        updateData.training_config = config.value.training_config;
+      }
+
+      // 调用更新接口
+      await tasksApi.updateTaskConfig(props.taskId, updateData);
+    } catch (error) {
+      console.error('保存任务配置失败:', error);
+    } finally {
+      isLoading.value = false;
+    }
+  }, 500); // 500ms防抖
+};
+
+// 监听整个config对象的变化，一次性处理所有配置更新
+watch(() => config.value, () => {
+  saveConfig();
+}, { deep: true, flush: 'post' });
+
+// 组件挂载时获取配置
+onMounted(() => {
+  fetchConfig();
+});
 </script>
 
 <style scoped>
@@ -737,16 +642,16 @@ watch(localConfig, () => {
   transition: 0.3s;
 }
 
-.toggle-switch input:checked + label {
+.toggle-switch input:checked+label {
   background: #007AFF;
 }
 
-.toggle-switch input:checked + label:after {
+.toggle-switch input:checked+label:after {
   left: calc(100% - 2px);
   transform: translateX(-100%);
 }
 
-.toggle-switch input:disabled + label {
+.toggle-switch input:disabled+label {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -796,6 +701,18 @@ watch(localConfig, () => {
 .form-group label {
   font-size: 14px;
   color: var(--text-secondary, #6B7280);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.label-text {
+  font-weight: 500;
+}
+
+.label-en {
+  font-size: 12px;
+  color: var(--text-tertiary, #9CA3AF);
 }
 
 .mac-input {
@@ -899,40 +816,37 @@ watch(localConfig, () => {
   transition: 0.3s;
 }
 
-.toggle-checkbox:checked + .toggle-label {
+.toggle-checkbox:checked+.toggle-label {
   background: #007AFF;
 }
 
-.toggle-checkbox:checked + .toggle-label:after {
+.toggle-checkbox:checked+.toggle-label:after {
   left: calc(100% - 2px);
   transform: translateX(-100%);
+}
+
+.toggle-checkbox:disabled+.toggle-label {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .trigger-words-section {
   margin-top: 8px;
   margin-bottom: 16px;
-  padding: 0 16px;
 }
 
 .section-divider {
-  margin: 16px 0;
   border-top: 1px solid #E5E7EB;
   padding-top: 16px;
-}
-
-.section-divider h4 {
-  font-size: 14px;
-  color: #4B5563;
-  margin: 0 0 12px 0;
 }
 
 @media (max-width: 768px) {
   .form-row {
     flex-direction: column;
   }
-  
+
   .form-group {
     width: 100%;
   }
 }
-</style> 
+</style>
