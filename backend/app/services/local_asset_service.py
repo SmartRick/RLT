@@ -5,7 +5,6 @@ from typing import Optional
 from ..models.asset import Asset
 from ..database import get_db
 from ..utils.logger import setup_logger
-from ..utils.ssh import execute_command
 from ..utils import common
 logger = setup_logger('local_asset_service')
 

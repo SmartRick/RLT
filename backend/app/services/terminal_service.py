@@ -5,11 +5,7 @@ from ..models.asset import Asset as AssetModel
 from ..models.upload_file import UploadFile
 from ..database import get_db
 from ..utils.logger import setup_logger
-from ..utils.ssh import (
-    upload_file, download_file, list_directory, SshFileInfo,
-    stream_download_file, stream_upload_file, delete_remote_file, rename_remote_file, move_remote_file,
-    connection_manager
-)
+from ..utils.ssh import SSHClientTool, create_ssh_client_from_asset, connection_manager, SshFileInfo
 from ..utils.file_handler import calculate_md5
 from ..config import config
 from ..services.upload_service import UploadService
@@ -55,14 +51,18 @@ class TerminalService:
             List[Dict]: 文件列表
         """
         try:
-            # 获取连接参数
-            params = TerminalService.get_asset_connection_params(asset_id)
+            # 直接查询资产
+            with get_db() as db:
+                asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+                if not asset:
+                    logger.error(f"资产不存在: {asset_id}")
+                    return []
+            
+            # 使用create_ssh_client_from_asset创建SSH客户端工具
+            ssh_client = create_ssh_client_from_asset(asset)
             
             # 列出目录
-            success, file_list, message = list_directory(
-                remote_path=remote_path,
-                **params
-            )
+            success, file_list, message = ssh_client.list_directory(remote_path)
             
             if not success:
                 logger.error(f"列出目录失败: {message}")
@@ -99,8 +99,14 @@ class TerminalService:
             Tuple[bool, str]: (成功标志, 消息)
         """
         try:
-            # 获取连接参数
-            params = TerminalService.get_asset_connection_params(asset_id)
+            # 直接查询资产
+            with get_db() as db:
+                asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+                if not asset:
+                    return False, f"资产不存在: {asset_id}"
+            
+            # 使用create_ssh_client_from_asset创建SSH客户端工具
+            ssh_client = create_ssh_client_from_asset(asset)
             
             # 获取文件信息
             file_info = UploadService.get_file_by_id(file_id)
@@ -114,10 +120,9 @@ class TerminalService:
             remote_file_path = os.path.join(remote_path, file_info['filename'])
             
             # 上传文件
-            success, message = upload_file(
+            success, message = ssh_client.upload_file(
                 local_path=local_path,
-                remote_path=remote_file_path,
-                **params
+                remote_path=remote_file_path
             )
             
             if success:
@@ -143,8 +148,14 @@ class TerminalService:
             Tuple[bool, Dict, str]: (成功标志, 文件信息, 消息)
         """
         try:
-            # 获取连接参数
-            params = TerminalService.get_asset_connection_params(asset_id)
+            # 直接查询资产
+            with get_db() as db:
+                asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+                if not asset:
+                    return False, {}, f"资产不存在: {asset_id}"
+            
+            # 使用create_ssh_client_from_asset创建SSH客户端工具
+            ssh_client = create_ssh_client_from_asset(asset)
             
             # 生成唯一文件名
             filename = os.path.basename(remote_path)
@@ -161,10 +172,9 @@ class TerminalService:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             
             # 下载文件
-            success, message = download_file(
+            success, message = ssh_client.download_file(
                 remote_path=remote_path,
-                local_path=file_path,
-                **params
+                local_path=file_path
             )
             
             if not success:
@@ -211,13 +221,18 @@ class TerminalService:
             Tuple[bool, Iterator[bytes], Dict, str]: (成功标志, 文件流迭代器, 文件信息, 消息)
         """
         try:
-            # 获取连接参数
-            params = TerminalService.get_asset_connection_params(asset_id)
+            # 直接查询资产
+            with get_db() as db:
+                asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+                if not asset:
+                    return False, iter([]), {}, f"资产不存在: {asset_id}"
+            
+            # 使用create_ssh_client_from_asset创建SSH客户端工具
+            ssh_client = create_ssh_client_from_asset(asset)
             
             # 创建文件流
-            success, file_stream, file_info, message = stream_download_file(
-                remote_path=remote_path,
-                **params
+            success, file_stream, file_info, message = ssh_client.stream_download_file(
+                remote_path=remote_path
             )
             
             if not success:
@@ -251,15 +266,20 @@ class TerminalService:
             Tuple[bool, str]: (成功标志, 消息)
         """
         try:
-            # 获取连接参数
-            params = TerminalService.get_asset_connection_params(asset_id)
+            # 直接查询资产
+            with get_db() as db:
+                asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+                if not asset:
+                    return False, f"资产不存在: {asset_id}"
+            
+            # 使用create_ssh_client_from_asset创建SSH客户端工具
+            ssh_client = create_ssh_client_from_asset(asset)
             
             # 上传文件流
-            success, message = stream_upload_file(
+            success, message = ssh_client.stream_upload_file(
                 remote_path=remote_path,
                 file_obj=file_obj,
-                progress_callback=progress_callback,
-                **params
+                progress_callback=progress_callback
             )
             
             if success:
@@ -289,17 +309,20 @@ class TerminalService:
             Tuple[bool, str]: (成功标志, 消息)
         """
         try:
-            # 获取连接参数
-            params = TerminalService.get_asset_connection_params(asset_id)
+            # 直接查询资产
+            with get_db() as db:
+                asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+                if not asset:
+                    return False, f"资产不存在: {asset_id}"
+            
+            # 使用create_ssh_client_from_asset创建SSH客户端工具
+            ssh_client = create_ssh_client_from_asset(asset)
             
             # 删除文件或目录
-            return delete_remote_file(
-                remote_path=remote_path,
-                **params
-            )
+            return ssh_client.delete_remote_file(remote_path)
         except Exception as e:
             logger.error(f"删除远程文件失败: {str(e)}")
-            return False
+            return False, f"删除远程文件失败: {str(e)}"
             
     @staticmethod
     def rename_remote_file(
@@ -319,8 +342,14 @@ class TerminalService:
             Tuple[bool, str]: (成功标志, 消息)
         """
         try:
-            # 获取连接参数
-            params = TerminalService.get_asset_connection_params(asset_id)
+            # 直接查询资产
+            with get_db() as db:
+                asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+                if not asset:
+                    return False, f"资产不存在: {asset_id}"
+            
+            # 使用create_ssh_client_from_asset创建SSH客户端工具
+            ssh_client = create_ssh_client_from_asset(asset)
             
             # 获取目录和文件名
             parent_dir = os.path.dirname(old_path)
@@ -331,10 +360,9 @@ class TerminalService:
             new_path = os.path.join(parent_dir, new_name).replace('\\', '/')
             
             # 执行重命名操作
-            success, message = rename_remote_file(
+            success, message = ssh_client.rename_remote_file(
                 old_path=old_path,
-                new_path=new_path,
-                **params
+                new_path=new_path
             )
             
             if success:
@@ -365,8 +393,20 @@ class TerminalService:
             Tuple[bool, Dict[str, Any]]: (成功标志, 操作结果)
         """
         try:
-            # 获取连接参数
-            params = TerminalService.get_asset_connection_params(asset_id)
+            # 直接查询资产
+            with get_db() as db:
+                asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+                if not asset:
+                    return False, {
+                        'success_count': 0,
+                        'failed_count': len(source_paths),
+                        'total_count': len(source_paths),
+                        'message': f"资产不存在: {asset_id}",
+                        'details': []
+                    }
+            
+            # 使用create_ssh_client_from_asset创建SSH客户端工具
+            ssh_client = create_ssh_client_from_asset(asset)
             
             # 保存每个文件的移动结果
             results = {
@@ -379,10 +419,9 @@ class TerminalService:
             # 处理每个文件
             for source_path in source_paths:
                 # 执行移动操作
-                success, message = move_remote_file(
+                success, message = ssh_client.move_remote_file(
                     source_path=source_path,
-                    target_dir=target_dir,
-                    **params
+                    target_dir=target_dir
                 )
                 
                 # 记录结果
@@ -528,23 +567,25 @@ class TerminalService:
             Tuple[bool, str]: (连接是否成功, 消息)
         """
         try:
-            # 从资产对象提取连接参数
-            hostname = asset.ip
-            port = int(asset.ssh_port)
-            username = asset.ssh_username
-            auth_type = asset.ssh_auth_type
-            password = asset.ssh_password if auth_type == 'PASSWORD' else None
-            key_path = asset.ssh_key_path if auth_type == 'KEY' else None
+            # 从资产对象创建SSH客户端工具
+            ssh_client = create_ssh_client_from_asset(asset)
             
-            # 调用通用SSH连接验证方法
-            return TerminalService.verify_ssh_connection(
-                hostname=hostname,
-                port=port,
-                username=username,
-                auth_type=auth_type,
-                password=password,
-                key_path=key_path
-            )
+            # 执行简单命令测试连接
+            result = ssh_client.execute_command('echo "SSH connection test"')
+            
+            if result.returncode != 0:
+                return False, f"SSH命令执行失败: {result.stderr}"
+                
+            logger.info(f"SSH连接成功: {asset.ip}:{asset.ssh_port}")
+            return True, "SSH连接验证成功"
+            
+        except paramiko.AuthenticationException as e:
+            return False, "SSH认证失败，请检查用户名和密码/密钥"
+            
+        except paramiko.SSHException as e:
+            logger.error(f"SSH连接异常: {str(e)}")
+            return False, f"SSH连接异常: {str(e)}"
+            
         except Exception as e:
             logger.error(f"验证资产SSH连接失败: {str(e)}")
             return False, f"验证资产SSH连接失败: {str(e)}"

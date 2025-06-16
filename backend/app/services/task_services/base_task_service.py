@@ -67,7 +67,7 @@ class BaseTaskService:
             # 初始化状态为NEW并添加日志记录
             db.commit()
             db.refresh(task)
-            task.update_status('NEW', '任务已创建', db=db)  # 不自动提交
+            task.update_status('NEW', '任务已创建', db=db) 
             return task.to_dict()
         except Exception as e:
             logger.error(f"创建任务失败: {e}")
@@ -374,8 +374,8 @@ class BaseTaskService:
                 # 确定需要删除的状态历史记录
                 status_to_delete = []
                 if target_status == TaskStatus.NEW:
-                    # 回滚到新建状态，删除所有除NEW外的历史
-                    status_to_delete = [s.value for s in TaskStatus if s != TaskStatus.NEW]
+                    # 删除所有状态
+                    status_to_delete = [s.value for s in TaskStatus]
                 elif target_status == TaskStatus.MARKED:
                     # 回滚到已标记状态，删除ERROR和TRAINING状态
                     status_to_delete = ['ERROR', 'TRAINING']
@@ -419,19 +419,18 @@ class BaseTaskService:
             task.progress = 0
             
             # 清除当前阶段的prompt_id
-            if (target_status == TaskStatus.NEW and task.status == TaskStatus.MARKING) or \
-               (target_status == TaskStatus.MARKED and task.status == TaskStatus.TRAINING):
+            if task.status == TaskStatus.MARKING or task.status == TaskStatus.TRAINING:
                 task.prompt_id = None
                 
                 # 清除资产关联
             if clear_assets:
                 if target_status == TaskStatus.NEW and task.marking_asset:
                     task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
-                task.marking_asset_id = None
+                    task.marking_asset_id = None
                 
                 if task.training_asset:
                     task.training_asset.training_tasks_count = max(0, task.training_asset.training_tasks_count - 1)
-                task.training_asset_id = None
+                    task.training_asset_id = None
                 
             db.commit()
             return True
@@ -440,3 +439,70 @@ class BaseTaskService:
             logger.error(f"回滚任务状态失败: {str(e)}", exc_info=True)
             db.rollback()
             return False 
+
+    @staticmethod
+    def cancel_task(db: Session, task_id: int) -> Optional[Dict]:
+        """
+        取消任务
+        
+        可以在任务的任何状态下取消，包括：
+        - SUBMITTED状态：直接回滚到NEW状态
+        - MARKING状态：调用stop_task终止打标并回滚
+        - MARKED状态：直接回滚到NEW状态
+        - TRAINING状态：调用stop_task终止训练并回滚
+        - ERROR/COMPLETED状态：类似restart_task重置状态
+        
+        Returns:
+            包含操作结果的字典
+        """
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return {
+                    'success': False,
+                    'error': '任务不存在',
+                    'error_type': 'VALIDATION_ERROR'
+                }
+                
+            # 根据任务状态进行不同的处理
+            if task.status in [TaskStatus.MARKING, TaskStatus.TRAINING]:
+                # 对于正在处理中的任务，使用stop_task终止并回滚
+                return BaseTaskService.stop_task(db, task_id)
+                
+            elif task.status in [TaskStatus.ERROR, TaskStatus.COMPLETED]:
+                # 对于错误或完成状态的任务，使用restart_task逻辑重置状态
+                return BaseTaskService.restart_task(db, task_id)
+                
+            else:
+                # 对于其他状态（SUBMITTED, MARKED, NEW），直接回滚到NEW状态
+                target_status = TaskStatus.NEW
+                
+                # 使用公共回滚方法
+                rollback_success = BaseTaskService._rollback_task_state(
+                    db=db,
+                    task=task,
+                    target_status=target_status,
+                    delete_history=True,
+                    clear_assets=True
+                )
+                
+                if rollback_success:
+                    return {
+                        'success': True,
+                        'message': f'任务已取消并回滚到{target_status.value}状态',
+                        'task': task.to_dict()
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': '回滚任务状态失败',
+                        'error_type': 'SYSTEM_ERROR'
+                    }
+
+        except Exception as e:
+            logger.error(f"取消任务失败: {str(e)}", exc_info=True)
+            return {
+                'success': False,
+                'error': f"系统错误: {str(e)}",
+                'error_type': 'SYSTEM_ERROR'
+            } 

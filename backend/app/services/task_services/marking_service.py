@@ -9,7 +9,6 @@ from ...services.config_service import ConfigService
 from ...utils.file_handler import generate_unique_folder_path
 from ...utils.mark_handler import MarkRequestHandler, MarkConfig
 from ...utils.common import copy_attributes
-from ...utils.ssh import upload_directory, download_directory
 from ...services.asset_service import AssetService
 from ...config import Config
 import json
@@ -48,12 +47,9 @@ class MarkingService:
             # 检查是否有图片
             if not task.images:
                 raise ValueError("任务没有上传任何图片")
-            
-            # 获取标记配置
-            mark_config = ConfigService.get_task_mark_config(task_id)
-            training_data_path = f"{mark_config.get('repeat_num',10)}_rick"
+
             # 生成唯一的打标路径
-            marked_images_path = os.path.join(generate_unique_folder_path(Config.MARKED_DIR, task_id, 'mark'),training_data_path)
+            marked_images_path = generate_unique_folder_path(Config.MARKED_DIR, task_id, 'mark')
             task.marked_images_path = marked_images_path
 
             # 更新任务状态为已提交，并传递数据库会话
@@ -112,8 +108,8 @@ class MarkingService:
                 raise ValueError(f"任务 {task_id} 没有上传任何图片")
             
             # 获取标记配置
-            mark_config = ConfigService.get_task_mark_config(task_id)
-            training_data_path = f"{mark_config.get('repeat_num', 10)}_rick"
+            training_config = ConfigService.get_task_training_config(task_id)
+            training_data_path = f"{training_config.get('repeat_num', 10)}_rick"
             # 生成唯一的打标路径
             marked_images_path = os.path.join(generate_unique_folder_path(Config.MARKED_DIR, task_id, 'mark'), training_data_path)
             task.marked_images_path = marked_images_path
@@ -140,7 +136,7 @@ class MarkingService:
                 logger.info(f"开始处理标记任务 {task_id}")
                 
                 # 更新任务状态，记录开始处理标记
-                task.update_status(TaskStatus.MARKING, f'开始处理标记任务，使用资产: {asset.name}')
+                task.update_status(TaskStatus.MARKING, f'开始处理标记任务，使用资产: {asset.name}',db=db)
 
                 mark_config = ConfigService.get_task_mark_config(task.id)
                 
@@ -153,29 +149,46 @@ class MarkingService:
                 # 定义远程目录路径
                 remote_input_dir = f"{Config.REMOTE_UPLOAD_DIR}/{task_id}"
                 # 从task.marked_images_path获取任务后缀部分
-                output_suffix = task.marked_images_path.replace(Config.MARKED_DIR, '').lstrip('/')
-                remote_output_dir = f"{Config.REMOTE_MARKED_DIR}/{output_suffix}"
+                output_suffix = task.marked_images_path.replace(Config.MARKED_DIR, '').replace('\\', '/')
+                remote_output_dir = f"{Config.REMOTE_MARKED_DIR}{output_suffix}"
                 
                 # 将远程输出路径保存到任务的ai_engine配置中
                 if not task.mark_config:
                     task.mark_config = {}
-                task.mark_config['remote_output_dir'] = remote_output_dir
+                
+                # 创建一个新的字典来确保SQLAlchemy检测到变化
+                mark_config = dict(task.mark_config) if task.mark_config else {}
+                mark_config['remote_output_dir'] = remote_output_dir
+                task.mark_config = mark_config  # 重新赋值整个字典
+                
+                # 显式标记为已修改
+                db.add(task)
+                db.commit()
                 
                 # 如果不是本地资产，需要同步文件
                 if not asset.is_local:
                     task.add_log('资产不是本地资产，需要同步文件...')
                     
-                    # 上传图片到远程服务器
-                    task.add_log(f'开始上传图片到远程服务器: {remote_input_dir}')
-                    upload_directory(asset, input_dir, remote_input_dir)
+                    # 使用同步工具上传图片到远程服务器
+                    task.add_log(f'开始同步图片到远程服务器: {remote_input_dir}')
+                    success, message, stats = sync_directory(
+                        asset=asset,
+                        local_path=input_dir,
+                        remote_path=remote_input_dir,
+                        sync_mode='upload',
+                        delete_extra=True
+                    )
                     
-                    task.add_log('图片上传成功')
+                    if not success:
+                        raise Exception(f"同步图片失败: {message}")
+                    
+                    task.add_log(f'图片同步成功: {message}')
                     
                     # 更新输入目录为远程目录
                     input_dir = remote_input_dir
                 
                 # 创建标记处理器
-                task.add_log(f'准备发送标记请求: task_id={task_id}, asset_id={asset_id}, asset_ip={asset.ip}', db=db)
+                task.add_log(f'准备发送标记请求: task_id={task_id}, asset_id={asset_id}, asset_ip={asset.ip}')
                 db.commit()
                 
                 try:
@@ -258,33 +271,35 @@ class MarkingService:
                 while True:
                     try:
                         completed, success, task_info = handler.check_status(prompt_id, mark_config)
-                        
+                        logger.info(f"检查标记任务状态: completed={completed}, success={success}, task_info={task_info}")
                         with get_db() as complete_db:
                             task = complete_db.query(Task).filter(Task.id == task_id).first()
                             # 可能在打标过程中取消了任务，不再继续监听
-                            if task and task.status == TaskStatus.NEW:
-                                logger.info("监听打标过程中任务被取消")
+                            if task and task.status != TaskStatus.MARKING:
+                                logger.info("任务状态为非打标状态，退出监听")
                                 break
                                 
                             if completed and task:
                                 if success:
                                     # 如果是非本地资产，需要下载结果
                                     if not asset.is_local and task.mark_config and task.mark_config.get('remote_output_dir'):
-                                        task.add_log('打标完成，开始从远程服务器下载结果...', db=complete_db)
+                                        task.add_log('打标完成，开始从远程服务器同步结果...', db=complete_db)
                                         
-                                        # 下载远程输出目录到本地
-                                        success, message = download_directory(
-                                            asset, 
-                                            task.mark_config['remote_output_dir'], 
-                                            task.marked_images_path
+                                        # 使用同步工具下载远程输出目录到本地
+                                        success, message, stats = sync_directory(
+                                            asset=asset,
+                                            local_path=task.marked_images_path,
+                                            remote_path=task.mark_config['remote_output_dir'],
+                                            sync_mode='download',
+                                            delete_extra=True
                                         )
                                         
                                         if not success:
-                                            task.add_log(f'下载结果失败: {message}', db=complete_db)
-                                            task.update_status(TaskStatus.ERROR, f'下载打标结果失败: {message}', db=complete_db)
+                                            task.add_log(f'同步结果失败: {message}', db=complete_db)
+                                            task.update_status(TaskStatus.ERROR, f'同步打标结果失败: {message}', db=complete_db)
                                             break
                                         
-                                        task.add_log('打标结果下载成功', db=complete_db)
+                                        task.add_log(f'打标结果同步成功: {message}', db=complete_db)
                                     
                                     task.update_status(TaskStatus.MARKED, '标记完成', db=complete_db)
                                     task.progress = 100
@@ -296,7 +311,6 @@ class MarkingService:
                                         task.add_log('启用自动训练，设置状态为训练中，等待调度器分配资产', db=complete_db)
                                         task.update_status(TaskStatus.TRAINING, '准备开始训练', db=complete_db)
                                     else:
-                                        logger.info(f"任务 {task_id} 未启用自动训练，需要手动提交训练")
                                         task.add_log('未启用自动训练，请手动提交训练任务', db=complete_db)
                                 else:
                                     # 处理失败情况
@@ -321,7 +335,8 @@ class MarkingService:
                                     task.marking_asset.marking_tasks_count = max(0, task.marking_asset.marking_tasks_count - 1)
                                     complete_db.commit()
                                 break
-                    
+                        
+                        time.sleep(poll_interval)
                         # 重置错误计数
                         error_count = 0
                     except Exception as check_err:
@@ -341,9 +356,9 @@ class MarkingService:
                                         err_db.commit()
                                 break
                 
-                        time.sleep(poll_interval)
-                    
-                    logger.info("已退出监听标记任务状态")
+                    time.sleep(poll_interval)
+
+                logger.info("已退出监听标记任务状态")
 
         except Exception as e:
             # 处理整体监控异常

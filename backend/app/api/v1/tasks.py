@@ -208,7 +208,8 @@ def restart_task(task_id):
 def cancel_task(task_id):
     """取消任务"""
     with get_db() as db:
-        result = TaskService.cancel_task(db, task_id)
+        from app.services.task_services.base_task_service import BaseTaskService
+        result = BaseTaskService.cancel_task(db, task_id)
         if result:
             if not result.get('success', False):
                 error_code = 500 if result.get('error_type') == 'SYSTEM_ERROR' else 1002
@@ -334,6 +335,18 @@ def get_execution_history(task_id):
     with get_db() as db:
         history_records = TaskService.get_execution_history(db, task_id)
         return success_json(data=history_records)
+
+@tasks_bp.route('/execution-history/<int:history_id>', methods=['GET'])
+@exception_handler
+def get_execution_history_by_id(history_id):
+    """
+    获取任务的单个执行历史记录详情
+    """
+    with get_db() as db:
+        history_record = TaskService.get_execution_history_by_id(db, history_id)
+        if history_record:
+            return success_json(data=history_record)
+        return response_template("not_found", code=1006, msg=f"未找到ID为 {history_id} 的执行历史记录")
 
 @tasks_bp.route('/batch/mark', methods=['POST'])
 @exception_handler

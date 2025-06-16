@@ -10,8 +10,7 @@ from websocket import WebSocketApp
 
 from comfyui_api import ComfyUIConfig
 
-# 配置日志
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# 配置日志，使用已有的日志配置
 logger = logging.getLogger('ComfyUIWebSocketAPI')
 
 @dataclass

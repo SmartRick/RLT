@@ -353,7 +353,7 @@ class ConfigService:
                 
                 if task.use_global_training_config:
                     # 使用全局配置
-                    return ConfigService.get_global_lora_training_config()
+                    return ConfigService.get_asset_lora_config(task.training_asset_id)
                 else:
                     # 混合全局配置和任务配置
                     training_params = ConfigService.get_global_lora_training_config()
@@ -389,22 +389,18 @@ class ConfigService:
         try:
             with get_db() as db:
                 asset = db.query(Asset).filter(Asset.id == asset_id).first()
-                if not asset:
-                    logger.error(f"资产不存在: {asset_id}")
-                    return None
-                
-                if not asset.lora_training.get('use_global_config', True):
-                    # 不使用全局配置，直接返回资产特定配置
-                    return asset.lora_training.get('params', {})
+                if not asset or asset.lora_training.get('use_global_config', True):
+                    # 使用全局配置，直接返回全局配置
+                    return ConfigService.get_global_lora_training_config()
+                else:
+                    # 不使用全局配置，在全局配置的基础上合并资产特定配置
+                    config_params = ConfigService.get_global_lora_training_config()
                     
-                # 使用全局配置作为基础
-                config_params = ConfigService.get_global_lora_training_config()
-                
-                # 合并资产特定配置
-                if 'params' in asset.lora_training and isinstance(asset.lora_training['params'], dict):
-                    config_params.update(asset.lora_training['params'])
-                    
-                return config_params
+                    # 合并资产特定配置
+                    if 'params' in asset.lora_training and isinstance(asset.lora_training['params'], dict):
+                        config_params.update(asset.lora_training['params'])
+                        
+                    return config_params
         except Exception as e:
             logger.error(f"获取资产Lora训练配置失败, 资产ID: {asset_id}, 错误: {str(e)}")
             return None
@@ -423,24 +419,19 @@ class ConfigService:
         try:
             with get_db() as db:
                 asset = db.query(Asset).filter(Asset.id == asset_id).first()
-                if not asset:
-                    logger.error(f"资产不存在: {asset_id}")
-                    return None
-                
-                if not asset.ai_engine.get('use_global_config', True):
-                    # 不使用全局配置，直接返回资产特定配置
-                    return {k: v for k, v in asset.ai_engine.items() 
-                           if k not in ['use_global_config', 'verified', 'enabled']}
+                if not asset or asset.ai_engine.get('use_global_config', True):
+                    # 使用全局配置，直接返回全局配置
+                    return ConfigService.get_global_ai_engine_config()
+                else:
+                    # 不使用全局配置，在全局配置的基础上合并资产特定配置
+                    engine_config = ConfigService.get_global_ai_engine_config()
                     
-                # 使用全局配置作为基础
-                engine_config = ConfigService.get_global_ai_engine_config()
-                
-                # 合并资产特定配置
-                for key, value in asset.ai_engine.items():
-                    if key not in ['use_global_config', 'verified', 'enabled'] and value:
-                        engine_config[key] = value
+                    # 合并资产特定配置
+                    for key, value in asset.ai_engine.items():
+                        if key not in ['use_global_config', 'verified', 'enabled'] and value:
+                            engine_config[key] = value
                         
-                return engine_config
+                    return engine_config
         except Exception as e:
             logger.error(f"获取资产AI引擎配置失败, 资产ID: {asset_id}, 错误: {str(e)}")
             return None

@@ -11,11 +11,15 @@ from .marking_service import MarkingService
 from .training_service import TrainingService
 import time
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 logger = setup_logger('scheduler_service')
 scheduler_lock = threading.RLock()
 scheduler_thread = None
 scheduler_running = False
+
+# 添加线程池用于监控任务
+monitor_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="MonitorWorker")
 
 class SchedulerService:
     @staticmethod
@@ -94,9 +98,28 @@ class SchedulerService:
             
             # 启动新线程执行标记任务处理
             logger.info(f"为标记任务 {task.id} 分配资产 {asset.id} ({asset.name})")
+            
+            # 创建处理线程，并获取prompt_id以启动监控
+            def process_and_monitor():
+                try:
+                    # 执行标记处理
+                    prompt_id = MarkingService._process_marking(task.id, asset.id)
+                    
+                    # 如果获取到prompt_id，启动监控
+                    if prompt_id:
+                        logger.info(f"标记任务 {task.id} 获取到prompt_id: {prompt_id}，启动监控")
+                        monitor_pool.submit(
+                            MarkingService._monitor_mark_status,
+                            task.id,
+                            asset.id,
+                            prompt_id
+                        )
+                except Exception as e:
+                    logger.error(f"标记任务 {task.id} 处理或启动监控失败: {str(e)}", exc_info=True)
+            
+            # 启动处理和监控线程
             thread = threading.Thread(
-                target=MarkingService._process_marking, 
-                args=(task.id, asset.id),
+                target=process_and_monitor,
                 name=f"mark_task_{task.id}"
             )
             thread.daemon = True
@@ -131,11 +154,30 @@ class SchedulerService:
             asset.training_tasks_count += 1
             db.commit()
             
-            # 启动新线程执行训练任务处理
+            # 启动新线程执行训练任务处理和监控
             logger.info(f"为训练任务 {task.id} 分配资产 {asset.id} ({asset.name})")
+            
+            # 创建处理线程，并获取training_task_id以启动监控
+            def process_and_monitor():
+                try:
+                    # 执行训练处理
+                    training_task_id = TrainingService._process_training(task.id, asset.id)
+                    
+                    # 如果获取到training_task_id，启动监控
+                    if training_task_id:
+                        logger.info(f"训练任务 {task.id} 获取到training_task_id: {training_task_id}，启动监控")
+                        monitor_pool.submit(
+                            TrainingService._monitor_training_status,
+                            task.id,
+                            asset.id,
+                            training_task_id
+                        )
+                except Exception as e:
+                    logger.error(f"训练任务 {task.id} 处理或启动监控失败: {str(e)}", exc_info=True)
+            
+            # 启动处理和监控线程
             thread = threading.Thread(
-                target=TrainingService._process_training, 
-                args=(task.id, asset.id),
+                target=process_and_monitor,
                 name=f"train_task_{task.id}"
             )
             thread.daemon = True
@@ -225,6 +267,8 @@ class SchedulerService:
             if scheduler_running:
                 scheduler_running = False
                 logger.info("正在停止任务调度器...")
+                # 关闭监控线程池
+                monitor_pool.shutdown(wait=False)
                 return True
             else:
                 logger.warning("任务调度器已经停止")
@@ -277,5 +321,48 @@ class SchedulerService:
                 task.training_asset_id = None
                 task.update_status(TaskStatus.TRAINING, "系统重启，训练任务重置为等待状态", db=db)
                 
+            # 恢复处理中的任务监控
+            SchedulerService._recover_task_monitors(db)
+            
         # 启动调度器
-        SchedulerService.start_scheduler() 
+        SchedulerService.start_scheduler()
+        
+    @staticmethod
+    def _recover_task_monitors(db: Session):
+        """恢复任务状态监控"""
+        try:
+            # 恢复标记中的任务监控
+            marking_tasks = db.query(Task).filter(
+                Task.status == TaskStatus.MARKING,
+                Task.prompt_id.isnot(None)  # 已有prompt_id的任务
+            ).all()
+            
+            for task in marking_tasks:
+                if task.marking_asset_id and task.prompt_id:
+                    logger.info(f"恢复标记任务 {task.id} 的状态监控")
+                    monitor_pool.submit(
+                        MarkingService._monitor_mark_status,
+                        task.id,
+                        task.marking_asset_id,
+                        task.prompt_id
+                    )
+
+            # 恢复训练中的任务监控
+            training_tasks = db.query(Task).filter(
+                Task.status == TaskStatus.TRAINING,
+                Task.prompt_id.isnot(None),  # 已有训练任务ID的任务
+                Task.training_asset_id.isnot(None)  # 已分配训练资产的任务
+            ).all()
+            
+            for task in training_tasks:
+                if task.training_asset_id and task.prompt_id:
+                    logger.info(f"恢复训练任务 {task.id} 的状态监控")
+                    monitor_pool.submit(
+                        TrainingService._monitor_training_status,
+                        task.id,
+                        task.training_asset_id,
+                        task.prompt_id
+                    )
+                    
+        except Exception as e:
+            logger.error(f"恢复任务监控失败: {str(e)}", exc_info=True) 

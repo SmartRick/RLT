@@ -5,6 +5,11 @@ from ..config import config
 def setup_logger(name: str) -> logging.Logger:
     """设置日志记录器"""
     logger = logging.getLogger(name)
+    
+    # 检查是否已经有处理器，如果有则不再添加
+    if logger.handlers:
+        return logger
+        
     logger.setLevel(logging.INFO)
     
     # 文件处理器

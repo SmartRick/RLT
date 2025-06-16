@@ -12,8 +12,8 @@ from comfyui_api import ComfyUIAPI, ComfyUIConfig
 from comfyui_ws_api import ComfyUIWebSocketAPI, WebSocketCallbacks
 from comfyui_error_parser import ComfyUIErrorParser
 from comfyui_precheck import ComfyUIPreCheck
-# 配置日志
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# 配置日志，使用已有的日志配置
 logger = logging.getLogger('TaskScheduler')
 
 class TaskStatus(Enum):

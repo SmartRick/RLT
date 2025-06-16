@@ -29,7 +29,7 @@ class TaskService:
     get_stats = BaseTaskService.get_stats
     stop_task = BaseTaskService.stop_task
     restart_task = BaseTaskService.restart_task
-    # cancel_task = BaseTaskService.cancel_task
+    cancel_task = BaseTaskService.cancel_task
     
     # 任务图片管理（委托给TaskImageService）
     upload_images = TaskImageService.upload_images
@@ -52,18 +52,10 @@ class TaskService:
     get_training_results = ResultService.get_training_results
     get_training_loss_data = ResultService.get_training_loss_data
     get_execution_history = ResultService.get_execution_history
+    get_execution_history_by_id = ResultService.get_execution_history_by_id
     
     # 调度器管理（委托给SchedulerService）
     init_scheduler = SchedulerService.init_scheduler
     start_scheduler = SchedulerService.start_scheduler
     stop_scheduler = SchedulerService.stop_scheduler
     run_scheduler_once = SchedulerService.run_scheduler_once
-    
-    @classmethod
-    def init_service(cls):
-        """
-        初始化任务服务，应用启动时调用
-        """
-        logger.info("初始化任务服务...")
-        # 初始化调度器
-        cls.init_scheduler()

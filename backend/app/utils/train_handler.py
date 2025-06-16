@@ -160,7 +160,6 @@ class TrainRequestHandler:
             headers.update(train_config.headers)
         
         logger.debug(f"发送训练请求到 {url}")
-        logger.info(f"请求参数: {json.dumps(payload, indent=2)}")
         
         # 发送请求
         response = requests.post(url, json=payload, headers=headers, timeout=60)
@@ -212,7 +211,7 @@ class TrainRequestHandler:
         # 检查响应是否有效
         if data.get('status') != 'success' or 'data' not in data or 'tasks' not in data['data']:
             logger.warning(f"任务状态响应格式无效: {data}")
-            return False, False, "响应格式无效"
+            raise ValueError("任务状态响应格式无效")
         
         # 查找指定ID的任务
         task_info = None
@@ -224,7 +223,7 @@ class TrainRequestHandler:
         # 如果没有找到任务
         if not task_info:
             logger.warning(f"未找到任务 {task_id} 的状态信息")
-            return True, False, f"未找到任务 {task_id} 的状态信息, 可能训练引擎已经重启"
+            return "NOT_FOUND"
 
         return task_info.get("status", "RUNNING")
         

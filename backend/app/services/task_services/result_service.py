@@ -284,31 +284,63 @@ class ResultService:
                     output_data_path = f"/data{output_data_path}"
                 if not output_data_path.endswith("/"):
                     output_data_path += "/"
+                
+                # 读取预览图的提示词
+                preview_prompts = []
+                sample_prompts_path = os.path.join(task.marked_images_path, "sample_prompts.txt")
+                if os.path.exists(sample_prompts_path):
+                    try:
+                        with open(sample_prompts_path, "r", encoding="utf-8") as f:
+                            for line in f:
+                                # 提取--n前面的正向提示词
+                                prompt_parts = line.split("--n")
+                                if len(prompt_parts) > 0:
+                                    preview_prompts.append(prompt_parts[0].strip())
+                                else:
+                                    preview_prompts.append(line.strip())
+                    except Exception as e:
+                        logger.error(f"读取预览图提示词失败: {str(e)}")
+                
+                # 提示词和预览图序号的映射字典
+                prompt_index_map = {}
+                if preview_prompts:
+                    for i, prompt in enumerate(preview_prompts):
+                        prompt_index_map[f"{i:02d}"] = prompt
                     
                 # 预先加载sample目录中的所有预览图及其修改时间
                 sample_dir = os.path.join(output_dir, "sample")
-                preview_images = {}
-                latest_preview = None
-                latest_time = 0
+                preview_images_by_epoch = {}  # 按轮次分组的预览图
+                max_epoch = "000000"  # 初始化最大轮次
                 
                 if os.path.exists(sample_dir) and os.path.isdir(sample_dir):
                     # 使用一次循环处理所有预览图
                     for img_file in os.listdir(sample_dir):
                         if img_file.endswith('.png'):
-                            img_path = os.path.join(sample_dir, img_file)
-                            mod_time = os.path.getmtime(img_path)
-                            
-                            # 记录最新的预览图
-                            if mod_time > latest_time:
-                                latest_time = mod_time
-                                latest_preview = img_file
-                            
                             # 尝试从文件名中提取epoch数字
-                            
                             epoch_match = re.search(r'_e(\d{6})_', img_file)
                             if epoch_match:
                                 epoch_num = epoch_match.group(1)
-                                preview_images[epoch_num] = img_file
+                                # 如果这个轮次还没有预览图列表，创建一个
+                                if epoch_num not in preview_images_by_epoch:
+                                    preview_images_by_epoch[epoch_num] = []
+                                
+                                # 构建预览图对象
+                                image_path = f"{output_data_path}sample/{img_file}"
+                                preview_image = {"path": image_path, "prompt": ""}
+                                
+                                # 从文件名中提取提示词索引并关联提示词
+                                prompt_index_match = re.search(r'_(\d{2})_', img_file)
+                                if prompt_index_match and prompt_index_map:
+                                    prompt_index = prompt_index_match.group(1)
+                                    if prompt_index in prompt_index_map:
+                                        preview_image["prompt"] = prompt_index_map[prompt_index]
+                                
+                                # 添加预览图对象到对应轮次的列表
+                                preview_images_by_epoch[epoch_num].append(preview_image)
+                                
+                                # 更新最大轮次
+                                if epoch_num > max_epoch:
+                                    max_epoch = epoch_num
                 
                 # 查找所有模型文件
                 models = []
@@ -318,27 +350,28 @@ class ResultService:
                         # 获取模型名称（不含扩展名）
                         model_name_base = os.path.splitext(filename)[0]
                         
-                        # 初始化预览图为空
-                        preview_image = ''
+                        # 初始化预览图为空数组
+                        preview_images = []
                         
                         # 尝试从模型名称中提取轮次编号
                         epoch_match = re.search(r'-(\d{6})', model_name_base)
                         
                         if epoch_match:
-                            # 如果是有轮次的模型，查找对应的预览图
+                            # 如果是有轮次的模型，查找对应的预览图数组
                             epoch_num = epoch_match.group(1)
-                            if epoch_num in preview_images:
-                                preview_image = f"{output_data_path}sample/{preview_images[epoch_num]}"
+                            if epoch_num in preview_images_by_epoch:
+                                # 使用所有匹配的预览图对象
+                                preview_images = preview_images_by_epoch[epoch_num]
                         else:
-                            # 如果是最后一轮模型（没有轮次数字），使用最新的预览图
-                            if latest_preview:
-                                preview_image = f"{output_data_path}sample/{latest_preview}"
+                            # 如果是最后一轮模型（没有轮次数字），使用轮数最大的预览图
+                            if max_epoch in preview_images_by_epoch:
+                                preview_images = preview_images_by_epoch[max_epoch]
                         
                         # 构建模型信息
                         model_info = {
                             "name": filename,
                             "path": f"{output_data_path}{filename}",
-                            "preview_image": preview_image,
+                            "preview_images": preview_images,  # 现在是包含路径和提示词的对象数组
                             "size": os.path.getsize(file_path),
                             "modified_time": datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
                         }
@@ -400,17 +433,17 @@ class ResultService:
             if not training_config:
                 raise ValueError("无法获取训练配置")
             
-            # 计算总步数
-            image_count = db.query(TaskImage).filter(TaskImage.task_id == task_id).count()
-            repeat_num = training_config.get('repeat_num', 10)  # 默认重复次数为10
-            max_epochs = training_config.get('max_train_epochs', 10)  # 默认训练轮次为10
-            train_batch_size = training_config.get('train_batch_size', 1)  # 默认训练batch size为1
-            total_steps = image_count * repeat_num * max_epochs / train_batch_size
+        # 计算总步数
+        image_count = db.query(TaskImage).filter(TaskImage.task_id == task_id).count()
+        repeat_num = training_config.get('repeat_num', 10)  # 默认重复次数为10
+        max_epochs = training_config.get('max_train_epochs', 10)  # 默认训练轮次为10
+        train_batch_size = training_config.get('train_batch_size', 1)  # 默认训练batch size为1
+        total_steps = image_count * repeat_num * max_epochs / train_batch_size
             
-            # 创建训练处理器并获取loss数据
-            handler = TrainRequestHandler(task.training_asset)
-            
-            loss_data = handler.get_training_loss_data(task.prompt_id)
+        # 创建训练处理器并获取loss数据
+        handler = TrainRequestHandler(task.training_asset)
+        
+        loss_data = handler.get_training_loss_data(task.prompt_id)
             
         # 如果获取失败，抛出异常
         if not loss_data:
@@ -495,6 +528,34 @@ class ResultService:
         except Exception as e:
             logger.error(f"获取执行历史记录失败: {str(e)}", exc_info=True)
             return []
+
+    @staticmethod
+    def get_execution_history_by_id(db: Session, history_id: int) -> Optional[Dict]:
+        """
+        获取任务的单个执行历史记录详情
+        
+        Args:
+            db: 数据库会话
+            history_id: 历史记录ID
+            
+        Returns:
+            执行历史记录详情，未找到则返回None
+        """
+        try:
+            # 查询指定的执行历史记录
+            history_record = db.query(TaskExecutionHistory).filter(
+                TaskExecutionHistory.id == history_id
+            ).first()
+            
+            if not history_record:
+                logger.warning(f"未找到执行历史记录 {history_id}")
+                return None
+                
+            return history_record.to_dict()
+            
+        except Exception as e:
+            logger.error(f"获取执行历史记录详情失败: {str(e)}", exc_info=True)
+            return None
 
     @staticmethod
     def update_execution_history_result(db: Session, execution_history_id: int, results: Dict, loss_data: Dict = None, status: str = 'COMPLETED') -> bool:

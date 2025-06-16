@@ -321,6 +321,7 @@ class Task(Base):
             'images': [img.to_dict() for img in self.images],
             'marked_images_path': self.marked_images_path,
             'training_output_path': self.training_output_path,
+            'auto_training':self.auto_training,
             'marking_asset': self.marking_asset.to_dict() if self.marking_asset else None,
             'training_asset': self.training_asset.to_dict() if self.training_asset else None,
             'mark_config': self.mark_config,

@@ -1,12 +1,12 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union, Tuple
+from datetime import datetime
 from sqlalchemy.orm import Session
+from ..models.task import Task, TaskStatus
 from ..models.asset import Asset as AssetModel
 from ..schemas.asset import AssetCreate, AssetUpdate, Asset
 from ..database import get_db
 from ..utils.logger import setup_logger
-from ..utils.ssh import execute_command
 from ..utils.common import copy_attributes, generate_domain_url
-import paramiko
 from ..services.terminal_service import TerminalService
 from ..models.constants import DOMAIN_ACCESS_CONFIG
 import socket
@@ -156,12 +156,20 @@ class AssetService:
 
                 results = {
                     'lora_training': False,
-                    'ai_engine': False
+                    'ai_engine': False,
+                    'ssh_connection': True  # 默认本地资产SSH连接为True
                 }
 
                 # 如果是本地资产，确保使用127.0.0.1作为连接地址
-                if asset.is_local:
-                    logger.info(f"验证本地资产 {asset_id} 的能力")
+                if not asset.is_local:
+                    # 非本地资产需要验证SSH连接
+                    ssh_success, ssh_message = TerminalService.verify_asset_ssh_connection(asset)
+                    results['ssh_connection'] = ssh_success
+                    
+                    if not ssh_success:
+                        logger.debug(f"资产 {asset_id} SSH连接验证失败: {ssh_message}")
+                        # SSH连接失败，无需继续验证其他能力
+                        return results
                     
                 # 验证Lora训练能力
                 if (capability_type is None or capability_type == 'lora_training') and asset.lora_training.get('enabled'):
@@ -183,7 +191,6 @@ class AssetService:
                             # 如果是域名访问模式，先尝试连接特殊域名
                             if asset.port_access_mode == 'DOMAIN' and domain_url:
                                 try:
-                                    logger.info(f"尝试通过域名连接: {domain_url}")
                                     # 从域名URL中提取主机名
                                     hostname = domain_url.replace('https://', '').replace('http://', '').split('/')[0]
                                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -197,7 +204,6 @@ class AssetService:
                                     logger.info(f"Lora训练服务通过域名连接成功: {domain_url}")
                                     sock.close()
                                 except Exception as e:
-                                    logger.error(f"域名连接失败: {domain_url}, 错误: {str(e)}")
                                     sock.close()
                             
                             # 如果域名模式连接失败或不是域名模式，尝试直接连接
@@ -213,7 +219,6 @@ class AssetService:
                                     }
                                     logger.info(f"Lora训练服务直接连接成功: {url}:{port}")
                                 except Exception as e:
-                                    logger.error(f"Lora训练服务连接失败: {url}:{port}, 错误: {str(e)}")
                                     asset.lora_training = {
                                         **asset.lora_training,
                                         'verified': False,
@@ -221,13 +226,11 @@ class AssetService:
                                 finally:
                                     sock.close()
                         else:
-                            logger.error(f"Lora训练验证失败: 未配置端口")
                             asset.lora_training = {
                                 **asset.lora_training,
                                 'verified': False,
                             }
                     except Exception as e:
-                        logger.error(f"Lora训练验证失败: {str(e)}")
                         asset.lora_training = {
                             **asset.lora_training,
                             'verified': False,
@@ -253,7 +256,6 @@ class AssetService:
                             # 如果是域名访问模式，先尝试连接特殊域名
                             if asset.port_access_mode == 'DOMAIN' and domain_url:
                                 try:
-                                    logger.info(f"尝试通过域名连接: {domain_url}")
                                     # 从域名URL中提取主机名
                                     hostname = domain_url.replace('https://', '').replace('http://', '').split('/')[0]
                                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -267,7 +269,6 @@ class AssetService:
                                     logger.info(f"AI引擎服务通过域名连接成功: {domain_url}")
                                     sock.close()
                                 except Exception as e:
-                                    logger.error(f"域名连接失败: {domain_url}, 错误: {str(e)}")
                                     sock.close()
                             
                             # 如果域名模式连接失败或不是域名模式，尝试直接连接
@@ -284,7 +285,6 @@ class AssetService:
                                     }
                                     logger.info(f"AI引擎服务直接连接成功: {url}:{port}")
                                 except Exception as e:
-                                    logger.error(f"AI引擎服务连接失败: {url}:{port}, 错误: {str(e)}")
                                     asset.ai_engine = {
                                         **asset.ai_engine,
                                         'verified': False,
@@ -292,13 +292,11 @@ class AssetService:
                                 finally:
                                     sock.close()
                         else:
-                            logger.error(f"AI引擎验证失败: 未配置端口")
                             asset.ai_engine = {
                                 **asset.ai_engine,
                                 'verified': False,
                             }
                     except Exception as e:
-                        logger.error(f"AI引擎验证失败: {str(e)}")
                         asset.ai_engine = {
                             **asset.ai_engine,
                             'verified': False,
@@ -306,10 +304,9 @@ class AssetService:
 
                 # 提交所有变更
                 db.commit()
-                logger.info(f"资产 {asset_id} 能力验证结果: {results}")
+                # logger.info(f"资产 {asset_id} 能力验证结果: {results}")
                 return results
         except Exception as e:
-            logger.error(f"验证资产能力失败: {str(e)}")
             raise
 
     @staticmethod
@@ -334,12 +331,16 @@ class AssetService:
             with get_db() as db:
                 # 获取所有资产
                 assets = db.query(AssetModel).all()
-                logger.info(f"找到 {len(assets)} 个资产需要验证")
                 
                 for asset in assets:
                     try:
                         # 验证资产能力
                         results = AssetService.verify_capabilities(asset.id, capability_type)
+                        
+                        # 首先检查SSH连接是否成功（对于非本地资产）
+                        if not asset.is_local and not results.get('ssh_connection', False):
+                            logger.debug(f"资产 {asset.id} SSH连接验证失败，跳过该资产")
+                            continue
                         
                         # 根据验证结果筛选可用资产
                         if capability_type == 'ai_engine' and results.get('ai_engine'):

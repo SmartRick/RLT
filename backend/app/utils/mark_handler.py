@@ -51,18 +51,11 @@ class MarkRequestHandler:
             else:
                 # 直连模式
                 self.asset_ip = asset.ip
-        
-        # 构建API基础URL
-        if self.mark_port == 80 or self.mark_port == 443:
-            # 标准HTTP/HTTPS端口无需在URL中指定
-            self.api_base_url = f"http://{self.asset_ip}"
-        else:
-            self.api_base_url = f"http://{self.asset_ip}:{self.mark_port}"
             
         # 创建ComfyUIConfig和ComfyUIAPI实例
         self.comfy_config = ComfyUIConfig(
-            host=self.api_base_url,
-            port=None,  # 端口已包含在api_base_url中
+            host=f"http://{self.asset_ip}",
+            port=self.mark_port,
             client_id="lora_tool"
         )
         self.api = ComfyUIAPI(self.comfy_config)
@@ -71,7 +64,7 @@ class MarkRequestHandler:
         """加载标记工作流配置"""
         try:
             #TODO: 从数据库中获取工作流配置
-            workflow_file = os.path.join(Config.DATA_DIR, 'workflow', 'mark_workflow_api.json')
+            workflow_file = os.path.join(Config.DATA_DIR, 'workflow', 'mark_workflow_api_list.json')
             with open(workflow_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
@@ -94,16 +87,16 @@ class MarkRequestHandler:
             workflow["208"]["inputs"]["string"] = mark_config.input_folder
             workflow["155"]["inputs"]["string"] = mark_config.output_folder
             
-            workflow["207"]["inputs"]["seed"] = random.randint(1, 1000000)
-            workflow["64"]["inputs"]["max_new_tokens"] = mark_config.max_tokens
-            workflow["64"]["inputs"]["temperature"] = mark_config.min_confidence
+            # workflow["207"]["inputs"]["seed"] = random.randint(1, 1000000)
+            # workflow["64"]["inputs"]["max_new_tokens"] = mark_config.max_tokens
+            workflow["220"]["inputs"]["threshold"] = mark_config.min_confidence
             workflow["210"]["inputs"]["string"] = mark_config.trigger_words
             # 保存修改后的工作流配置到项目路径的workflow文件夹下
             workflow_new_file = os.path.join(Config.DATA_DIR, 'workflow', 'mark_workflow_api_new.json')
             with open(workflow_new_file, 'w', encoding='utf-8') as f:
                 json.dump(workflow, f, ensure_ascii=False, indent=4)
 
-            logger.debug(f"发送标记请求到 {self.api_base_url}")
+            logger.debug(f"发送标记请求到 http://{self.asset_ip}:{self.mark_port}")
             
             # 使用ComfyUIAPI提交任务
             response = self.api.submit_prompt(workflow)

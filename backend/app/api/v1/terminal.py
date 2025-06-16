@@ -8,8 +8,8 @@ from ...services.terminal_service import TerminalService
 from ...utils.logger import setup_logger
 from ...utils.response import success_json, error_json, exception_handler, response_template
 from werkzeug.utils import secure_filename
+from ...utils.ssh import SSHRealTimeClient
 from ...config import config
-from ...utils.ssh import SSHClient
 import time
 
 logger = setup_logger('terminal')
@@ -56,7 +56,7 @@ def terminal(ws, asset_id):
             connect_params['key_filename'] = asset.ssh_key_path
             
         # 创建SSH客户端
-        ssh = SSHClient(**connect_params)
+        ssh = SSHRealTimeClient(**connect_params)
         
     except Exception as e:
         error_msg = f'SSH参数错误: {str(e)}'

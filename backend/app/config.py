@@ -10,10 +10,10 @@ class Config:
     MARKED_DIR = os.path.join(DATA_DIR, 'marked')
     OUTPUT_DIR = os.path.join(DATA_DIR, 'output')
 
-    REMOTE_DATA_DIR = "/home/rick_lora/"
-    REMOTE_UPLOAD_DIR = os.path.join(REMOTE_DATA_DIR, 'uploads')
-    REMOTE_MARKED_DIR = os.path.join(REMOTE_DATA_DIR, 'marked')
-    REMOTE_OUTPUT_DIR = os.path.join(REMOTE_DATA_DIR, 'output')
+    REMOTE_DATA_DIR = "/home/rick_lora"
+    REMOTE_UPLOAD_DIR = f'{REMOTE_DATA_DIR}/uploads'
+    REMOTE_MARKED_DIR = f'{REMOTE_DATA_DIR}/marked'
+    REMOTE_OUTPUT_DIR = f'{REMOTE_DATA_DIR}/output'
 
     # 确保必要的目录存在
     for dir_path in [DATA_DIR, LOGS_DIR, UPLOAD_DIR, MARKED_DIR]:
@@ -120,7 +120,7 @@ class Config:
         'enable_bucket': True,
         'min_bucket_reso': 256,
         'max_bucket_reso': 1024,
-        'bucket_reso_steps': 32,
+        'bucket_reso_steps': 64,
         'bucket_no_upscale': True,
         'save_model_as': 'safetensors',
         'save_precision': 'fp16',
@@ -141,9 +141,6 @@ class Config:
         'network_module': 'networks.lora_flux',
         'network_dim': 64,
         'network_alpha': 32,
-        'sample_prompts':'(masterpiece, best quality:1.2), 1girl, solo, --n lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry,  --w 512  --h 768  --l 7  --s 24  --d 1337',
-        'sample_sampler': 'euler_a',
-        'sample_every_n_epochs': 2,
         'log_with': 'tensorboard',
         'logging_dir': './logs',
         'caption_extension': '.txt',
@@ -165,17 +162,19 @@ class Config:
         'persistent_data_loader_workers': True,
         'repeat_num':5,
         
-        # 预览图生成参数
+        # 预览图生成参数（兼容旧版本）
         'generate_preview':True,#是否生成预览图
         'use_image_tags': False,           # 是否使用图片标签生成预览图
         'max_image_tags': 5,               # 最多采用图片提示词数量
-        'positive_prompt': '1girl, solo',  # 正向提示词
-        'negative_prompt': 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry',  # 负面提示词
-        'preview_width': 512,              # 预览图宽度
-        'preview_height': 768,             # 预览图高度
-        'cfg_scale': 7,                    # CFG强度
-        'steps': 24,                       # 迭代步数
-        'seed': 1337,                      # 种子
+        'positive_prompts': 'masterpiece, best quality, 1girl, solo',
+        'negative_prompts': 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry',
+        'sample_width': 512,
+        'sample_height': 768,
+        'sample_cfg': 7,
+        'sample_steps': 24,
+        'sample_seed': 1337,
+        'sample_sampler': 'euler_a',
+        'sample_every_n_epochs': 2,
     }
     
     # AI引擎配置

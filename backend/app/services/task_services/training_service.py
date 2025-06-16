@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict,Any, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from ...models.task import Task, TaskStatus, TaskExecutionHistory
@@ -9,7 +9,7 @@ from ...services.config_service import ConfigService
 from ...utils.file_handler import generate_unique_folder_path
 from ...utils.train_handler import TrainRequestHandler, TrainConfig
 from ...utils.common import copy_attributes
-from ...utils.ssh import upload_directory, download_directory
+from ...utils.ssh import create_ssh_client_from_asset, SSHClientTool
 from ...services.asset_service import AssetService
 from ...config import Config
 import json
@@ -17,6 +17,7 @@ import traceback
 import os
 import time
 import re
+import shutil
 
 logger = setup_logger('training_service')
 
@@ -86,25 +87,30 @@ class TrainingService:
             training_config: 训练配置
             
         Returns:
-            生成的sample_prompts字符串
+            生成的sample_prompts文件路径
         """
         try:
             # 获取配置参数
             use_image_tags = training_config.get('use_image_tags', False)
             max_image_tags = int(training_config.get('max_image_tags', 5))
-            positive_prompt = training_config.get('positive_prompt', '')
-            negative_prompt = training_config.get('negative_prompt', 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry')
-            preview_width = training_config.get('preview_width', 512)
-            preview_height = training_config.get('preview_height', 768)
-            cfg_scale = training_config.get('cfg_scale', 7)
-            steps = training_config.get('steps', 24)
-            seed = training_config.get('seed', 1337)
+            positive_prompt = training_config.get('positive_prompts', '')
+            negative_prompt = training_config.get('negative_prompts', 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry')
             
-            # 构建基本的负面提示词部分
-            negative_part = f"--n {negative_prompt}"
+            # 获取采样参数
+            width = training_config.get('sample_width', 512)
+            height = training_config.get('sample_height', 768)
+            cfg = training_config.get('sample_cfg', 7)
+            steps = training_config.get('sample_steps', 24)
+            seed = training_config.get('sample_seed', 1337)
             
-            # 构建预览图参数部分
-            params_part = f" --w {preview_width} --h {preview_height} --l {cfg_scale} --s {steps} --d {seed}"
+            # 准备保存提示词的文件
+            with get_db() as db:
+                task = db.query(Task).filter(Task.id == task_id).first()
+                # 创建输出目录（如果不存在）
+                os.makedirs(task.marked_images_path, exist_ok=True)
+                
+                # 提示词文件路径
+                sample_prompts_file = os.path.join(task.marked_images_path, "sample_prompts.txt")
             
             # 如果使用图片标签
             if use_image_tags:
@@ -115,7 +121,10 @@ class TrainingService:
                     
                     if not marked_texts:
                         # 如果没有打标文本，使用默认提示词
-                        return f"(masterpiece, best quality:1.2), 1girl, solo, {negative_part}{params_part}"
+                        default_prompt = f"(masterpiece, best quality:1.2), 1girl, solo --n {negative_prompt} --w {width} --h {height} --l {cfg} --s {steps} --d {seed}"
+                        with open(sample_prompts_file, "w", encoding="utf-8") as f:
+                            f.write(default_prompt)
+                        return sample_prompts_file
                     
                     # 构建多行提示词
                     prompts = []
@@ -128,62 +137,133 @@ class TrainingService:
                         # 提取文本的第一行作为提示词
                         first_line = text.strip().split('\n')[0] if text else ""
                         if first_line:
-                            # 添加基本质量词
-                            prompt = f"(masterpiece, best quality:1.2), {first_line}, {negative_part}{params_part}"
+                            # 添加基本质量词和采样参数
+                            prompt = f"(masterpiece, best quality:1.2), {first_line} --n {negative_prompt} --w {width} --h {height} --l {cfg} --s {steps} --d {seed}"
                             prompts.append(prompt)
                             count += 1
                     
                     # 如果没有有效的提示词，使用默认提示词
                     if not prompts:
-                        return f"(masterpiece, best quality:1.2), 1girl, solo, {negative_part}{params_part}"
+                        default_prompt = f"(masterpiece, best quality:1.2), 1girl, solo --n {negative_prompt} --w {width} --h {height} --l {cfg} --s {steps} --d {seed}"
+                        with open(sample_prompts_file, "w", encoding="utf-8") as f:
+                            f.write(default_prompt)
+                        return sample_prompts_file
                     
-                    # 返回多行提示词
-                    return "\n".join(prompts)
+                    # 写入多行提示词到文件
+                    with open(sample_prompts_file, "w", encoding="utf-8") as f:
+                        f.write("\n".join(prompts))
+                    
+                    return sample_prompts_file
             else:
                 # 使用配置中的正向提示词
-                return f"(masterpiece, best quality:1.2), {positive_prompt}, {negative_part}{params_part}"
+                prompt = f"(masterpiece, best quality:1.2), {positive_prompt} --n {negative_prompt} --w {width} --h {height} --l {cfg} --s {steps} --d {seed}"
+                with open(sample_prompts_file, "w", encoding="utf-8") as f:
+                    f.write(prompt)
+                return sample_prompts_file
         
         except Exception as e:
             logger.error(f"生成sample_prompts失败: {str(e)}", exc_info=True)
             # 返回一个默认值
-            return "(masterpiece, best quality:1.2), 1girl, solo, --n lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry --w 512 --h 768 --l 7 --s 24 --d 1337"
+            return ""
             
     @staticmethod
-    def _prepare_training_execution_history(task_id: int, db: Session):
+    def _prepare_training_execution_history(task_id: int, db: Session, asset=None) -> Optional[Dict[str, Any]]:
         """
         准备训练执行历史记录和相关配置
         
         Args:
             task_id: 任务ID
             db: 数据库会话
+            asset: 训练资产（可选）
             
         Returns:
-            Dictionary containing training configuration and output path
+            Dictionary containing training configuration
         """
+        # 1. 获取任务和配置
         task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise ValueError("任务不存在")
 
-        # 获取训练配置
         mark_config = ConfigService.get_task_mark_config(task_id)
         training_config = ConfigService.get_task_training_config(task_id)
         
-        # 生成sample_prompts并更新到训练配置中
-        training_config['sample_prompts'] = TrainingService._generate_sample_prompts(task_id, training_config)
+        # 2. 设置目录路径
+        input_dir = task.marked_images_path
+        training_output_path = generate_unique_folder_path(Config.OUTPUT_DIR, task_id, 'train')
+        task.training_output_path = training_output_path
         
-        # 移除业务参数，避免传递给训练服务
-        business_params = ['use_image_tags', 'max_image_tags', 'positive_prompt', 
-                            'negative_prompt', 'preview_width', 'preview_height', 
-                            'cfg_scale', 'steps', 'seed']
+        # 检查输入目录
+        if not os.path.exists(input_dir):
+            raise ValueError(f"标记图片目录不存在: {input_dir}")
+        
+        # 3. 创建训练数据目录
+        repeat_num = training_config.get('repeat_num', 10)
+        train_data_dir = os.path.join(task.marked_images_path, f"{repeat_num}_rick")
+        
+        # 准备训练数据目录
+        TrainingService._prepare_train_data_dir(input_dir, train_data_dir)
+        task.add_log(f'训练数据目录: {train_data_dir}', db=db)
+        
+        # 4. 处理远程路径
+        remote_path = None
+        remote_train_data_dir = None
+        remote_output_dir = None
+        
+        if task.mark_config and task.mark_config.get('remote_output_dir'):
+            # 设置远程路径
+            remote_path = task.mark_config['remote_output_dir'].replace('\\', '/')
+            remote_train_data_dir = os.path.join(remote_path, f"{repeat_num}_rick").replace('\\', '/')
+            
+            # 设置远程输出路径
+            output_suffix = training_output_path.replace(Config.OUTPUT_DIR, '').replace('\\', '/')
+            remote_output_dir = f"{Config.REMOTE_OUTPUT_DIR}{output_suffix}"
+            
+            task.add_log(f'远程训练数据目录: {remote_train_data_dir}', db=db)
+            
+            # 保存远程输出路径到任务配置
+            if not task.training_config:
+                task.training_config = {}
+            task.training_config['remote_output_dir'] = remote_output_dir
+        
+        # 5. 对于远程资产，同步文件
+        if asset and not asset.is_local and remote_path:
+            TrainingService._sync_files_to_remote(task, asset, input_dir, remote_path, remote_train_data_dir, db)
+            # 更新输入目录为远程目录
+            input_dir = remote_train_data_dir
+        
+        # 6. 更新训练配置
+        training_config['train_data_dir'] = input_dir
+        training_config['output_dir'] = remote_output_dir if asset and not asset.is_local else training_output_path
+        training_config['output_name'] = task.name
+        
+        # 7. 处理生成预览图的配置
+        business_params = ['use_image_tags', 'max_image_tags', 'generate_preview','repeat_num']
+        if training_config.get('generate_preview'):
+            # 生成sample_prompts.txt文件
+            prompts_file = TrainingService._generate_sample_prompts(task_id, training_config)
+            
+            # 如果生成了提示词文件，将其路径添加到配置中
+            if prompts_file:
+                if asset and not asset.is_local and remote_path:
+                    # 对于远程资产，上传提示词文件
+                    remote_prompts_file = os.path.join(remote_path, "sample_prompts.txt").replace('\\', '/')
+                    TrainingService._upload_prompts_file(task, asset, prompts_file, remote_prompts_file, db)
+                    training_config['prompt_file'] = remote_prompts_file
+                else:
+                    # 本地资产，直接使用本地文件路径
+                    training_config['prompt_file'] = prompts_file
+        else:
+            # 如果不生成预览图，移除相关参数
+            sample_args = ['positive_prompts', 'negative_prompts', 'sample_width', 'sample_height', 
+                          'sample_cfg', 'sample_steps', 'sample_seed', 'sample_sampler', 'sample_every_n_epochs']
+            business_params.extend(sample_args)
+        
+        # 8. 移除业务参数
         for param in business_params:
             if param in training_config:
                 training_config.pop(param)
         
-        # 生成唯一的训练输出路径
-        training_output_path = generate_unique_folder_path(Config.OUTPUT_DIR, task_id, 'train')
-        task.training_output_path = training_output_path
-        
-        # 创建执行历史记录
+        # 9. 创建执行历史记录
         execution_history = TaskExecutionHistory(
             task_id=task_id,
             status='RUNNING',
@@ -197,15 +277,98 @@ class TrainingService:
         db.commit()
         db.refresh(execution_history)
         
-        # 记录历史ID到任务的prompt_id字段，方便后续更新
+        # 记录历史ID到任务
         task.execution_history_id = execution_history.id
         db.commit()
+        
+        # 记录训练配置
+        task.add_log(f'训练配置: {json.dumps(training_config, indent=2, ensure_ascii=False)}', db=db)
 
-        return {
-            "training_config": training_config,
-            "training_output_path": training_output_path,
-            "execution_history_id": execution_history.id
-        }
+        return training_config
+    
+    @staticmethod
+    def _prepare_train_data_dir(input_dir: str, train_data_dir: str):
+        """准备训练数据目录"""
+        # 确保训练数据目录为空
+        if os.path.exists(train_data_dir):
+            shutil.rmtree(train_data_dir)
+        
+        # 创建训练数据目录
+        os.makedirs(train_data_dir, exist_ok=True)
+        
+        # 复制文件
+        for item in os.listdir(input_dir):
+            src_path = os.path.join(input_dir, item)
+            dst_path = os.path.join(train_data_dir, item)
+            if os.path.isfile(src_path):
+                shutil.copy2(src_path, dst_path)
+    
+    @staticmethod
+    def _sync_files_to_remote(task, asset, input_dir, remote_path, remote_train_data_dir, db):
+        """同步文件到远程服务器"""
+        task.add_log('资产不是本地资产，需要同步文件...', db=db)
+        
+        # 创建SSH客户端工具
+        ssh_client = create_ssh_client_from_asset(asset)
+        
+        # 检查是否需要同步标记结果（如果训练和打标资产不同）
+        if not task.marking_asset or task.marking_asset_id != asset.id:
+            task.add_log('训练和打标资产不同，需要同步打标结果到训练资产...', db=db)
+            
+            # 上传打标结果
+            success, message, stats = ssh_client.upload_directory(
+                local_path=input_dir,
+                remote_path=remote_path
+            )
+            
+            if not success:
+                raise ValueError(f"同步打标结果失败: {message}")
+            
+            task.add_log(f'打标结果同步成功: {message}', db=db)
+        else:
+            task.add_log('训练和打标使用相同资产，无需同步打标结果', db=db)
+        
+        # 在远程服务器上创建训练数据目录
+        task.add_log(f'在远程服务器上创建训练数据目录: {remote_train_data_dir}', db=db)
+        success, message = ssh_client.mkdir(remote_train_data_dir)
+        if not success:
+            raise ValueError(f"创建远程训练数据目录失败: {message}")
+        
+        # 清空远程训练数据目录
+        task.add_log(f'清空远程训练数据目录: {remote_train_data_dir}', db=db)
+        success, message = ssh_client.execute_command(f"rm -rf {remote_train_data_dir}/*")
+        if success.returncode != 0:
+            task.add_log(f'清空目录警告: {success.stderr}', db=db)
+        
+        # 复制文件到远程训练数据目录
+        task.add_log(f'复制文件到远程训练数据目录', db=db)
+        success, message = ssh_client.copy_remote_file(f"{remote_path}/*", remote_train_data_dir)
+        if not success:
+            raise ValueError(f"复制文件到远程训练数据目录失败: {message}")
+        
+        task.add_log(f'远程文件复制成功: {message}', db=db)
+    
+    @staticmethod
+    def _upload_prompts_file(task, asset, local_file, remote_file, db):
+        """上传提示词文件到远程服务器"""
+        task.add_log(f'上传提示词文件到远程服务器: {remote_file}', db=db)
+        
+        # 创建SSH客户端工具
+        ssh_client = create_ssh_client_from_asset(asset)
+        
+        # 创建远程目录
+        ssh_client.mkdir(os.path.dirname(remote_file))
+        
+        # 上传提示词文件
+        success, message = ssh_client.upload_file(
+            local_path=local_file,
+            remote_path=remote_file
+        )
+        
+        if success:
+            task.add_log(f'提示词文件上传成功', db=db)
+        else:
+            task.add_log(f'提示词文件上传失败: {message}，将使用默认提示词', db=db)
     
     @staticmethod
     def _process_training(task_id: int, asset_id: int):
@@ -224,78 +387,8 @@ class TrainingService:
                 task.update_status(TaskStatus.TRAINING, f'开始处理训练任务，使用资产: {asset.name}', db=db)
 
                 # 准备训练执行历史记录和配置
-                execution_result = TrainingService._prepare_training_execution_history(task_id, db)
-                training_config = execution_result["training_config"]
-                output_dir = execution_result["training_output_path"]
-                
-                # 记录执行历史ID
-                task.execution_history_id = execution_result["execution_history_id"]
-                db.commit()
-                
-                # 准备输入输出目录
-                input_dir = task.marked_images_path
-                output_dir = execution_result["training_output_path"]
-                
-                # 检查输入目录是否存在
-                if not os.path.exists(input_dir):
-                    raise ValueError(f"标记图片目录不存在: {input_dir}")
-                
-                # 确保输出目录存在
-                os.makedirs(output_dir, exist_ok=True)
+                training_config = TrainingService._prepare_training_execution_history(task_id, db, asset)
 
-                # 记录目录信息
-                task.add_log(f'输入目录: {input_dir}', db=db)
-                task.add_log(f'输出目录: {output_dir}', db=db)
-
-                # 定义远程目录路径
-                # 如果任务有打标资产，并且mark_config中有remote_output_dir，则使用该路径作为远程输入目录
-                remote_input_dir = None
-                if task.marking_asset and task.mark_config and task.mark_config.get('remote_output_dir'):
-                    remote_input_dir = task.mark_config['remote_output_dir']
-                    task.add_log(f'使用打标任务的远程输出路径作为训练输入: {remote_input_dir}', db=db)
-                else:
-                    # 如果没有打标资产或没有保存remote_output_dir，使用默认路径
-                    output_suffix = task.marked_images_path.replace(Config.MARKED_DIR, '').lstrip('/')
-                    remote_input_dir = f"{Config.REMOTE_MARKED_DIR}/{output_suffix}"
-                    task.add_log(f'使用默认远程输入路径: {remote_input_dir}', db=db)
-                
-                # 定义训练输出目录
-                output_suffix = output_dir.replace(Config.OUTPUT_DIR, '').lstrip('/')
-                remote_output_dir = f"{Config.REMOTE_OUTPUT_DIR}/{output_suffix}"
-                
-                # 将远程输出路径保存到任务的training_config配置中
-                if not task.training_config:
-                    task.training_config = {}
-                task.training_config['remote_output_dir'] = remote_output_dir
-                db.commit()
-                
-                # 如果不是本地资产，需要同步文件
-                if not asset.is_local:
-                    task.add_log('资产不是本地资产，需要同步文件...', db=db)
-                    
-                    # 检查是否需要同步标记结果（如果训练和打标资产不同）
-                    if not task.marking_asset or task.marking_asset_id != asset_id:
-                        task.add_log('训练和打标资产不同，需要同步打标结果到训练资产...', db=db)
-                        
-                        # 上传打标结果到训练资产
-                        success, message = upload_directory(asset, input_dir, remote_input_dir)
-                        if not success:
-                            raise ValueError(f"上传打标结果失败: {message}")
-                        
-                        task.add_log('打标结果上传成功', db=db)
-                    else:
-                        task.add_log('训练和打标使用相同资产，无需同步打标结果', db=db)
-                    
-                    # 更新输入目录为远程目录
-                    input_dir = remote_input_dir
-                
-                # 更新训练配置中的输入输出路径
-                training_config['train_data_dir'] = input_dir
-                training_config['output_dir'] = remote_output_dir if not asset.is_local else output_dir
-                
-                # 记录训练配置
-                task.add_log(f'训练配置: {json.dumps(training_config, indent=2, ensure_ascii=False)}', db=db)
-                
                 # 创建训练处理器，直接传入资产对象
                 handler = TrainRequestHandler(asset)
                 
@@ -305,9 +398,9 @@ class TrainingService:
                 try:
                     # 创建基础TrainConfig对象
                     train_config = TrainConfig(
-                        train_data_dir=input_dir,
+                        train_data_dir=training_config['train_data_dir'],
                         output_dir=training_config['output_dir'],
-                        output_name=task.name
+                        output_name=training_config['output_name']
                     )
                     
                     # 从训练配置中拷贝参数到train_config对象
@@ -377,19 +470,25 @@ class TrainingService:
                 # 记录开始监控
                 task.add_log(f'开始监控训练任务状态, training_task_id={training_task_id}', db=db)
                 
-                # 创建训练处理器，直接传入资产对象
-                handler = TrainRequestHandler(asset)
-                
                 poll_interval = ConfigService.get_value('train_poll_interval', 30)
                 error_count = 0
                 max_error_retries = 10
                 
                 while True:
                     try:
-                        # 获取训练状态
-                        training_config = ConfigService.get_task_training_config(task_id)
-                        status = handler.check_status(training_task_id, training_config)
-                        logger.info(f"检查训练任务状态: {status}")
+                        # 在每次循环中使用新的数据库会话获取新的asset对象
+                        with get_db() as status_db:
+                            current_asset = status_db.query(Asset).filter(Asset.id == asset_id).first()
+                            if not current_asset:
+                                raise ValueError(f"资产ID {asset_id} 不存在")
+                                
+                            # 创建训练处理器，使用新获取的资产对象
+                            handler = TrainRequestHandler(current_asset)
+                            
+                            # 获取训练状态
+                            training_config = ConfigService.get_task_training_config(task_id)
+                            status = handler.check_status(training_task_id, training_config)
+                            logger.info(f"检查训练任务状态: {status}")
                         
                         # 判断任务状态
                         is_completed = False
@@ -399,6 +498,10 @@ class TrainingService:
                             is_completed = True
                             is_success = True
                         elif status in ["FAILED", "TERMINATED"]:
+                            is_completed = True
+                            is_success = False
+                        elif status == "NOT_FOUND":
+                            logger.warning("训练任务未找到，可能训练引擎已经重启")
                             is_completed = True
                             is_success = False
                         
@@ -431,23 +534,28 @@ class TrainingService:
                                     ).first()
                                 
                                 if is_success:
+                                    # 获取最新的asset对象，避免会话分离问题
+                                    current_asset = complete_db.query(Asset).filter(Asset.id == asset_id).first()
+                                    
                                     # 如果是非本地资产，需要下载训练结果
-                                    if not asset.is_local and task.training_config and task.training_config.get('remote_output_dir'):
-                                        task.add_log('训练完成，开始从远程服务器下载结果...', db=complete_db)
+                                    if current_asset and not current_asset.is_local and task.training_config and task.training_config.get('remote_output_dir'):
+                                        task.add_log('训练完成，开始从远程服务器同步结果...', db=complete_db)
                                         
-                                        # 下载远程输出目录到本地
-                                        success, message = download_directory(
-                                            asset, 
-                                            task.training_config['remote_output_dir'], 
-                                            task.training_output_path
+                                        # 创建SSH客户端工具
+                                        ssh_client = create_ssh_client_from_asset(current_asset)
+                                        
+                                        # 使用SSH客户端下载远程输出目录到本地
+                                        success, message, stats = ssh_client.download_directory(
+                                            remote_path=task.training_config['remote_output_dir'],
+                                            local_path=task.training_output_path
                                         )
                                         
                                         if not success:
-                                            task.add_log(f'下载结果失败: {message}', db=complete_db)
-                                            task.update_status(TaskStatus.ERROR, f'下载训练结果失败: {message}', db=complete_db)
+                                            task.add_log(f'同步结果失败: {message}', db=complete_db)
+                                            task.update_status(TaskStatus.ERROR, f'同步训练结果失败: {message}', db=complete_db)
                                             break
                                         
-                                        task.add_log('训练结果下载成功', db=complete_db)
+                                        task.add_log(f'训练结果同步成功: {message}', db=complete_db)
                                     
                                     # 更新任务状态为完成
                                     task.update_status(TaskStatus.COMPLETED, '训练完成', db=complete_db)
@@ -504,10 +612,10 @@ class TrainingService:
                                     complete_db.commit()
                                 break
                     
-                            # 重置错误计数
-                            if error_count > 0:
-                                logger.info(f"从错误状态恢复，重置错误计数器。之前错误次数: {error_count}")
-                            error_count = 0
+                        # 重置错误计数
+                        if error_count > 0:
+                            logger.info(f"从错误状态恢复，重置错误计数器。之前错误次数: {error_count}")
+                        error_count = 0
                     
                     except Exception as check_err:
                         # 处理检查状态时的错误

@@ -7,8 +7,7 @@ import uuid
 import logging
 import os
 
-# 配置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# 配置日志，使用已有的日志配置
 logger = logging.getLogger('ComfyUIAPI')
 
 @dataclass

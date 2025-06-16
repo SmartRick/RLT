@@ -7,7 +7,7 @@ from .middleware.error_handler import ErrorHandler
 from .database import init_db
 from .api.v1.terminal import sock  # 确保导入 sock
 from .services.config_service import ConfigService  # 添加这行
-from .services.task_service import TaskService
+from .services.task_services.scheduler_service import SchedulerService
 from .utils.json_encoder import CustomJSONEncoder
 from .utils.ssh import close_ssh_connection_pool
 import os
@@ -17,6 +17,7 @@ logger = setup_logger('main')
 
 def create_app():
     """创建 Flask 应用"""
+    logger.info("开始创建Flask应用...")
     app = Flask(__name__)
     
     # 基础配置
@@ -80,7 +81,7 @@ def create_app():
         return send_from_directory(directory, filename)
     
     # 初始化任务服务和调度器
-    TaskService.init_service()
+    SchedulerService.init_scheduler()
     logger.info("任务服务已启动")
     
     # 注册应用关闭处理函数
