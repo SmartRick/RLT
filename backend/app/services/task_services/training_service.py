@@ -183,7 +183,7 @@ class TrainingService:
         task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise ValueError("任务不存在")
-
+        
         mark_config = ConfigService.get_task_mark_config(task_id)
         training_config = ConfigService.get_task_training_config(task_id)
         
@@ -237,7 +237,7 @@ class TrainingService:
         training_config['output_name'] = task.name
         
         # 7. 处理生成预览图的配置
-        business_params = ['use_image_tags', 'max_image_tags', 'generate_preview','repeat_num']
+        business_params = ['use_image_tags', 'max_image_tags', 'generate_preview']
         if training_config.get('generate_preview'):
             # 生成sample_prompts.txt文件
             prompts_file = TrainingService._generate_sample_prompts(task_id, training_config)
@@ -271,6 +271,8 @@ class TrainingService:
             training_config=training_config,
             marked_images_path=task.marked_images_path,
             training_output_path=training_output_path,
+            training_asset_id=asset.id if asset else None,
+            marking_asset_id=task.marking_asset_id,
             description=f"训练开始于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
         db.add(execution_history)
@@ -380,11 +382,9 @@ class TrainingService:
 
                 if not task or not asset:
                     raise ValueError("任务或资产不存在")
-
-                logger.info(f"开始处理训练任务 {task_id}")
                 
                 # 更新任务状态，记录开始处理训练
-                task.update_status(TaskStatus.TRAINING, f'开始处理训练任务，使用资产: {asset.name}', db=db)
+                task.add_log(f'开始处理训练任务，使用资产: {asset.name}', db=db)
 
                 # 准备训练执行历史记录和配置
                 training_config = TrainingService._prepare_training_execution_history(task_id, db, asset)

@@ -11,6 +11,7 @@ from ...utils.mark_handler import MarkRequestHandler, MarkConfig
 from ...utils.common import copy_attributes
 from ...services.asset_service import AssetService
 from ...config import Config
+from ...utils.ssh import create_ssh_client_from_asset
 import json
 import traceback
 import os
@@ -285,13 +286,12 @@ class MarkingService:
                                     if not asset.is_local and task.mark_config and task.mark_config.get('remote_output_dir'):
                                         task.add_log('打标完成，开始从远程服务器同步结果...', db=complete_db)
                                         
-                                        # 使用同步工具下载远程输出目录到本地
-                                        success, message, stats = sync_directory(
-                                            asset=asset,
+                                        # 创建SSH客户端工具
+                                        ssh_client = create_ssh_client_from_asset(asset)
+                                        # 下载打标结果
+                                        success, message, stats = ssh_client.download_directory(
                                             local_path=task.marked_images_path,
-                                            remote_path=task.mark_config['remote_output_dir'],
-                                            sync_mode='download',
-                                            delete_extra=True
+                                            remote_path=task.mark_config['remote_output_dir']
                                         )
                                         
                                         if not success:

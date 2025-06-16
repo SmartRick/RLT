@@ -313,14 +313,7 @@ def get_training_loss(task_id):
     获取任务的训练loss曲线数据和训练进度
     """
     try:
-        history_id = request.args.get('history_id')
-        if history_id:
-            try:
-                history_id = int(history_id)
-            except ValueError:
-                return error_json(msg=f"无效的历史记录ID: {history_id}")
-                
-        result = TaskService.get_training_loss_data(task_id, history_id)
+        result = TaskService.get_training_loss_data(task_id)
         return success_json(data=result)
     except Exception as e:
         logger.error(f"获取训练loss数据失败: {str(e)}")
@@ -336,6 +329,22 @@ def get_execution_history(task_id):
         history_records = TaskService.get_execution_history(db, task_id)
         return success_json(data=history_records)
 
+@tasks_bp.route('/execution-history/<int:history_id>', methods=['DELETE'])
+@exception_handler
+def delete_execution_history(history_id):
+    """
+    删除指定的执行历史记录及其相关文件
+    """
+    try:
+        with get_db() as db:
+            result = TaskService.delete_execution_history(db, history_id)
+            return success_json(result, f"执行历史记录 {history_id} 已成功删除")
+    except ValueError as e:
+        return error_json(1006, str(e))
+    except Exception as e:
+        logger.error(f"删除执行历史记录失败: {str(e)}", exc_info=True)
+        return error_json(1006, f"删除执行历史记录失败: {str(e)}")
+
 @tasks_bp.route('/execution-history/<int:history_id>', methods=['GET'])
 @exception_handler
 def get_execution_history_by_id(history_id):
@@ -347,6 +356,34 @@ def get_execution_history_by_id(history_id):
         if history_record:
             return success_json(data=history_record)
         return response_template("not_found", code=1006, msg=f"未找到ID为 {history_id} 的执行历史记录")
+
+@tasks_bp.route('/<int:task_id>/config', methods=['GET'])
+@exception_handler
+def get_task_config(task_id):
+    """
+    获取任务的打标配置和训练配置
+    """
+    with get_db() as db:
+        task_config = TaskService.get_task_config(db, task_id)
+        if task_config:
+            return success_json(data=task_config)
+        return response_template("not_found", code=1007, msg=f"未找到ID为 {task_id} 的任务配置")
+
+@tasks_bp.route('/<int:task_id>/config', methods=['PUT'])
+@exception_handler
+def update_task_config(task_id):
+    """
+    更新任务的打标配置和训练配置
+    """
+    data = request.get_json()
+    if not data:
+        return response_template("bad_request", msg="请提供有效的配置数据")
+        
+    with get_db() as db:
+        task = TaskService.update_task_config(db, task_id, data)
+        if task:
+            return response_template("updated", data=task)
+        return error_json(1004, "更新任务失败")
 
 @tasks_bp.route('/batch/mark', methods=['POST'])
 @exception_handler

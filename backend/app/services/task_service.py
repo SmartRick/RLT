@@ -30,6 +30,8 @@ class TaskService:
     stop_task = BaseTaskService.stop_task
     restart_task = BaseTaskService.restart_task
     cancel_task = BaseTaskService.cancel_task
+    get_task_config = BaseTaskService.get_task_config
+    update_task_config = BaseTaskService.update_task_config
     
     # 任务图片管理（委托给TaskImageService）
     upload_images = TaskImageService.upload_images
@@ -53,6 +55,7 @@ class TaskService:
     get_training_loss_data = ResultService.get_training_loss_data
     get_execution_history = ResultService.get_execution_history
     get_execution_history_by_id = ResultService.get_execution_history_by_id
+    delete_execution_history = ResultService.delete_execution_history
     
     # 调度器管理（委托给SchedulerService）
     init_scheduler = SchedulerService.init_scheduler

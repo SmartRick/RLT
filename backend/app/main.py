@@ -61,8 +61,6 @@ def create_app():
     @app.route('/data/<path:filepath>')
     def serve_data_files(filepath):
         """处理data目录下的文件访问，包括上传的图片和打标后的文本等"""
-        logger.info(f"Accessing data file: {filepath}")
-        
         # 构建完整的文件路径
         full_path = os.path.join(config.DATA_DIR, filepath)
         directory, filename = os.path.split(full_path)
@@ -77,7 +75,6 @@ def create_app():
             logger.error(f"File not found: {full_path}")
             return "File not found", 404
             
-        logger.info(f"Serving file: {filename} from {directory}")
         return send_from_directory(directory, filename)
     
     # 初始化任务服务和调度器

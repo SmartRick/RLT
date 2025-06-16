@@ -7,8 +7,10 @@ from ...utils.logger import setup_logger
 from ...config import config, Config
 from ...utils.train_handler import TrainRequestHandler
 import os
-import json
 import re
+from ...models.asset import Asset
+from ...services.task_services.base_task_service import BaseTaskService
+from ...services.config_service import ConfigService
 
 logger = setup_logger('result_service')
 
@@ -386,7 +388,7 @@ class ResultService:
                 }
             
     @staticmethod
-    def get_training_loss_data(task_id: int, history_id: int = None) -> Dict:
+    def get_training_loss_data(task_id: int) -> Dict:
         """
         获取训练loss曲线数据并计算训练进度
         
@@ -413,11 +415,8 @@ class ResultService:
         # 获取训练配置（从执行历史记录中获取）
         training_config = None
         
-        # 先确定要使用的历史记录ID
-        history_id_to_use = history_id if history_id else task.execution_history_id
-        
         execution_history = db.query(TaskExecutionHistory).filter(
-            TaskExecutionHistory.id == history_id_to_use
+            TaskExecutionHistory.id == task.execution_history_id
         ).first()
         
         if execution_history and execution_history.training_config:
@@ -426,7 +425,6 @@ class ResultService:
         
         # 如果从执行历史记录中没有获取到配置，则回退到使用ConfigService
         if not training_config:
-            from ...services.config_service import ConfigService
             training_config = ConfigService.get_task_training_config(task_id)
             logger.info("从ConfigService获取训练配置")
         
@@ -472,16 +470,12 @@ class ResultService:
                 logger.warning(f"未找到任何训练数据系列")
                 raise ValueError("未找到任何训练数据系列")
         
-        # 计算进度百分比
-        progress = min(100, int((current_step / total_steps) * 100)) if total_steps > 0 else 0
-        
         result = {
             "success": True,
             "series": series_data,  # 返回匹配到的数据系列
             "training_progress": {
                 "current_step": current_step,
                 "total_steps": total_steps,
-                "progress_percent": progress,
                 "image_count": image_count,
                 "repeat_num": repeat_num,
                 "max_epochs": max_epochs
@@ -504,26 +498,61 @@ class ResultService:
     @staticmethod
     def get_execution_history(db: Session, task_id: int) -> List[Dict]:
         """
-        获取任务的执行历史记录列表
+        获取任务的执行历史记录列表，不包括状态为RUNNING的记录
+        同时关联查询资产名称
         
         Args:
             db: 数据库会话
             task_id: 任务ID
             
         Returns:
-            执行历史记录列表
+            执行历史记录列表，包含资产名称
         """
         try:
             task = db.query(Task).filter(Task.id == task_id).first()
             if not task:
                 return []
             
-            # 获取所有执行历史记录
+            # 获取所有执行历史记录，排除状态为RUNNING的记录
             history_records = db.query(TaskExecutionHistory).filter(
-                TaskExecutionHistory.task_id == task_id
+                TaskExecutionHistory.task_id == task_id,
+                TaskExecutionHistory.status != 'RUNNING'  # 过滤掉RUNNING状态的记录
             ).order_by(TaskExecutionHistory.start_time.desc()).all()
             
-            return [record.to_dict() for record in history_records]
+            # 创建资产ID到名称的映射
+            asset_ids = set()
+            for record in history_records:
+                if record.marking_asset_id:
+                    asset_ids.add(record.marking_asset_id)
+                if record.training_asset_id:
+                    asset_ids.add(record.training_asset_id)
+            
+            # 批量查询所有需要的资产
+            asset_map = {}
+            if asset_ids:
+                assets = db.query(Asset).filter(Asset.id.in_(list(asset_ids))).all()
+                for asset in assets:
+                    asset_map[asset.id] = asset.name
+            
+            # 转换为字典并添加资产名称
+            result = []
+            for record in history_records:
+                record_dict = record.to_dict()
+                
+                # 添加资产名称
+                if record.marking_asset_id and record.marking_asset_id in asset_map:
+                    record_dict['marking_asset_name'] = asset_map[record.marking_asset_id]
+                else:
+                    record_dict['marking_asset_name'] = None
+                    
+                if record.training_asset_id and record.training_asset_id in asset_map:
+                    record_dict['training_asset_name'] = asset_map[record.training_asset_id]
+                else:
+                    record_dict['training_asset_name'] = None
+                
+                result.append(record_dict)
+            
+            return result
             
         except Exception as e:
             logger.error(f"获取执行历史记录失败: {str(e)}", exc_info=True)
@@ -532,7 +561,7 @@ class ResultService:
     @staticmethod
     def get_execution_history_by_id(db: Session, history_id: int) -> Optional[Dict]:
         """
-        获取任务的单个执行历史记录详情
+        获取任务的单个执行历史记录详情，并关联查询资产名称
         
         Args:
             db: 数据库会话
@@ -550,8 +579,23 @@ class ResultService:
             if not history_record:
                 logger.warning(f"未找到执行历史记录 {history_id}")
                 return None
+            
+            result = history_record.to_dict()
+            
+            # 查询关联的资产名称
+            if history_record.marking_asset_id:
+                marking_asset = db.query(Asset).filter(Asset.id == history_record.marking_asset_id).first()
+                result['marking_asset_name'] = marking_asset.name if marking_asset else None
+            else:
+                result['marking_asset_name'] = None
                 
-            return history_record.to_dict()
+            if history_record.training_asset_id:
+                training_asset = db.query(Asset).filter(Asset.id == history_record.training_asset_id).first()
+                result['training_asset_name'] = training_asset.name if training_asset else None
+            else:
+                result['training_asset_name'] = None
+                
+            return result
             
         except Exception as e:
             logger.error(f"获取执行历史记录详情失败: {str(e)}", exc_info=True)
@@ -597,4 +641,62 @@ class ResultService:
         except Exception as e:
             logger.error(f"更新执行历史记录结果失败: {str(e)}", exc_info=True)
             db.rollback()
-            return False 
+            return False
+
+    @staticmethod
+    def delete_execution_history(db: Session, history_id: int) -> Dict:
+        """
+        删除执行历史记录及其相关文件
+
+        Args:
+            db: 数据库会话
+            history_id: 历史记录ID
+
+        Returns:
+            包含操作结果的字典
+        """
+        try:
+            # 查询指定的执行历史记录
+            history_record = db.query(TaskExecutionHistory).filter(
+                TaskExecutionHistory.id == history_id
+            ).first()
+            
+            if not history_record:
+                raise ValueError(f"未找到执行历史记录 {history_id}")
+            
+            # 获取相关任务
+            task = db.query(Task).filter(Task.id == history_record.task_id).first()
+            
+            # 检查是否是当前任务绑定的执行历史记录
+            if task and task.execution_history_id == history_id:
+                raise ValueError(f"无法删除当前任务绑定的执行历史记录 {history_id}，请先取消任务或等待任务完成")
+            
+            # 存储需要删除的文件路径
+            directories_to_delete = []
+            if history_record.marked_images_path and os.path.exists(history_record.marked_images_path):
+                directories_to_delete.append(history_record.marked_images_path)
+            
+            if history_record.training_output_path and os.path.exists(history_record.training_output_path):
+                directories_to_delete.append(history_record.training_output_path)
+            
+            # 从数据库中删除历史记录
+            db.delete(history_record)
+            db.commit()
+            
+            # 处理远程资产的远程目录删除
+            BaseTaskService._delete_remote_directories(db, history_record)
+            
+            # 删除本地目录
+            BaseTaskService._delete_local_directories(directories_to_delete)
+            
+            return {
+                "success": True,
+                "message": "执行历史记录已删除",
+                "task_id": history_record.task_id,
+                "history_id": history_id
+            }
+            
+        except Exception as e:
+            logger.error(f"删除执行历史记录失败: {str(e)}", exc_info=True)
+            db.rollback()
+            raise e

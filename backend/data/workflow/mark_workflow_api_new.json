@@ -1,7 +1,7 @@
 {
     "35": {
         "inputs": {
-            "aspect_ratio": "1:1",
+            "aspect_ratio": "2:3",
             "proportional_width": 512,
             "proportional_height": 512,
             "method": "lanczos",
@@ -70,7 +70,7 @@
     },
     "155": {
         "inputs": {
-            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1_7_mark"
+            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1_6_mark"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -194,7 +194,7 @@
     },
     "210": {
         "inputs": {
-            "string": "Pink Dragon Baby"
+            "string": "Ink Peony"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -255,7 +255,7 @@
                 1
             ],
             "split_by": ".",
-            "from_right": "false"
+            "from_right": "true"
         },
         "class_type": "JWStringSplit",
         "_meta": {
@@ -270,7 +270,6 @@
             "replace_underscore": false,
             "trailing_comma": false,
             "exclude_tags": "",
-            "tags": "1boy, closed_eyes, realistic, dragon",
             "image": [
                 "217",
                 0

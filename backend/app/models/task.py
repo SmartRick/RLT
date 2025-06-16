@@ -88,6 +88,10 @@ class TaskExecutionHistory(Base):
     mark_config = Column(JSON, comment='打标参数配置')
     training_config = Column(JSON, comment='训练参数配置')
     
+    # 存储资产ID
+    marking_asset_id = Column(Integer, nullable=True, comment='打标使用的资产ID')
+    training_asset_id = Column(Integer, nullable=True, comment='训练使用的资产ID')
+    
     # 存储路径信息
     marked_images_path = Column(String(500), comment='打标后的图片文件路径')
     training_output_path = Column(String(500), comment='训练输出文件路径')
@@ -113,6 +117,8 @@ class TaskExecutionHistory(Base):
             'status': self.status,
             'mark_config': self.mark_config,
             'training_config': self.training_config,
+            'marking_asset_id': self.marking_asset_id,
+            'training_asset_id': self.training_asset_id,
             'training_results': self.training_results,
             'loss_data': self.loss_data,
             'description': self.description,
@@ -129,10 +135,9 @@ class Task(Base):
     description = Column(Text, nullable=True, comment='任务描述')
     status = Column(SQLEnum(TaskStatus), nullable=False, default=TaskStatus.NEW, comment='任务状态')
     progress = Column(Integer, default=0, comment='进度百分比')
-    log_file = Column(String(500), comment='日志文件路径')
     created_at = Column(DateTime, default=datetime.now, comment='创建时间')
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
-    prompt_id = Column(String(50))  # 存储ComfyUI的prompt_id
+    prompt_id = Column(String(50))  
 
     # 资产关联
     marking_asset_id = Column(Integer, ForeignKey('assets.id'), comment='标记资产ID')
@@ -263,8 +268,6 @@ class Task(Base):
         if db:
             db.add(log_entry)
             db.commit()
-        
-        logger.info(f"任务 {self.id} 日志更新为 {message}")
 
     def add_progress_log(self, progress: int, db: object = None):
         """

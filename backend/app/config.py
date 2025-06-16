@@ -125,7 +125,7 @@ class Config:
         'save_model_as': 'safetensors',
         'save_precision': 'fp16',
         'save_every_n_epochs': 2,
-        'max_train_epochs': 1,
+        'max_train_epochs': 2,
         'train_batch_size': 2,
         'gradient_checkpointing': True,
         'gradient_accumulation_steps': 1,

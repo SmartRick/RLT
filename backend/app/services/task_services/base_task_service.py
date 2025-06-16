@@ -1,16 +1,18 @@
-from typing import List, Dict, Optional
-from datetime import datetime
+from typing import List, Dict, Optional, Any
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from ...models.task import Task, TaskStatus, TaskStatusHistory, TaskStatusLog
+from sqlalchemy import desc, func, or_
+import os
+from ...models.task import Task, TaskStatus, TaskStatusHistory, TaskStatusLog, TaskImage, TaskExecutionHistory
+from ...models.asset import Asset
 from ...database import get_db
 from ...utils.logger import setup_logger
-import os
-import shutil
-from ...models.task import TaskImage
 from ...config import config
 from ...services.common_service import CommonService
 from ...utils.train_handler import TrainRequestHandler
 from ...utils.mark_handler import MarkRequestHandler
+import shutil
+
 logger = setup_logger('base_task_service')
 
 class BaseTaskService:
@@ -105,28 +107,131 @@ class BaseTaskService:
             return False
             
         try:
-            images = db.query(TaskImage).filter(TaskImage.task_id == task_id).all()
-            for image in images:
-                # 删除单个图片文件
-                if image.file_path and os.path.exists(image.file_path):
-                    os.remove(image.file_path)
-                    logger.info(f"已删除图片文件: {image.file_path}")
-                
-            # 2. 删除任务目录
+            # 1. 明确删除相关的模型数据记录，虽然已设置级联删除，但这里明确进行
+            # 删除任务状态日志
+            status_histories = db.query(TaskStatusHistory).filter(TaskStatusHistory.task_id == task_id).all()
+            for history in status_histories:
+                db.query(TaskStatusLog).filter(TaskStatusLog.history_id == history.id).delete(synchronize_session=False)
+            db.query(TaskStatusHistory).filter(TaskStatusHistory.task_id == task_id).delete(synchronize_session=False)
+            
+            # 删除任务图片记录
+            db.query(TaskImage).filter(TaskImage.task_id == task_id).delete(synchronize_session=False)
+            
+            # 2. 获取任务所有执行历史记录中的路径信息
+            history_records = db.query(TaskExecutionHistory).filter(
+                TaskExecutionHistory.task_id == task_id
+            ).all()
+            
+            # 收集执行历史中的目录
+            for history in history_records:
+                # 处理远程资产的远程目录删除
+                BaseTaskService._delete_remote_directories(db, history)
+            
+            # 明确删除执行历史
+            db.query(TaskExecutionHistory).filter(TaskExecutionHistory.task_id == task_id).delete(synchronize_session=False)
+
+            pattern = f"{task_id}_"
+            directories_to_delete = []
+
             task_upload_dir = os.path.join(config.UPLOAD_DIR, str(task_id))
             if os.path.exists(task_upload_dir):
-                shutil.rmtree(task_upload_dir)
-                logger.info(f"已删除任务目录: {task_upload_dir}")
+                directories_to_delete.append(task_upload_dir)
+                
             
-            # 3. 删除数据库中的任务记录（会级联删除关联的图片记录）
+            # 检查输出目录
+            if os.path.exists(config.OUTPUT_DIR):
+                for item in os.listdir(config.OUTPUT_DIR):
+                    if item.startswith(pattern):
+                        dir_path = os.path.join(config.OUTPUT_DIR, item)
+                        if os.path.isdir(dir_path):
+                            directories_to_delete.append(dir_path)
+                            
+            # 检查标记目录
+            if os.path.exists(config.MARKED_DIR):
+                for item in os.listdir(config.MARKED_DIR):
+                    if item.startswith(pattern):
+                        dir_path = os.path.join(config.MARKED_DIR, item)
+                        if os.path.isdir(dir_path):
+                            directories_to_delete.append(dir_path)
+            
+            # 删除找到的目录
+            BaseTaskService._delete_local_directories(directories_to_delete)
+            
+            # 3. 最后删除任务本身
             db.delete(task)
             db.commit()
-            logger.info(f"已删除任务记录: {task_id}")
+            logger.info(f"已删除任务数据库记录: {task_id}")
+            
             return True
         except Exception as e:
-            logger.error(f"删除任务失败: {e}")
+            logger.error(f"删除任务失败: {str(e)}", exc_info=True)
             db.rollback()
             return False
+
+    @staticmethod
+    def _delete_remote_directories(db: Session, history: TaskExecutionHistory):
+        """删除远程资产相关的目录
+        
+        Args:
+            db: 数据库会话
+            history: 执行历史记录
+        """
+        # 标记资产的远程目录
+        if history.marking_asset_id:
+            try:
+                marking_asset = db.query(Asset).filter(Asset.id == history.marking_asset_id).first()
+                if marking_asset and not marking_asset.is_local and history.mark_config:
+                    # 如果是远程标记资产，通过SSH删除远程标记目录
+                    from ...utils.ssh import create_ssh_client_from_asset
+                    ssh_client = create_ssh_client_from_asset(marking_asset)
+                    
+                    # 获取远程目录路径
+                    remote_marked_path = history.mark_config.get('remote_output_dir')
+                    if remote_marked_path:
+                        logger.info(f"通过SSH删除远程标记目录: {remote_marked_path}")
+                        ssh_client.execute_command(f"rm -rf {remote_marked_path}")
+            except Exception as e:
+                logger.warning(f"删除远程标记目录时发生错误: {str(e)}")
+        
+        # 训练资产的远程目录
+        if history.training_asset_id:
+            try:
+                training_asset = db.query(Asset).filter(Asset.id == history.training_asset_id).first()
+                if training_asset and not training_asset.is_local and history.training_config:
+                    # 如果是远程训练资产，通过SSH删除远程训练目录
+                    from ...utils.ssh import create_ssh_client_from_asset
+                    ssh_client = create_ssh_client_from_asset(training_asset)
+                    
+                    # 获取远程训练数据目录和输出目录
+                    remote_train_data_dir = history.training_config.get('train_data_dir')
+                    remote_output_dir = history.training_config.get('output_dir')
+                    
+                    # 删除远程训练数据目录
+                    if remote_train_data_dir:
+                        logger.info(f"通过SSH删除远程训练数据目录: {remote_train_data_dir}")
+                        ssh_client.execute_command(f"rm -rf {remote_train_data_dir}")
+                    
+                    # 删除远程输出目录
+                    if remote_output_dir:
+                        logger.info(f"通过SSH删除远程训练输出目录: {remote_output_dir}")
+                        ssh_client.execute_command(f"rm -rf {remote_output_dir}")
+            except Exception as e:
+                logger.warning(f"删除远程训练目录时发生错误: {str(e)}")
+
+    @staticmethod
+    def _delete_local_directories(directories: List[str]):
+        """删除本地目录列表
+        
+        Args:
+            directories: 要删除的目录路径列表
+        """
+        for directory in set(directories):  # 使用set去重
+            try:
+                if os.path.exists(directory):
+                    shutil.rmtree(directory)
+                    logger.info(f"已删除目录: {directory}")
+            except Exception as e:
+                logger.warning(f"删除目录 {directory} 失败: {str(e)}")
 
     @staticmethod
     def get_task_log(task_id: int) -> Optional[str]:
@@ -352,8 +457,7 @@ class BaseTaskService:
             
     @staticmethod
     def _rollback_task_state(db: Session, task: Task, target_status: TaskStatus, 
-                             delete_history: bool = True, clear_assets: bool = True,
-                             keep_marked_files: bool = False) -> bool:
+                             delete_history: bool = True, clear_assets: bool = True) -> bool:
         """
         将任务回滚到指定状态
         
@@ -398,18 +502,6 @@ class BaseTaskService:
                     db.delete(history)
                     
                 db.commit()
-                
-            # 如果回滚到NEW状态且需要删除标记文件
-            if target_status == TaskStatus.NEW and not keep_marked_files and task.marked_images_path and os.path.exists(task.marked_images_path):
-                try:
-                    # 只删除目录下的文件，保留目录本身
-                    for filename in os.listdir(task.marked_images_path):
-                        file_path = os.path.join(task.marked_images_path, filename)
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                            logger.info(f"已删除标记文件: {file_path}")
-                except Exception as e:
-                    logger.error(f"删除标记文件失败: {str(e)}")
                 
                 # 清除执行历史ID，但保留执行历史记录
                 task.execution_history_id = None
@@ -506,3 +598,53 @@ class BaseTaskService:
                 'error': f"系统错误: {str(e)}",
                 'error_type': 'SYSTEM_ERROR'
             } 
+
+    @staticmethod
+    def get_task_config(db: Session, task_id: int) -> Optional[Dict]:
+        """
+        获取任务的配置信息，包括打标配置和训练配置
+        
+        Args:
+            db: 数据库会话
+            task_id: 任务ID
+            
+        Returns:
+            包含配置信息的字典，未找到则返回None
+        """
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            logger.warning(f"任务 {task_id} 不存在")
+            return None
+        
+        # 获取标记配置和训练配置
+        mark_config = task.mark_config or {}
+        training_config = task.training_config or {}
+        
+        return {
+            "task_id": task_id,
+            "task_name": task.name,
+            "use_global_mark_config": task.use_global_mark_config,
+            "use_global_training_config": task.use_global_training_config,
+            "mark_config": mark_config,
+            "training_config": training_config
+        }
+            
+    @staticmethod
+    def update_task_config(db: Session, task_id: int, config_data: Dict[str, Any]) -> Dict:
+        """
+        更新任务的配置信息
+        
+        Args:
+            db: 数据库会话
+            task_id: 任务ID
+            config_data: 包含配置更新的字典，可包含以下字段：
+                - mark_config: 打标配置
+                - training_config: 训练配置
+                - use_global_mark_config: 是否使用全局打标配置
+                - use_global_training_config: 是否使用全局训练配置
+            
+        Returns:
+            包含更新结果的字典
+        """
+        return BaseTaskService.update_task(db, task_id, config_data)
+        
