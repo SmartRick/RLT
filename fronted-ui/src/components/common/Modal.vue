@@ -4,12 +4,16 @@
       <transition :name="animation ? 'modal' : ''">
         <div 
           class="modal-wrapper mac-card" 
-          :class="{ 'modal-fullscreen': isFullscreen }" 
+          :class="{ 
+            'modal-fullscreen': isFullscreen,
+            'no-header': !hasHeader
+          }" 
           :style="modalStyle"
           @click.stop
           ref="modalRef"
         >
-          <div class="modal-header">
+          <!-- 标题模式 -->
+          <div v-if="title && (!tabs || tabs.length === 0)" class="modal-header">
             <h3 class="modal-title">{{ title }}</h3>
             <div class="modal-header-actions">
               <button v-if="fullscreenToggle" class="action-btn" @click="toggleFullscreen" title="切换全屏">
@@ -21,6 +25,36 @@
               </button>
             </div>
           </div>
+          
+          <!-- 标签页模式 -->
+          <div v-else-if="tabs && tabs.length > 0" class="modal-header with-tabs">
+            <div class="modal-tabs">
+              <div 
+                v-for="(tab, index) in tabs" 
+                :key="index"
+                class="modal-tab"
+                :class="{ active: activeTabIndex === index }"
+                @click="setActiveTab(index)"
+              >
+                <component v-if="tab.icon" :is="tab.icon" class="tab-icon" />
+                <span>{{ tab.title }}</span>
+              </div>
+            </div>
+            <div class="modal-header-actions">
+              <button v-if="fullscreenToggle" class="action-btn" @click="toggleFullscreen" title="切换全屏">
+                <ArrowsPointingInIcon v-if="isFullscreen" class="action-icon" />
+                <ArrowsPointingOutIcon v-else class="action-icon" />
+              </button>
+              <button class="close-btn" @click="close" title="关闭">
+                <XMarkIcon class="close-icon" />
+              </button>
+            </div>
+          </div>
+          
+          <!-- 无标题模式下的浮动关闭按钮 -->
+          <button v-if="!hasHeader" class="floating-close-btn" @click="close" title="关闭">
+            <XMarkIcon class="floating-close-icon" />
+          </button>
           
           <div class="modal-body" :style="bodyStyle">
             <div v-if="loading" class="modal-loading-overlay">
@@ -110,17 +144,44 @@ export default {
     zIndex: {
       type: Number,
       default: 1000
+    },
+    // 标签页配置，格式为[{title: '标签1', icon: Component}, {title: '标签2', icon: Component}]
+    tabs: {
+      type: Array,
+      default: () => []
+    },
+    // 默认激活的标签页索引
+    defaultActiveTab: {
+      type: Number,
+      default: 0
     }
   },
-  emits: ['update:modelValue', 'confirm', 'fullscreen-change', 'update:fullscreen'],
+  emits: ['update:modelValue', 'confirm', 'fullscreen-change', 'update:fullscreen', 'tab-change'],
   setup(props, { emit }) {
     const modalRef = ref(null)
     const isFullscreen = ref(props.fullscreen)
+    const activeTabIndex = ref(props.defaultActiveTab)
+    
+    // 计算是否有标题区域
+    const hasHeader = computed(() => {
+      return (props.title && props.title.trim() !== '') || (props.tabs && props.tabs.length > 0)
+    })
     
     // 监听props.fullscreen变化
     watch(() => props.fullscreen, (newVal) => {
       isFullscreen.value = newVal
     })
+    
+    // 监听props.defaultActiveTab变化
+    watch(() => props.defaultActiveTab, (newVal) => {
+      activeTabIndex.value = newVal
+    })
+    
+    // 设置当前活动的标签页
+    const setActiveTab = (index) => {
+      activeTabIndex.value = index
+      emit('tab-change', index)
+    }
     
     // 计算模态框样式
     const modalStyle = computed(() => {
@@ -222,7 +283,10 @@ export default {
       modalStyle,
       bodyStyle,
       isFullscreen,
-      toggleFullscreen
+      toggleFullscreen,
+      activeTabIndex,
+      setActiveTab,
+      hasHeader
     }
   }
 }
@@ -261,6 +325,49 @@ export default {
   transition: all 0.3s ease;
 }
 
+/* 无标题模式 */
+.modal-wrapper.no-header {
+  border-radius: var(--radius-lg);
+  overflow: visible;
+}
+
+/* 浮动关闭按钮 */
+.floating-close-btn {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  border: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+  padding: 0;
+  color: white;
+}
+
+.floating-close-btn:hover {
+  background: var(--primary-color-dark, #2563eb);
+  transform: scale(1.1);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25);
+}
+
+.floating-close-btn:active {
+  transform: scale(0.95);
+}
+
+.floating-close-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.5;
+}
+
 /* 全屏模式 */
 .modal-fullscreen {
   position: fixed !important;
@@ -284,14 +391,59 @@ export default {
   justify-content: space-between;
 }
 
+/* 标签页模式的头部样式 */
+.modal-header.with-tabs {
+  padding: 0;
+  border-bottom: none;
+}
+
+.modal-tabs {
+  display: flex;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+}
+
+.modal-tabs::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
+
+.modal-tab {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.modal-tab:hover {
+  background-color: var(--background-hover);
+  color: var(--text-primary);
+}
+
+.modal-tab.active {
+  border-bottom-color: var(--primary-color);
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.tab-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .modal-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 0 16px;
 }
 
 .modal-body {
-  padding: var(--spacing-2);
   overflow-y: auto;
   flex: 1;
   max-height: calc(85vh - 120px); /* 减去头部和底部的高度 */

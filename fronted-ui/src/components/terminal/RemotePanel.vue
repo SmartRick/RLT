@@ -1,30 +1,14 @@
 <template>
   <BaseModal
     v-model="show"
-    :title="`${asset?.name} - ${activeTab === 'terminal' ? '终端' : '文件管理'}`"
+    :title="asset?.name"
     width="80vw"
     @close="handleClose"
+    :tabs="tabs"
+    :defaultActiveTab="activeTabIndex"
+    @tab-change="handleTabChange"
   >
     <template #body>
-      <div class="terminal-tabs">
-        <div 
-          class="tab-item" 
-          :class="{ active: activeTab === 'terminal' }"
-          @click="activeTab = 'terminal'"
-        >
-          <CommandLineIcon class="tab-icon" />
-          <span>终端</span>
-        </div>
-        <div 
-          class="tab-item" 
-          :class="{ active: activeTab === 'fileManager' }"
-          @click="activeTab = 'fileManager'"
-        >
-          <FolderIcon class="tab-icon" />
-          <span>文件管理</span>
-        </div>
-      </div>
-      
       <div class="tab-content">
         <!-- 终端标签页内容 -->
         <div v-show="activeTab === 'terminal'" class="terminal-container">
@@ -63,9 +47,22 @@ const show = computed({
   set: (value) => emit('update:modelValue', value)
 })
 
+// 定义标签页配置
+const tabs = [
+  { title: '终端', icon: CommandLineIcon },
+  { title: '文件管理', icon: FolderIcon }
+]
+
 // 标签页状态
 const activeTab = ref('terminal')
+const activeTabIndex = ref(0)
 const terminalComponent = ref(null)
+
+// 处理标签页切换
+const handleTabChange = (index) => {
+  activeTabIndex.value = index
+  activeTab.value = index === 0 ? 'terminal' : 'fileManager'
+}
 
 // 监听显示状态变化
 watch(show, (newVal) => {
@@ -92,39 +89,6 @@ const handleClose = () => {
   height: 580px;
   overflow: hidden;
   position: relative;
-}
-
-.terminal-tabs {
-  display: flex;
-  background: #f3f4f6;
-  border-radius: 6px 6px 0 0;
-  border-bottom: 1px solid #e5e7eb;
-  overflow: hidden;
-}
-
-.tab-item {
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border-right: 1px solid #e5e7eb;
-}
-
-.tab-item:hover {
-  background: #e5e7eb;
-}
-
-.tab-item.active {
-  background: #fff;
-  border-bottom: 2px solid #3b82f6;
-  font-weight: 500;
-}
-
-.tab-icon {
-  width: 16px;
-  height: 16px;
 }
 
 .tab-content {

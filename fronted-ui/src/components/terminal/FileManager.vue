@@ -367,7 +367,6 @@ const loadDirectory = async (path) => {
     files.value = response.files || []
   } catch (error) {
     console.error('加载目录失败:', error)
-    message.error(error.response?.msg || '加载目录失败')
   } finally {
     loading.value = false
   }
@@ -730,7 +729,6 @@ const uploadSingleFile = async (file, targetPath) => {
     }
   } catch (error) {
     console.error('上传文件失败:', error)
-    message.error(error.response?.msg || '上传失败')
   }
 }
 
@@ -832,21 +830,15 @@ const deleteItem = async () => {
   try {
     message.info(`正在删除: ${item.name}`)
     
-    const response = await terminalApi.deleteRemoteFile(
+    await terminalApi.deleteRemoteFile(
       props.asset.id,
       item.path
     )
-    
-    if (response.code === 0) {
-      message.success(`删除成功: ${item.name}`)
-      // 刷新当前目录
-      refreshDirectory()
-    } else {
-      message.error(response.msg || '删除失败')
-    }
+    message.success(`删除成功: ${item.name}`)
+    // 刷新当前目录
+    refreshDirectory()
   } catch (error) {
     console.error('删除失败:', error)
-    message.error(error.response?.msg || '删除失败')
   } finally {
     deleteDialog.value.show = false
   }

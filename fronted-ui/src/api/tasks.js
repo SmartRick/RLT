@@ -149,5 +149,26 @@ export const tasksApi = {
    */
   async getTrainingLoss(taskId) {
     return request.get(`${BASE_URL}/${taskId}/training-loss`)
+  },
+  
+  /**
+   * 批量提交任务进行标记
+   * @param {Array<number>} taskIds 任务ID数组
+   * @returns {Promise<Object>} 成功提交的任务ID列表
+   */
+  async batchStartMarking(taskIds) {
+    return request.post(`${BASE_URL}/batch/mark`, { task_ids: taskIds })
+  },
+  
+  // 获取任务训练历史
+  async getTaskTrainingHistory(taskId) {
+    const response = await request.get(`${BASE_URL}/${taskId}/execution-history`)
+    return response
+  },
+  
+  // 获取特定历史记录详情
+  async getTrainingHistoryDetails(historyId) {
+    const response = await request.get(`${BASE_URL}/execution-history/${historyId}`)
+    return response
   }
 } 

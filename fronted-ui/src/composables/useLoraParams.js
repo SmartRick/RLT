@@ -189,6 +189,14 @@ export const PARAM_SECTIONS = [
         half: true
       },
       {
+        name: 'network_module',
+        label: '网络模块',
+        type: 'text',
+        placeholder: 'networks.lora_flux',
+        default: 'networks.lora_flux',
+        full: true
+      },
+      {
         name: 'network_dim',
         label: '网络维度 (Dim)',
         type: 'number',
@@ -254,6 +262,25 @@ export const PARAM_SECTIONS = [
     always: false,
     params: [
       {
+        name: 'save_every_n_epochs',
+        label: '每N轮保存一次',
+        type: 'number',
+        placeholder: '2',
+        default: 2,
+        half: true
+      },
+      {
+        name: 'save_model_as',
+        label: '模型保存格式',
+        type: 'select',
+        options: [
+          { value: 'safetensors', label: 'safetensors' },
+          { value: 'ckpt', label: 'ckpt' }
+        ],
+        default: 'safetensors',
+        half: true
+      },
+      {
         name: 'lr_warmup_steps',
         label: '预热步数',
         type: 'number',
@@ -279,6 +306,14 @@ export const PARAM_SECTIONS = [
           { value: 'none', label: '不使用' }
         ],
         default: 'tensorboard',
+        half: true
+      },
+      {
+        name: 'logging_dir',
+        label: '日志目录',
+        type: 'text',
+        placeholder: './logs',
+        default: './logs',
         half: true
       },
       {
@@ -315,6 +350,15 @@ export const PARAM_SECTIONS = [
         half: true
       },
       {
+        name: 'sample_every_n_epochs',
+        label: '每N轮生成一次预览',
+        type: 'number',
+        placeholder: '2',
+        default: 2,
+        half: true,
+        depends: 'generate_preview=true'
+      },
+      {
         name: 'use_image_tags',
         label: '使用图片标签',
         type: 'select',
@@ -336,17 +380,17 @@ export const PARAM_SECTIONS = [
         depends: 'generate_preview=true'
       },
       {
-        name: 'positive_prompt',
+        name: 'positive_prompts',
         label: '正向提示词',
         type: 'textarea',
-        placeholder: '1girl, solo',
-        default: '1girl, solo',
+        placeholder: 'masterpiece, best quality, 1girl, solo',
+        default: 'masterpiece, best quality, 1girl, solo',
         full: true,
         rows: 2,
         depends: 'generate_preview=true'
       },
       {
-        name: 'negative_prompt',
+        name: 'negative_prompts',
         label: '负面提示词',
         type: 'textarea',
         placeholder: 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry',
@@ -356,7 +400,7 @@ export const PARAM_SECTIONS = [
         depends: 'generate_preview=true'
       },
       {
-        name: 'preview_width',
+        name: 'sample_width',
         label: '预览图宽度',
         type: 'number',
         placeholder: '512',
@@ -365,7 +409,7 @@ export const PARAM_SECTIONS = [
         depends: 'generate_preview=true'
       },
       {
-        name: 'preview_height',
+        name: 'sample_height',
         label: '预览图高度',
         type: 'number',
         placeholder: '768',
@@ -374,7 +418,7 @@ export const PARAM_SECTIONS = [
         depends: 'generate_preview=true'
       },
       {
-        name: 'cfg_scale',
+        name: 'sample_cfg',
         label: 'CFG强度',
         type: 'number',
         placeholder: '7',
@@ -384,7 +428,7 @@ export const PARAM_SECTIONS = [
         depends: 'generate_preview=true'
       },
       {
-        name: 'steps',
+        name: 'sample_steps',
         label: '迭代步数',
         type: 'number',
         placeholder: '24',
@@ -393,7 +437,7 @@ export const PARAM_SECTIONS = [
         depends: 'generate_preview=true'
       },
       {
-        name: 'seed',
+        name: 'sample_seed',
         label: '随机种子',
         type: 'number',
         placeholder: '1337',
@@ -462,6 +506,14 @@ export const PARAM_SECTIONS = [
         placeholder: '1024',
         default: 1024,
         half: true
+      },
+      {
+        name: 'bucket_reso_steps',
+        label: '桶分辨率步长',
+        type: 'number',
+        placeholder: '32',
+        default: 32,
+        half: true
       }
     ]
   },
@@ -493,6 +545,191 @@ export const PARAM_SECTIONS = [
           { value: 'bf16', label: 'bf16' }
         ],
         default: 'fp16',
+        half: true
+      },
+      {
+        name: 'fp8_base',
+        label: 'FP8基础',
+        type: 'select',
+        options: [
+          { value: 'true', label: '启用' },
+          { value: 'false', label: '禁用' }
+        ],
+        default: 'true',
+        half: true
+      },
+      {
+        name: 'sdpa',
+        label: 'SDPA优化',
+        type: 'select',
+        options: [
+          { value: 'true', label: '启用' },
+          { value: 'false', label: '禁用' }
+        ],
+        default: 'true',
+        half: true
+      }
+    ]
+  },
+  {
+    id: 'memory',
+    title: '内存优化',
+    subsection: true,
+    parent: 'advanced',
+    params: [
+      {
+        name: 'lowram',
+        label: '低内存模式',
+        type: 'select',
+        options: [
+          { value: 'false', label: '禁用' },
+          { value: 'true', label: '启用' }
+        ],
+        default: 'false',
+        half: true
+      },
+      {
+        name: 'cache_latents',
+        label: '缓存潜变量',
+        type: 'select',
+        options: [
+          { value: 'true', label: '启用' },
+          { value: 'false', label: '禁用' }
+        ],
+        default: 'true',
+        half: true
+      },
+      {
+        name: 'cache_latents_to_disk',
+        label: '潜变量缓存到磁盘',
+        type: 'select',
+        options: [
+          { value: 'true', label: '启用' },
+          { value: 'false', label: '禁用' }
+        ],
+        default: 'true',
+        half: true
+      },
+      {
+        name: 'cache_text_encoder_outputs',
+        label: '缓存文本编码器输出',
+        type: 'select',
+        options: [
+          { value: 'true', label: '启用' },
+          { value: 'false', label: '禁用' }
+        ],
+        default: 'true',
+        half: true
+      },
+      {
+        name: 'cache_text_encoder_outputs_to_disk',
+        label: '文本编码器输出缓存到磁盘',
+        type: 'select',
+        options: [
+          { value: 'true', label: '启用' },
+          { value: 'false', label: '禁用' }
+        ],
+        default: 'true',
+        half: true
+      },
+      {
+        name: 'persistent_data_loader_workers',
+        label: '持久数据加载器工作线程',
+        type: 'select',
+        options: [
+          { value: 'true', label: '启用' },
+          { value: 'false', label: '禁用' }
+        ],
+        default: 'true',
+        half: true
+      }
+    ]
+  },
+  {
+    id: 'text_processing',
+    title: '文本处理',
+    subsection: true,
+    parent: 'advanced',
+    params: [
+      {
+        name: 'caption_extension',
+        label: '标题文件扩展名',
+        type: 'text',
+        placeholder: '.txt',
+        default: '.txt',
+        half: true
+      },
+      {
+        name: 'shuffle_caption',
+        label: '随机打乱标题',
+        type: 'select',
+        options: [
+          { value: 'false', label: '禁用' },
+          { value: 'true', label: '启用' }
+        ],
+        default: 'false',
+        half: true
+      },
+      {
+        name: 'keep_tokens',
+        label: '保留令牌数',
+        type: 'number',
+        placeholder: '0',
+        default: 0,
+        half: true
+      },
+      {
+        name: 'clip_skip',
+        label: 'CLIP跳过层数',
+        type: 'number',
+        placeholder: '2',
+        default: 2,
+        half: true
+      },
+      {
+        name: 'max_token_length',
+        label: '最大令牌长度',
+        type: 'number',
+        placeholder: '255',
+        default: 255,
+        half: true
+      },
+      {
+        name: 'prior_loss_weight',
+        label: '先验损失权重',
+        type: 'number',
+        placeholder: '1',
+        default: 1,
+        half: true
+      }
+    ]
+  },
+  {
+    id: 'full_precision',
+    title: '全精度',
+    subsection: true,
+    parent: 'advanced',
+    params: [
+      {
+        name: 'full_fp16',
+        label: '全FP16精度',
+        type: 'select',
+        options: [
+          { value: 'false', label: '禁用' },
+          { value: 'true', label: '启用' }
+        ],
+        default: 'false',
+        half: true
+      },
+      {
+        name: 'full_bf16',
+        label: '全BF16精度',
+        type: 'select',
+        options: [
+          { value: 'true', label: '启用' },
+          { value: 'false', label: '禁用' }
+        ],
+        default: 'true',
         half: true
       }
     ]

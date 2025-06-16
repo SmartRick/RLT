@@ -5,6 +5,15 @@
       <div class="header-actions">
         <button 
           v-if="selectedTaskIds.length > 0"
+          class="batch-action-btn primary"
+          @click="confirmBatchMark"
+          title="批量提交标记选中的任务"
+        >
+          <TagIcon class="icon" />
+          提交标记({{ selectedTaskIds.length }})
+        </button>
+        <button 
+          v-if="selectedTaskIds.length > 0"
           class="batch-action-btn danger"
           @click="confirmBatchDelete"
           title="批量删除选中的任务"
@@ -14,7 +23,7 @@
         </button>
         <button 
           class="new-task-btn"
-          @click="$emit('create')"
+          @click="openCreateModal"
           title="新建任务"
         >
           <PlusIcon class="icon" />
@@ -67,16 +76,12 @@
     <div class="task-count">
       <div class="count-info">共 {{ tasks.length }} 个任务</div>
       <div class="selection-actions" v-if="tasks.length > 0">
-        <label class="select-all-label">
-          <input 
-            type="checkbox" 
-            :checked="isAllSelected" 
-            :indeterminate="isIndeterminate"
-            @change="toggleSelectAll" 
-            class="select-all-checkbox"
-          />
-          <span>{{ isAllSelected ? '取消全选' : '全选' }}</span>
-        </label>
+        <Checkbox 
+          v-model="allSelected"
+          :indeterminate="isIndeterminate"
+        >
+          {{ isAllSelected ? '取消全选' : '全选' }}
+        </Checkbox>
       </div>
     </div>
     
@@ -89,12 +94,10 @@
         :class="{ 'selected': selectedTaskId == task.id }"
         @click="selectTask(task)"
       >
-        <div class="task-checkbox">
-          <input 
-            type="checkbox" 
-            :checked="selectedTaskIds.includes(task.id)"
-            @click.stop="toggleTaskSelection(task)"
-            class="task-select-checkbox"
+        <div class="task-checkbox" @click.stop>
+          <Checkbox 
+            :model-value="selectedTaskIds.includes(task.id)"
+            @update:model-value="(checked) => updateTaskSelection(task, checked)"
           />
         </div>
         <div class="task-icon">
@@ -135,33 +138,38 @@
       </div>
     </div>
 
-    <!-- 编辑任务模态框 -->
+    <!-- 任务模态框 -->
     <BaseModal
-      v-model="showEditModal"
-      title="编辑任务"
-      :loading="isEditing"
-      @confirm="handleEditTask"
+      v-model="showTaskModal"
+      :title="isEditMode ? '编辑任务' : '新建训练任务'"
+      :loading="isProcessing"
+      @confirm="handleTaskSubmit"
     >
       <template #body>
         <div class="form-group">
-          <label for="editTaskName">任务名称</label>
+          <label for="taskName">任务名称</label>
           <input
-            id="editTaskName"
-            v-model="editingTask.name"
+            id="taskName"
+            v-model="currentTask.name"
             type="text"
             placeholder="输入任务名称"
             class="form-input"
           />
         </div>
         <div class="form-group">
-          <label for="editTaskDescription">任务描述 (可选)</label>
+          <label for="taskDescription">任务描述 (可选)</label>
           <textarea
-            id="editTaskDescription"
-            v-model="editingTask.description"
+            id="taskDescription"
+            v-model="currentTask.description"
             placeholder="输入任务描述"
             class="form-textarea"
             rows="3"
           ></textarea>
+        </div>
+        <div class="form-group">
+          <Checkbox v-model="currentTask.auto_training">
+            自动训练（提交后自动打标并训练）
+          </Checkbox>
         </div>
       </template>
     </BaseModal>
@@ -194,6 +202,7 @@ import {
   statusDetailColorMap
 } from '@/utils/taskStatus'
 import BaseModal from '@/components/common/Modal.vue'
+import Checkbox from '@/components/common/Checkbox.vue'
 
 const route = useRoute()
 
@@ -212,9 +221,10 @@ const searchQuery = ref('')
 const statusFilter = ref('')
 const dateFilter = ref('')
 const selectedTaskIds = ref([]) // 多选模式下选中的任务ID
-const showEditModal = ref(false) // 编辑模态框显示状态
-const editingTask = ref({ name: '', description: '' }) // 当前编辑的任务
-const isEditing = ref(false) // 编辑中状态
+const showTaskModal = ref(false) // 任务模态框显示状态
+const currentTask = ref({ id: 0, name: '', description: '', auto_training: false }) // 当前操作的任务
+const isProcessing = ref(false) // 处理中状态
+const isEditMode = ref(false) // 是否为编辑模式
 
 // 判断当前是否在任务相关页面
 const isTasksRoute = computed(() => {
@@ -360,12 +370,46 @@ const confirmBatchDelete = () => {
   }
 }
 
+// 确认批量提交标记
+const confirmBatchMark = () => {
+  if (selectedTaskIds.value.length === 0) return
+  
+  if (confirm(`确定要提交选中的 ${selectedTaskIds.value.length} 个任务进行标记吗？`)) {
+    handleBatchMark()
+  }
+}
+
+// 批量提交标记
+const handleBatchMark = async () => {
+  if (selectedTaskIds.value.length === 0) return
+  
+  try {
+    const result = await tasksApi.batchStartMarking(selectedTaskIds.value)
+    message.success(`成功提交 ${result.task_ids.length} 个任务进行标记`)
+    
+    // 刷新任务列表
+    fetchTasks()
+  } catch (error) {
+    console.log('提交标记失败',error)
+  }
+}
+
 // 切换选择单个任务
 const toggleTaskSelection = (task) => {
   const index = selectedTaskIds.value.indexOf(task.id)
   if (index === -1) {
     selectedTaskIds.value.push(task.id)
   } else {
+    selectedTaskIds.value.splice(index, 1)
+  }
+}
+
+// 更新任务选择状态
+const updateTaskSelection = (task, checked) => {
+  const index = selectedTaskIds.value.indexOf(task.id)
+  if (checked && index === -1) {
+    selectedTaskIds.value.push(task.id)
+  } else if (!checked && index !== -1) {
     selectedTaskIds.value.splice(index, 1)
   }
 }
@@ -380,6 +424,18 @@ const isIndeterminate = computed(() => {
   return selectedTaskIds.value.length > 0 && selectedTaskIds.value.length < tasks.value.length
 })
 
+// 全选的双向绑定计算属性
+const allSelected = computed({
+  get: () => isAllSelected.value,
+  set: (value) => {
+    if (value) {
+      selectedTaskIds.value = tasks.value.map(task => task.id) // 全选
+    } else {
+      selectedTaskIds.value = [] // 取消全选
+    }
+  }
+})
+
 // 切换全选/取消全选
 const toggleSelectAll = () => {
   if (isAllSelected.value) {
@@ -391,40 +447,64 @@ const toggleSelectAll = () => {
 
 // 打开编辑任务模态框
 const openEditModal = (task) => {
-  editingTask.value = { 
+  currentTask.value = { 
     id: task.id,
     name: task.name, 
-    description: task.description || ''
+    description: task.description || '',
+    auto_training: task.auto_training || false
   }
-  showEditModal.value = true
+  isEditMode.value = true
+  showTaskModal.value = true
 }
 
-// 处理编辑任务提交
-const handleEditTask = async () => {
-  if (!editingTask.value.name) {
+// 打开新建任务模态框
+const openCreateModal = () => {
+  currentTask.value = { id: 0, name: '', description: '', auto_training: false }
+  isEditMode.value = false
+  showTaskModal.value = true
+}
+
+// 处理任务提交
+const handleTaskSubmit = async () => {
+  if (!currentTask.value.name) {
     message.warning('请输入任务名称')
     return
   }
 
   try {
-    isEditing.value = true
+    isProcessing.value = true
     
-    // 调用API更新任务
-    await tasksApi.updateTask(editingTask.value.id, {
-      name: editingTask.value.name,
-      description: editingTask.value.description
-    })
+    if (isEditMode.value) {
+      // 编辑模式：调用API更新任务
+      await tasksApi.updateTask(currentTask.value.id, {
+        name: currentTask.value.name,
+        description: currentTask.value.description,
+        auto_training: currentTask.value.auto_training
+      })
+      message.success('任务已更新')
+    } else {
+      // 创建模式：调用API创建任务
+      const createdTask = await tasksApi.createTask(currentTask.value)
+      message.success('任务创建成功')
+      
+      // 选择新创建的任务
+      if (createdTask && createdTask.id) {
+        selectTask(createdTask)
+      }
+    }
     
-    message.success('任务已更新')
-    showEditModal.value = false
+    // 重置表单
+    currentTask.value = { id: 0, name: '', description: '', auto_training: false }
+    showTaskModal.value = false
+    isEditMode.value = false
     
     // 刷新任务列表
     fetchTasks()
   } catch (error) {
-    console.error('编辑任务失败:', error)
-    message.error('编辑任务失败')
+    console.error('处理任务失败:', error)
+    message.error(isEditMode.value ? '编辑任务失败' : '创建任务失败')
   } finally {
-    isEditing.value = false
+    isProcessing.value = false
   }
 }
 
@@ -446,14 +526,15 @@ watch(() => route.path, (newPath) => {
 
 // 暴露方法给父组件
 defineExpose({
-  fetchTasks
+  fetchTasks,
+  showTaskModal
 })
 </script>
 
 <style scoped>
 /* 左侧任务列表侧边栏 */
 .task-list-sidebar {
-  width: 280px;
+  width: 350px;
   display: flex;
   flex-direction: column;
   background: var(--background-primary);
@@ -512,6 +593,15 @@ defineExpose({
   gap: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.batch-action-btn.primary {
+  background-color: #EFF6FF;
+  color: #3B82F6;
+}
+
+.batch-action-btn.primary:hover {
+  background-color: #EFF6FF;
 }
 
 .batch-action-btn.danger {
@@ -850,5 +940,13 @@ defineExpose({
 .form-textarea {
   resize: vertical;
   min-height: 80px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
 }
 </style> 

@@ -17,6 +17,23 @@
       </div>
 
       <div class="right-section">
+        <!-- 修改历史记录按钮部分 -->
+        <div v-if="canViewTrainingHistory" class="history-dropdown-container">
+          <button class="mac-btn info" @click="toggleHistoryDropdown" ref="historyBtn">
+            <ClockIcon class="btn-icon" />
+            训练历史
+          </button>
+          
+          <!-- 使用新组件 -->
+          <TrainingHistoryDropdown
+            :visible="showHistoryDropdown"
+            :records="trainingHistory"
+            :loading="isLoadingHistory"
+            :position="historyDropdownPosition"
+            @select="openHistoryDetails"
+          />
+        </div>
+
         <button v-if="canViewTrainingDetails" class="mac-btn info" @click="showTrainingDetailsModal = true">
           <ChartBarIcon class="btn-icon" />
           训练详情
@@ -29,6 +46,10 @@
           <PlayIcon class="btn-icon" />
           开始训练
         </button>
+        <div v-if="showAutoTrainingInfo" class="auto-training-info">
+          <InformationCircleIcon class="info-icon" />
+          自动训练已开启
+        </div>
         <button v-if="canStop" class="mac-btn error" :disabled="isLoading" @click="handleStop">
           <StopIcon class="btn-icon" />
           终止任务
@@ -164,12 +185,24 @@
           @preview-image="handlePreview" @model-images-change="updateTrainingModelImages" />
       </template>
     </BaseModal>
+
+    <!-- 训练历史详情模态框 -->
+    <BaseModal v-model="showHistoryDetailsModal" :width="75" :loading="false" :showFooter="false">
+      <template #body>
+        <TrainingHistoryDetails 
+          v-if="selectedHistoryRecord"
+          :historyRecord="selectedHistoryRecord" 
+          :taskName="task?.name || ''"
+          @preview-image="handlePreview"
+        />
+      </template>
+    </BaseModal>
   </div>
 </template>
 
 <script setup>
 /* eslint-disable */
-import { ref, computed, onMounted, onUnmounted, watch, } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   TagIcon,
@@ -180,7 +213,9 @@ import {
   StopIcon,
   TrashIcon,
   PencilIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  InformationCircleIcon,
+  ClockIcon
 } from '@heroicons/vue/24/outline'
 import { tasksApi } from '@/api/tasks'
 import { formatDate } from '@/utils/datetime'
@@ -192,12 +227,15 @@ import BaseModal from '@/components/common/Modal.vue'
 import TaskStatus from '@/components/tasks/TaskStatus.vue'
 import TaskConfigCard from '@/components/tasks/TaskConfigCard.vue'
 import TrainingDetails from '@/components/tasks/TrainingDetails.vue'
+import TrainingHistoryDetails from '@/components/tasks/TrainingHistoryDetails.vue'
+import TrainingHistoryDropdown from '@/components/tasks/TrainingHistoryDropdown.vue'
 import {
   getStatusText,
   getStatusClass,
   isTaskActive as checkTaskActive,
   statusDetailColorMap
 } from '@/utils/taskStatus'
+import { Teleport } from 'vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -231,10 +269,33 @@ const showTrainingDetailsModal = ref(false)
 const previewSource = ref('task') // 'task' 或 'training'
 const trainingModelImages = ref([]) // 训练模型预览图片数组
 
+// 自动训练提示信息
+const showAutoTrainingInfo = computed(() => {
+  return task.value?.status === 'MARKED' && task.value?.auto_training === true
+})
+
 // 计算是否可以查看训练详情
 const canViewTrainingDetails = computed(() => {
   return ['TRAINING', 'COMPLETED'].includes(task.value?.status)
 })
+
+// 历史记录相关
+const showHistoryDropdown = ref(false);
+const showHistoryDetailsModal = ref(false);
+const historyBtn = ref(null);
+const trainingHistory = ref([]);
+const isLoadingHistory = ref(false);
+const selectedHistoryRecord = ref(null);
+const historyDropdownPosition = ref({
+  top: '0px',
+  left: '0px',
+  zIndex: '1100'
+});
+
+// 计算是否可以查看训练历史
+const canViewTrainingHistory = computed(() => {
+  return taskId.value && task.value;
+});
 
 // 获取任务详情
 const fetchTask = async () => {
@@ -380,7 +441,7 @@ const canSubmitMarking = computed(() => {
 })
 
 const canStartTraining = computed(() => {
-  return task.value?.status === 'MARKED'
+  return task.value?.status === 'MARKED' && !task.value?.auto_training
 })
 
 // 计算是否可以重启
@@ -742,17 +803,122 @@ const getTaskImagesUrls = () => {
   return task.value.images.map(image => image.preview_url)
 }
 
+// 获取训练历史
+const fetchTrainingHistory = async () => {
+  if (!taskId.value) return;
+  
+  try {
+    isLoadingHistory.value = true;
+    const data = await tasksApi.getTaskTrainingHistory(taskId.value);
+    console.log("历史记录",data)
+    if (data) {
+      trainingHistory.value = data;
+    }
+  } catch (error) {
+    console.error('获取训练历史失败:', error);
+    message.error('获取训练历史失败');
+  } finally {
+    isLoadingHistory.value = false;
+  }
+};
+
+// 切换历史记录下拉菜单
+const toggleHistoryDropdown = async () => {
+  showHistoryDropdown.value = !showHistoryDropdown.value;
+  
+  if (showHistoryDropdown.value) {
+    // 加载历史数据
+    if (trainingHistory.value.length === 0) {
+      await fetchTrainingHistory();
+    }
+    
+    // 计算下拉菜单位置
+    nextTick(() => {
+      updateHistoryDropdownPosition();
+      document.addEventListener('click', handleClickOutside);
+    });
+  } else {
+    document.removeEventListener('click', handleClickOutside);
+  }
+};
+
+// 更新历史下拉菜单位置
+const updateHistoryDropdownPosition = () => {
+  if (!historyBtn.value) return;
+  
+  const btnRect = historyBtn.value.getBoundingClientRect();
+  
+  historyDropdownPosition.value = {
+    top: `${btnRect.bottom + window.scrollY + 8}px`,
+    left: `${btnRect.right - 280 + window.scrollX}px`, // 右对齐，假设下拉菜单宽度为280px
+    zIndex: '1100' // 确保足够高的z-index值
+  };
+};
+
+// 修改点击外部区域关闭下拉菜单处理函数
+const handleClickOutside = (event) => {
+  if (historyBtn.value && !historyBtn.value.contains(event.target) && 
+      !event.target.closest('.history-dropdown')) {
+    showHistoryDropdown.value = false;
+    document.removeEventListener('click', handleClickOutside);
+  }
+};
+
+// 打开历史详情模态框
+const openHistoryDetails = (record) => {
+  selectedHistoryRecord.value = record;
+  showHistoryDetailsModal.value = true;
+  showHistoryDropdown.value = false;
+  document.removeEventListener('click', handleClickOutside);
+};
+
+// 格式化短日期
+const formatShortDate = (dateStr) => {
+  if (!dateStr) return '';
+  
+  const date = new Date(dateStr);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+};
+
+// 获取历史记录的训练时长
+const getHistoryDuration = (record) => {
+  if (!record.start_time || !record.end_time) return '进行中';
+  
+  const start = new Date(record.start_time);
+  const end = new Date(record.end_time);
+  const duration = end - start;
+  
+  const minutes = Math.floor((duration / 1000 / 60) % 60);
+  const hours = Math.floor((duration / 1000 / 60 / 60));
+  
+  if (hours > 0) {
+    return `${hours}小时${minutes}分钟`;
+  } else {
+    return `${minutes}分钟`;
+  }
+};
+
+// 监听窗口大小变化，更新下拉菜单位置
+const handleResize = () => {
+  if (showHistoryDropdown.value) {
+    updateHistoryDropdownPosition();
+  }
+};
+
 // 初始化
 onMounted(() => {
   if (taskId.value) {
     fetchTask()
     startAutoRefresh()
   }
+  window.addEventListener('resize', handleResize);
 })
 
 // 清理
 onUnmounted(() => {
   stopAutoRefresh()
+  document.removeEventListener('click', handleClickOutside);
+  window.removeEventListener('resize', handleResize);
 })
 </script>
 
@@ -1077,4 +1243,29 @@ onUnmounted(() => {
 .mac-btn.info:hover {
   background-color: #DBEAFE;
 }
+
+.auto-training-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: #EFF6FF;
+  border-radius: 6px;
+  color: #3B82F6;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.info-icon {
+  width: 16px;
+  height: 16px;
+  color: #3B82F6;
+}
+
+/* 历史记录下拉菜单相关样式 */
+.history-dropdown-container {
+  position: relative;
+}
+
+/* 移除其他不需要的样式 */
 </style>

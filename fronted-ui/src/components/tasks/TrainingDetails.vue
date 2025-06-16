@@ -40,16 +40,40 @@
         <div class="model-preview-area">
           <h4 class="section-title">模型预览</h4>
           <div class="model-large-preview">
-            <img 
-              v-if="selectedModel && selectedModel.preview_image" 
-              :src="selectedModel.preview_image" 
+            <!-- 添加左上角图片计数器 -->
+            <div class="image-counter" v-if="hasMultiplePreviewImages">
+              {{ currentImageIndex + 1 }}/{{ totalPreviewImages }}
+            </div>
+            
+            <!-- 修改图片预览区域，增加一个可点击层 -->
+            <div class="preview-image-container" v-if="selectedModel && currentPreviewImage" @click="openImagePreview(currentPreviewImage.path)">
+              <img 
+                :src="currentPreviewImage.path" 
               alt="模型预览" 
               class="large-preview-image"
-              @click="openImagePreview(selectedModel.preview_image)"
             />
+            </div>
             <div v-else class="no-preview-large">
               <div class="empty-icon">🖼️</div>
               <div class="empty-text">{{ selectedModel ? '无预览图' : '请选择模型查看预览' }}</div>
+            </div>
+            
+            <!-- 添加左右切换按钮，完全阻止事件冒泡 -->
+            <div class="image-navigation" v-if="hasMultiplePreviewImages" @click.stop>
+              <button 
+                class="nav-btn prev-btn" 
+                @click.stop="prevImage()" 
+                :disabled="currentImageIndex === 0"
+              >
+                <ChevronLeftIcon class="nav-icon" />
+              </button>
+              <button 
+                class="nav-btn next-btn" 
+                @click.stop="nextImage()" 
+                :disabled="currentImageIndex >= totalPreviewImages - 1"
+              >
+                <ChevronRightIcon class="nav-icon" />
+              </button>
             </div>
             
             <div v-if="selectedModel" class="selected-model-info">
@@ -59,11 +83,16 @@
                   <span class="model-size">{{ formatFileSize(selectedModel.size) }}</span>
                   <span class="model-date">{{ formatDate(selectedModel.modified_time) }}</span>
                 </div>
+                
+                <!-- 添加提示词在下载条内 -->
+                <div class="prompt-display" v-if="currentPreviewImage && currentPreviewImage.prompt">
+                  <div class="prompt-content" :title="currentPreviewImage.prompt">
+                    {{ currentPreviewImage.prompt }}
+                  </div>
+                </div>
               </div>
               <button class="download-btn" @click="downloadModel(selectedModel)">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="download-icon">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                </svg>
+                <ArrowDownTrayIcon class="download-icon" />
                 下载
               </button>
             </div>
@@ -89,8 +118,8 @@
             >
               <div class="thumbnail-preview">
                 <img 
-                  v-if="model.preview_image" 
-                  :src="model.preview_image" 
+                  v-if="getPreviewImage(model)" 
+                  :src="getPreviewImage(model)" 
                   alt="模型缩略图"
                 />
                 <div v-else class="no-preview-thumbnail">无预览</div>
@@ -116,6 +145,11 @@ import {
   LegendComponent
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
+import { 
+  ChevronLeftIcon, 
+  ChevronRightIcon, 
+  ArrowDownTrayIcon 
+} from '@heroicons/vue/24/outline'
 
 // 注册必要的组件
 echarts.use([
@@ -147,6 +181,11 @@ const props = defineProps({
   task: {
     type: Object,
     default: () => ({})
+  },
+  // 添加历史记录ID属性，用于加载特定训练历史的数据
+  historyRecordId: {
+    type: [Number, String],
+    default: null
   }
 })
 
@@ -167,6 +206,9 @@ const selectedModel = ref(null)
 // 处理缩略图列表的横向滚动
 const thumbnailsContainer = ref(null)
 
+// 添加当前查看的图片索引
+const currentImageIndex = ref(0)
+
 // 计算属性
 const hasLossData = computed(() => lossData.value && lossData.value.length > 0)
 const lastStepLoss = computed(() => {
@@ -177,26 +219,95 @@ const lastStepLoss = computed(() => {
   return null
 })
 
-// 计算模型的所有预览图片数组
-const modelPreviewImages = computed(() => {
-  return models.value
-    .filter(model => model.preview_image)
-    .map(model => model.preview_image)
+// 获取预览图片
+const getPreviewImage = (model) => {
+  if (!model) return null
+  
+  if (model.preview_images && model.preview_images.length > 0) {
+    return model.preview_images[0].path
+  }
+  
+  return null
+}
+
+// 当前显示的预览图
+const currentPreviewImage = computed(() => {
+  if (!selectedModel.value || 
+      !selectedModel.value.preview_images || 
+      selectedModel.value.preview_images.length === 0) {
+    return null
+  }
+  
+  // 使用范围安全的索引，避免在计算属性中修改状态
+  const safeIndex = Math.min(currentImageIndex.value, selectedModel.value.preview_images.length - 1)
+  
+  return selectedModel.value.preview_images[safeIndex]
 })
 
-// 获取训练结果
+// 总预览图数量
+const totalPreviewImages = computed(() => {
+  if (!selectedModel.value || !selectedModel.value.preview_images) {
+    return 0
+  }
+  return selectedModel.value.preview_images.length
+})
+
+// 是否有多张预览图
+const hasMultiplePreviewImages = computed(() => {
+  return totalPreviewImages.value > 1
+})
+
+// 下一张预览图
+const nextImage = () => {
+  if (currentImageIndex.value < totalPreviewImages.value - 1) {
+    currentImageIndex.value++
+  }
+}
+
+// 上一张预览图
+const prevImage = () => {
+  if (currentImageIndex.value > 0) {
+    currentImageIndex.value--
+  }
+}
+
+// 修改计算模型的所有预览图片数组
+const modelPreviewImages = computed(() => {
+  return models.value
+    .flatMap(model => {
+      if (model.preview_images && model.preview_images.length > 0) {
+        return model.preview_images.map(img => img.path)
+      }
+      return []
+    })
+})
+
+// 修改获取训练结果方法，支持历史记录
 const fetchTrainingResults = async () => {
   if (!props.taskId) return
   
   try {
     isLoadingModels.value = true
-    const data = await tasksApi.getTrainingResults(props.taskId)
+    let data
+    
+    // 如果提供了historyRecordId，从历史记录中获取训练结果
+    if (props.historyRecordId) {
+      const historyData = await tasksApi.getTrainingHistoryDetails(props.historyRecordId)
+      if (historyData && historyData.training_results) {
+        data = historyData.training_results
+      }
+    } else {
+      data = await tasksApi.getTrainingResults(props.taskId)
+    }
+    
     if (data && data.models) {
       models.value = data.models
       
       // 如果没有选中模型，默认选择第一个有预览图的模型
       if (!selectedModel.value && models.value.length > 0) {
-        const modelWithPreview = models.value.find(model => model.preview_image) || models.value[0]
+        const modelWithPreview = models.value.find(model => 
+          model.preview_images && model.preview_images.length > 0
+        ) || models.value[0]
         selectedModel.value = modelWithPreview
       }
     }
@@ -207,13 +318,24 @@ const fetchTrainingResults = async () => {
   }
 }
 
-// 获取训练Loss数据
+// 修改获取训练Loss数据方法，支持历史记录
 const fetchTrainingLoss = async () => {
   if (!props.taskId) return
   
   try {
     isLoadingLoss.value = true
-    const data = await tasksApi.getTrainingLoss(props.taskId)
+    let data
+    
+    // 如果提供了historyRecordId，从历史记录中获取Loss数据
+    if (props.historyRecordId) {
+      const historyData = await tasksApi.getTrainingHistoryDetails(props.historyRecordId)
+      if (historyData && historyData.loss_data) {
+        data = historyData.loss_data
+      }
+    } else {
+      data = await tasksApi.getTrainingLoss(props.taskId)
+    }
+    
     if (data && data.series) {
       lossData.value = data.series
       trainingProgress.value = data.training_progress
@@ -233,6 +355,7 @@ const fetchTrainingLoss = async () => {
 // 选择模型
 const selectModel = (model) => {
   selectedModel.value = model
+  currentImageIndex.value = 0
 }
 
 // 初始化图表
@@ -419,11 +542,12 @@ const formatDate = (dateString) => {
   return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
-// 启动自动刷新
+// 修改自动刷新逻辑，在历史记录模式下不自动刷新
 const startAutoRefresh = () => {
   stopAutoRefresh() // 先停止可能存在的定时器
   
-  if (props.isTraining) {
+  // 只在非历史记录模式下且正在训练时启动自动刷新
+  if (props.isTraining && !props.historyRecordId && props.refreshInterval > 0) {
     refreshTimer.value = setInterval(() => {
       fetchTrainingLoss()
       fetchTrainingResults()
@@ -466,11 +590,17 @@ const handleThumbnailsScroll = (event) => {
   thumbnailsContainer.value.scrollLeft += scrollAmount
 }
 
-// 修改图片预览方法，发送事件到父组件
-const openImagePreview = (imageUrl) => {
-  if (!imageUrl) return
-  // 触发父组件的预览事件
-  emit('preview-image', 'train',imageUrl)
+// 修改图片预览方法
+const openImagePreview = (imagePath) => {
+  if (!imagePath) return
+  
+  // 如果是当前选中的模型，获取所有预览图发送给父组件
+  if (selectedModel.value && selectedModel.value.preview_images) {
+    const allImages = selectedModel.value.preview_images.map(img => img.path)
+    
+    // 多图预览，发送当前图片和所有图片列表
+    emit('preview-image', 'train', imagePath, allImages)
+  }
 }
 
 // 添加对modelPreviewImages变化的监听，向父组件发送更新
@@ -658,11 +788,19 @@ onUnmounted(() => {
   position: relative;
 }
 
+.preview-image-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
 .large-preview-image {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  cursor: pointer;
 }
 
 .selected-model-info {
@@ -675,14 +813,17 @@ onUnmounted(() => {
   backdrop-filter: blur(8px); 
   border-radius: 0 0 8px 8px; 
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* 改为顶部对齐 */
   justify-content: space-between;
-  z-index: 1;
+  z-index: 3;
 }
 
 .model-info-left {
   flex: 1;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .model-name {
@@ -871,5 +1012,85 @@ onUnmounted(() => {
   .chart-container {
     min-height: 300px;
   }
+}
+
+.image-navigation {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 5; /* 提高导航层的z-index */
+  pointer-events: none; /* 导航容器不接收事件 */
+}
+
+.nav-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.5);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  transition: all 0.2s;
+  z-index: 10; /* 提高按钮的z-index */
+  pointer-events: all; /* 确保按钮可点击 */
+}
+
+.nav-btn:hover {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.image-counter {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 14px;
+  z-index: 2;
+}
+
+.prompt-display {
+  margin-top: 8px;
+}
+
+.prompt-content {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.4;
+  /* 显示两行，隐藏多余内容 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-height: 2.8em; /* 两行的高度 */
+  white-space: normal;
+}
+
+.download-icon {
+  width: 16px;
+  height: 16px;
 }
 </style> 
