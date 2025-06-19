@@ -27,7 +27,7 @@
           <div class="status-card">
             <div class="time-info">
               <div class="info-item">
-                <div class="info-icon">
+                <div class="info-icon start-time">
                   <CalendarIcon />
                 </div>
                 <div class="info-content">
@@ -37,7 +37,7 @@
               </div>
               
               <div class="info-item">
-                <div class="info-icon">
+                <div class="info-icon end-time">
                   <CalendarIcon />
                 </div>
                 <div class="info-content">
@@ -47,7 +47,7 @@
               </div>
               
               <div class="info-item" v-if="trainingDuration">
-                <div class="info-icon">
+                <div class="info-icon duration">
                   <ClockIcon />
                 </div>
                 <div class="info-content">
@@ -58,7 +58,7 @@
               
               <!-- 添加打标资产信息 -->
               <div class="info-item" v-if="historyRecord.marking_asset_id">
-                <div class="info-icon">
+                <div class="info-icon marking">
                   <TagIcon />
                 </div>
                 <div class="info-content">
@@ -69,7 +69,7 @@
               
               <!-- 添加训练资产信息 -->
               <div class="info-item" v-if="historyRecord.training_asset_id">
-                <div class="info-icon">
+                <div class="info-icon training">
                   <CpuChipIcon />
                 </div>
                 <div class="info-content">
@@ -546,36 +546,110 @@ const handlePreviewImage = (source, imageUrl, allImages) => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  transition: all 0.3s ease;
+  animation: card-appear 0.5s ease-out;
+}
+
+.status-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+@keyframes card-appear {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .time-info {
   display: flex;
-  gap: 32px;
+  justify-content: space-between;
   flex-wrap: wrap;
+  gap: 16px;
 }
 
 .info-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  min-width: 200px;
+  flex: 1;
+  min-width: 180px;
+  animation: fade-in 0.5s ease-out;
+  animation-fill-mode: both;
 }
 
+.info-item:nth-child(1) { animation-delay: 0.1s; }
+.info-item:nth-child(2) { animation-delay: 0.2s; }
+.info-item:nth-child(3) { animation-delay: 0.3s; }
+.info-item:nth-child(4) { animation-delay: 0.4s; }
+.info-item:nth-child(5) { animation-delay: 0.5s; }
+
 .info-icon {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background-color: var(--background-tertiary);
+  background: linear-gradient(135deg, var(--background-tertiary), var(--background-hover));
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.info-icon.start-time {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.2));
+}
+
+.info-icon.start-time svg {
+  color: rgb(59, 130, 246);
+}
+
+.info-icon.end-time {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.2));
+}
+
+.info-icon.end-time svg {
+  color: rgb(16, 185, 129);
+}
+
+.info-icon.duration {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.2));
+}
+
+.info-icon.duration svg {
+  color: rgb(245, 158, 11);
+}
+
+.info-icon.marking {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.2));
+}
+
+.info-icon.marking svg {
+  color: rgb(139, 92, 246);
+}
+
+.info-icon.training {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.1), rgba(236, 72, 153, 0.2));
+}
+
+.info-icon.training svg {
+  color: rgb(236, 72, 153);
+}
+
+.info-item:hover .info-icon {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
 }
 
 .info-icon svg {
-  width: 16px;
-  height: 16px;
-  color: var(--text-secondary);
+  width: 18px;
+  height: 18px;
 }
 
 .info-content {
@@ -818,8 +892,13 @@ const handlePreviewImage = (source, imageUrl, allImages) => {
   }
   
   .time-info {
-    flex-direction: column;
-    gap: 16px;
+    justify-content: flex-start;
+    gap: 20px;
+  }
+  
+  .info-item {
+    min-width: 100%;
+    max-width: 100%;
   }
 }
 

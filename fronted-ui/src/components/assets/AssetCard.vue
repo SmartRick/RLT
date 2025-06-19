@@ -1,8 +1,7 @@
 <template>
   <div 
     class="asset-card mac-card"
-    :class="{ 'is-selected': isSelected, 'is-local': asset.is_local }"
-    @click="$emit('select', asset)"
+    :class="{'is-local': asset.is_local, 'is-disabled': !asset.enabled }"
   >
     <!-- 卡片头部 -->
     <div class="asset-card-header">
@@ -12,8 +11,9 @@
         <span class="asset-name text-ellipsis">{{ asset.name }}</span>
         <span v-if="asset.is_local" class="local-badge">本地</span>
       </div>
-      <div class="asset-status-badge" :class="getStatusClass(asset.status)">
-        {{ getStatusText(asset.status) }}
+      <div class="asset-status-badge" :class="getStatusClass(asset)">
+        <template v-if="!asset.enabled">已禁用</template>
+        <template v-else>{{ getStatusText(asset.status) }}</template>
       </div>
     </div>
 
@@ -76,7 +76,7 @@
       <button 
         class="mac-btn small terminal-btn" 
         @click.stop="$emit('open-terminal', asset)"
-        :disabled="asset.status !== 'CONNECTED' || asset.is_local"
+        :disabled="asset.status !== 'CONNECTED' || asset.is_local || !asset.enabled"
         :title="getTerminalBtnTitle(asset)"
       >
         <TerminalIcon class="btn-icon" />
@@ -84,7 +84,7 @@
       </button>
       <button 
         class="mac-btn small verify-btn" 
-        :disabled="asset.isVerifying"
+        :disabled="asset.isVerifying || !asset.enabled"
         @click.stop="$emit('verify', asset)"
       >
         <template v-if="!asset.isVerifying">
@@ -93,8 +93,16 @@
         </template>
         <template v-else>
           <span class="loading-spinner"></span>
-          <span>验证中</span>
+          <span>验证</span>
         </template>
+      </button>
+      <button 
+        class="mac-btn small toggle-btn" 
+        :class="{ 'toggle-on': asset.enabled, 'toggle-off': !asset.enabled }"
+        @click.stop="$emit('toggle', asset)"
+      >
+        <PowerIcon class="btn-icon" />
+        <span>{{ asset.enabled ? '禁用' : '启用' }}</span>
       </button>
       <button class="mac-btn small edit-btn" @click.stop="$emit('edit', asset)">
         <PencilIcon class="btn-icon" />
@@ -120,21 +128,18 @@ import {
   TrashIcon,
   ClockIcon,
   CheckCircleIcon,
-  CommandLineIcon as TerminalIcon
+  CommandLineIcon as TerminalIcon,
+  PowerIcon
 } from '@heroicons/vue/24/outline'
 
 defineProps({
   asset: {
     type: Object,
     required: true
-  },
-  isSelected: {
-    type: Boolean,
-    default: false
   }
 })
 
-defineEmits(['select', 'edit', 'delete', 'verify', 'open-terminal'])
+defineEmits(['select', 'edit', 'delete', 'verify', 'open-terminal', 'toggle'])
 
 // 获取状态文本
 const getStatusText = (status) => {
@@ -147,13 +152,15 @@ const getStatusText = (status) => {
 }
 
 // 添加状态样式类名映射
-const getStatusClass = (status) => {
+const getStatusClass = (asset) => {
+  if (!asset.enabled) return 'disabled'
+  
   const statusClassMap = {
     'CONNECTED': 'connected',
     'PENDING': 'pending',
     'CONNECTION_ERROR': 'connection-error'
   }
-  return statusClassMap[status] || ''
+  return statusClassMap[asset.status] || ''
 }
 
 // 获取终端按钮标题
@@ -189,14 +196,14 @@ const formatDate = (date) => {
   position: relative;
 }
 
-.asset-card.is-selected {
-  border: 1px solid var(--primary-color, #007AFF);
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
-}
-
 .asset-card.is-local {
   background: linear-gradient(to bottom, #FFFFFF, #F8FDFF);
   border: 1px solid #E1F5FE;
+}
+
+.asset-card.is-disabled {
+  background: #F9FAFB;
+  border: 1px dashed var(--border-color, rgba(0, 0, 0, 0.1));
 }
 
 .asset-card-header {
@@ -249,6 +256,12 @@ const formatDate = (date) => {
 .asset-status-badge.connection-error {
   background: #FFEBEE;
   color: #C62828;
+}
+
+/* 禁用状态 */
+.asset-status-badge.disabled {
+  background: #F3F4F6;
+  color: #6B7280;
 }
 
 /* 本地资产状态 */
@@ -360,7 +373,7 @@ const formatDate = (date) => {
 
 .asset-card-actions {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border-color-light, rgba(0, 0, 0, 0.06));
@@ -462,7 +475,8 @@ const formatDate = (date) => {
   }
   
   .asset-card-actions {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
+    row-gap: 8px;
   }
 }
 
@@ -478,5 +492,25 @@ const formatDate = (date) => {
 
 .asset-icon.local {
   color: #0277BD;
+}
+
+.toggle-btn.toggle-on {
+  background: #FEF2F2;
+  color: #B91C1C;
+  border: none;
+}
+
+.toggle-btn.toggle-on:hover {
+  background: #D1FAE5;
+}
+
+.toggle-btn.toggle-off {
+  background: #ECFDF5;
+  color: #047857;
+  border: none;
+}
+
+.toggle-btn.toggle-off:hover {
+  background: #FEE2E2;
 }
 </style> 

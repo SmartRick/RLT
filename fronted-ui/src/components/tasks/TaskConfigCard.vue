@@ -102,16 +102,29 @@
       </div>
       <div v-else class="training-config">
         <div class="config-form">
+          <!-- 最重要的两个参数放在最前面 -->
+          <div class="form-group">
+            <label>
+              <span class="label-text">最大训练轮次</span>
+              <span class="label-en">max_train_epochs</span>
+            </label>
+            <input type="range" v-model.number="config.training_config.max_train_epochs" min="1" max="20" step="1"
+              class="mac-slider" :disabled="!canEdit" />
+            <div class="slider-value">{{ config.training_config.max_train_epochs }}</div>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <span class="label-text">图片重复次数</span>
+              <span class="label-en">repeat_num</span>
+            </label>
+            <input type="range" v-model.number="config.training_config.repeat_num" min="1" max="50" step="1"
+              class="mac-slider" :disabled="!canEdit" />
+            <div class="slider-value">{{ config.training_config.repeat_num }}</div>
+          </div>
+
           <!-- 基础训练参数 -->
           <div class="form-row">
-            <div class="form-group">
-              <label>
-                <span class="label-text">最大训练轮次</span>
-                <span class="label-en">max_train_epochs</span>
-              </label>
-              <input type="number" v-model.number="config.training_config.max_train_epochs" min="1" placeholder="10"
-                class="mac-input" :disabled="!canEdit" />
-            </div>
             <div class="form-group">
               <label>
                 <span class="label-text">批量大小</span>
@@ -119,6 +132,14 @@
               </label>
               <input type="number" v-model.number="config.training_config.train_batch_size" min="1" placeholder="1"
                 class="mac-input" :disabled="!canEdit" />
+            </div>
+            <div class="form-group">
+              <label>
+                <span class="label-text">分辨率</span>
+                <span class="label-en">resolution</span>
+              </label>
+              <input v-model="config.training_config.resolution" placeholder="512,512" class="mac-input"
+                :disabled="!canEdit" />
             </div>
           </div>
 
@@ -150,31 +171,24 @@
               <input type="number" v-model.number="config.training_config.learning_rate" step="0.0001" min="0"
                 placeholder="0.0001" class="mac-input" :disabled="!canEdit" />
             </div>
+          </div>
+          <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">分辨率</span>
-                <span class="label-en">resolution</span>
+                <span class="label-text">Unet学习率</span>
+                <span class="label-en">unet_lr</span>
               </label>
-              <input v-model="config.training_config.resolution" placeholder="512,512" class="mac-input"
-                :disabled="!canEdit" />
+              <input type="number" v-model.number="config.training_config.unet_lr" step="0.0001" min="0"
+                placeholder="0.0005" class="mac-input" :disabled="!canEdit" />
             </div>
-          </div>
-
-          <div class="form-group">
-            <label>
-              <span class="label-text">Unet学习率</span>
-              <span class="label-en">unet_lr</span>
-            </label>
-            <input type="number" v-model.number="config.training_config.unet_lr" step="0.0001" min="0"
-              placeholder="0.0005" class="mac-input" :disabled="!canEdit" />
-          </div>
-          <div class="form-group">
-            <label>
-              <span class="label-text">文本编码器学习率</span>
-              <span class="label-en">text_encoder_lr</span>
-            </label>
-            <input type="number" v-model.number="config.training_config.text_encoder_lr" step="0.00001" min="0"
-              placeholder="0.00001" class="mac-input" :disabled="!canEdit" />
+            <div class="form-group">
+              <label>
+                <span class="label-text">文本编码器学习率</span>
+                <span class="label-en">text_encoder_lr</span>
+              </label>
+              <input type="number" v-model.number="config.training_config.text_encoder_lr" step="0.00001" min="0"
+                placeholder="0.00001" class="mac-input" :disabled="!canEdit" />
+            </div>
           </div>
 
           <div class="form-group">
@@ -273,14 +287,6 @@
                 <option value="no">不使用(no)</option>
                 <option value="fp16">fp16</option>
               </select>
-            </div>
-            <div class="form-group">
-              <label>
-                <span class="label-text">图片重复次数</span>
-                <span class="label-en">repeat_num</span>
-              </label>
-              <input type="number" v-model.number="config.training_config.repeat_num" min="1" placeholder="1"
-                class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
 
@@ -537,6 +543,13 @@ const saveConfig = () => {
 watch(() => config.value, () => {
   saveConfig();
 }, { deep: true, flush: 'post' });
+
+// 监听taskId变化，重新获取配置
+watch(() => props.taskId, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    fetchConfig();
+  }
+});
 
 // 组件挂载时获取配置
 onMounted(() => {

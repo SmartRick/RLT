@@ -20,22 +20,12 @@
     <div class="details-content">
       <!-- 左侧Loss曲线区域 -->
       <div class="loss-section">
-        <h4 class="section-title">
-          训练Loss曲线
-          <span v-if="firstStepLoss && lastStepLoss" class="loss-values">
-            <span class="initial-loss" title="初始Loss值">初始: {{ firstStepLoss }}</span>
-            <span class="loss-arrow">→</span>
-            <span class="current-loss" title="当前Loss值">当前: {{ lastStepLoss }}</span>
-          </span>
-        </h4>
-        <div class="chart-container" ref="chartContainer" id="training-loss-chart">
-          <div v-if="isLoadingLoss" class="loading-placeholder">加载中...</div>
-          <div v-else-if="!hasLossData" class="empty-placeholder">
-            <div class="empty-icon">📊</div>
-            <div class="empty-text">暂无训练数据</div>
-            <div class="empty-desc" v-if="isTraining">训练进行中，数据将在训练过程中更新</div>
-          </div>
-        </div>
+        <TrainingLossChart 
+          :loss-data="lossData" 
+          :is-loading="isLoadingLoss"
+          :is-training="isTraining"
+          height="100%"
+        />
       </div>
 
       <!-- 右侧模型预览和列表 -->
@@ -140,30 +130,12 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { tasksApi } from '@/api/tasks'
-import * as echarts from 'echarts/core'
-import { LineChart } from 'echarts/charts'
-import { 
-  GridComponent, 
-  TooltipComponent, 
-  TitleComponent,
-  LegendComponent
-} from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
 import { 
   ChevronLeftIcon, 
   ChevronRightIcon, 
   ArrowDownTrayIcon 
 } from '@heroicons/vue/24/outline'
-
-// 注册必要的组件
-echarts.use([
-  LineChart,
-  GridComponent,
-  TooltipComponent,
-  TitleComponent,
-  LegendComponent,
-  CanvasRenderer
-])
+import TrainingLossChart from '@/components/common/TrainingLossChart.vue'
 
 const props = defineProps({
   taskId: {
@@ -197,8 +169,6 @@ const props = defineProps({
 const emit = defineEmits(['preview-image', 'model-images-change'])
 
 // 状态变量
-const chartContainer = ref(null)
-const chart = ref(null)
 const models = ref([])
 const lossData = ref([])
 const trainingProgress = ref(null)
@@ -206,29 +176,12 @@ const isLoadingModels = ref(false)
 const isLoadingLoss = ref(false)
 const refreshTimer = ref(null)
 const selectedModel = ref(null)
-
-// 处理缩略图列表的横向滚动
-const thumbnailsContainer = ref(null)
-
-// 添加当前查看的图片索引
-const currentImageIndex = ref(0)
+const isComponentMounted = ref(false) // 添加组件挂载状态标志
+const thumbnailsContainer = ref(null) // 添加缩略图容器引用
+const currentImageIndex = ref(0) // 添加当前图片索引
 
 // 计算属性
 const hasLossData = computed(() => lossData.value && lossData.value.length > 0)
-const firstStepLoss = computed(() => {
-  if (lossData.value && lossData.value.length > 0) {
-    const firstLoss = lossData.value[0]
-    return firstLoss.value.toFixed(4)
-  }
-  return null
-})
-const lastStepLoss = computed(() => {
-  if (lossData.value && lossData.value.length > 0) {
-    const lastLoss = lossData.value[lossData.value.length - 1]
-    return lastLoss.value.toFixed(4)
-  }
-  return null
-})
 
 // 计算训练进度百分比
 const progressPercent = computed(() => {
@@ -303,7 +256,7 @@ const modelPreviewImages = computed(() => {
 
 // 修改获取训练结果方法，支持历史记录
 const fetchTrainingResults = async () => {
-  if (!props.taskId) return
+  if (!props.taskId || !isComponentMounted.value) return
   
   try {
     isLoadingModels.value = true
@@ -318,6 +271,9 @@ const fetchTrainingResults = async () => {
     } else {
       data = await tasksApi.getTrainingResults(props.taskId)
     }
+    
+    // 检查组件是否仍然挂载
+    if (!isComponentMounted.value) return
     
     if (data && data.models) {
       models.value = data.models
@@ -339,7 +295,7 @@ const fetchTrainingResults = async () => {
 
 // 修改获取训练Loss数据方法，支持历史记录
 const fetchTrainingLoss = async () => {
-  if (!props.taskId) return
+  if (!props.taskId || !isComponentMounted.value) return
   
   try {
     isLoadingLoss.value = true
@@ -355,14 +311,12 @@ const fetchTrainingLoss = async () => {
       data = await tasksApi.getTrainingLoss(props.taskId)
     }
     
+    // 检查组件是否仍然挂载
+    if (!isComponentMounted.value) return
+    
     if (data && data.series) {
       lossData.value = data.series
       trainingProgress.value = data.training_progress
-      
-      // 确保DOM已渲染后再初始化或更新图表
-      nextTick(() => {
-          updateChart()
-      })
     }
   } catch (error) {
     console.error('获取训练Loss数据失败:', error)
@@ -375,154 +329,6 @@ const fetchTrainingLoss = async () => {
 const selectModel = (model) => {
   selectedModel.value = model
   currentImageIndex.value = 0
-}
-
-// 初始化图表
-const initChart = () => {
-  try {
-    // 确保DOM元素已经存在
-    if (!chartContainer.value) {
-      console.warn('Chart container is not ready yet')
-      return false
-    }
-    
-    // 销毁可能存在的旧图表实例
-    if (chart.value) {
-      chart.value.dispose()
-    }
-    
-    // 创建新图表实例
-    chart.value = echarts.init(chartContainer.value, null, {
-      renderer: 'canvas',
-      useDirtyRect: true,
-      // 添加passive选项解决事件监听器警告
-      useCoarsePointer: true,
-      pointerOptions: { passive: true }
-    })
-    
-    // 设置图表选项
-    const option = {
-      title: {
-        text: 'Training Loss',
-        left: 'center',
-        textStyle: {
-          fontSize: 16,
-          fontWeight: 'normal'
-        }
-      },
-      tooltip: {
-        trigger: 'axis',
-        formatter: function(params) {
-          const dataPoint = params[0]
-          return `步数: ${dataPoint.value[0]}<br/>Loss: ${dataPoint.value[1].toFixed(4)}`
-        }
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true
-      },
-      xAxis: {
-        type: 'value',
-        name: '步数',
-        nameLocation: 'middle',
-        nameGap: 30
-      },
-      yAxis: {
-        type: 'value',
-        name: 'Loss',
-        nameLocation: 'middle',
-        nameGap: 40
-      },
-      series: [
-        {
-          name: 'Loss',
-          type: 'line',
-          smooth: true,
-          symbol: 'none',
-          sampling: 'average',
-          itemStyle: {
-            color: '#5470c6'
-          },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              {
-                offset: 0,
-                color: 'rgba(84, 112, 198, 0.5)'
-              },
-              {
-                offset: 1,
-                color: 'rgba(84, 112, 198, 0.1)'
-              }
-            ])
-          },
-          data: []
-        }
-      ]
-    }
-    
-    chart.value.setOption(option)
-    
-    // 添加窗口大小变化时的自适应
-    window.addEventListener('resize', handleResize, { passive: true })
-    
-    return true
-  } catch (error) {
-    console.error('初始化图表失败:', error)
-    return false
-  }
-}
-
-// 更新图表数据
-const updateChart = () => {
-  // 如果没有有效的图表容器元素，不进行任何操作
-  if (!chartContainer.value) {
-    console.warn('Chart container is not available')
-    return
-  }
-  
-  if (!chart.value) {
-    // 如果图表实例不存在，尝试初始化
-    const initialized = initChart()
-    if (!initialized) {
-      console.warn('Failed to initialize chart')
-      return
-    }
-  }
-  
-  if (!lossData.value || lossData.value.length === 0) {
-    console.warn('No loss data to update chart')
-    return
-  }
-  
-  try {
-    // 转换数据格式
-    const seriesData = lossData.value.map(item => [item.step, item.value])
-    
-    chart.value.setOption({
-      series: [
-        {
-          data: seriesData
-        }
-      ]
-    })
-  } catch (error) {
-    console.error('更新图表数据失败:', error)
-  }
-}
-
-// 窗口大小变化时调整图表大小
-const handleResize = () => {
-  if (!chart.value) {
-    return
-  }
-  
-  try {
-    chart.value.resize()
-  } catch (error) {
-    console.error('调整图表大小失败:', error)
-  }
 }
 
 // 下载模型
@@ -568,8 +374,14 @@ const startAutoRefresh = () => {
   // 只在非历史记录模式下且正在训练时启动自动刷新
   if (props.isTraining && !props.historyRecordId && props.refreshInterval > 0) {
     refreshTimer.value = setInterval(() => {
-      fetchTrainingLoss()
-      fetchTrainingResults()
+      // 确保组件仍然挂载
+      if (isComponentMounted.value) {
+        fetchTrainingLoss()
+        fetchTrainingResults()
+      } else {
+        // 如果组件已卸载，停止刷新
+        stopAutoRefresh()
+      }
     }, props.refreshInterval)
   }
 }
@@ -629,25 +441,13 @@ watch(modelPreviewImages, (images) => {
 
 // 组件挂载时
 onMounted(async () => {
+  isComponentMounted.value = true // 设置组件已挂载标志
+  
   // 先获取数据
   await Promise.all([
     fetchTrainingResults(),
     fetchTrainingLoss()
   ])
-  
-  // 确保DOM已完全渲染并且chartContainer元素存在
-  nextTick(() => {
-    // 确保DOM元素已存在
-    if (chartContainer.value) {
-      // 如果已有数据，初始化图表并绘制
-      const initialized = initChart()
-      if (initialized && lossData.value && lossData.value.length > 0) {
-        updateChart()
-      }
-    } else {
-      console.warn('Chart container not found in DOM')
-    }
-  })
   
   // 如果是训练中状态，启动自动刷新
   if (props.isTraining) {
@@ -655,31 +455,23 @@ onMounted(async () => {
   }
   
   // 添加滚轮事件监听，确保DOM元素存在
-  if (thumbnailsContainer.value) {
+  if (thumbnailsContainer.value && document.body.contains(thumbnailsContainer.value)) {
     thumbnailsContainer.value.addEventListener('wheel', handleThumbnailsScroll, { passive: false })
   }
 })
 
 // 组件卸载时
 onUnmounted(() => {
+  isComponentMounted.value = false // 设置组件已卸载标志
   stopAutoRefresh()
-  
-  // 移除窗口大小变化监听
-  window.removeEventListener('resize', handleResize)
-  
-  // 销毁图表实例
-  if (chart.value) {
-    try {
-      chart.value.dispose()
-    } catch (error) {
-      console.error('销毁图表实例失败:', error)
-    }
-    chart.value = null
-  }
   
   // 移除滚轮事件监听
   if (thumbnailsContainer.value) {
-    thumbnailsContainer.value.removeEventListener('wheel', handleThumbnailsScroll)
+    try {
+      thumbnailsContainer.value.removeEventListener('wheel', handleThumbnailsScroll)
+    } catch (error) {
+      console.error('移除滚轮事件监听失败:', error)
+    }
   }
 })
 </script>
@@ -768,14 +560,6 @@ onUnmounted(() => {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
-}
-
-.chart-container {
-  flex: 1;
-  position: relative;
-  min-height: 0; 
-  background-color: var(--background-secondary);
-  border-radius: 8px;
 }
 
 /* 右侧模型区域 */
@@ -959,30 +743,6 @@ onUnmounted(() => {
   margin: 0 0 16px 0;
 }
 
-.section-title .loss-values {
-  font-size: 14px;
-  font-weight: normal;
-  color: var(--text-secondary);
-  margin-left: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-title .initial-loss {
-  color: #e67e22;
-}
-
-.section-title .loss-arrow {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.section-title .current-loss {
-  color: #2ecc71;
-  font-weight: 500;
-}
-
 .no-preview-large {
   display: flex;
   flex-direction: column;
@@ -1043,10 +803,6 @@ onUnmounted(() => {
   .loss-section,
   .models-section {
     width: 100%;
-  }
-  
-  .chart-container {
-    min-height: 300px;
   }
 }
 
@@ -1123,10 +879,5 @@ onUnmounted(() => {
   -webkit-box-orient: vertical;
   max-height: 2.8em; /* 两行的高度 */
   white-space: normal;
-}
-
-.download-icon {
-  width: 16px;
-  height: 16px;
 }
 </style> 

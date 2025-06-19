@@ -40,4 +40,5 @@ pnpm-debug.log*
 
 # Build
 /dist/
-build/ 
+build/
+data/

@@ -389,11 +389,11 @@ export default {
 }
 
 .modal-header {
-  padding-bottom: var(--spacing-2);
   border-bottom: 1px solid var(--border-color-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 10px;
 }
 
 /* 标签页模式的头部样式 */

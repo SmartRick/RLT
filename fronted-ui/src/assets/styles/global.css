@@ -105,8 +105,8 @@ body {
 }
 
 .mac-btn.primary:hover {
-  background: color-mix(in srgb, var(--primary-color) 90%, black);
-  border-color: color-mix(in srgb, var(--primary-color) 90%, black);
+  background: #0969DA;
+  border-color: #0969DA;
 }
 
 /* 输入框样式 */

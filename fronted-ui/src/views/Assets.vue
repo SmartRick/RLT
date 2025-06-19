@@ -31,6 +31,13 @@
               <option value="ai">AI引擎</option>
             </select>
           </div>
+          <div class="filter-item">
+            <select v-model="enabledFilter" class="mac-filter-select">
+              <option value="">启用状态</option>
+              <option value="enabled">已启用</option>
+              <option value="disabled">已禁用</option>
+            </select>
+          </div>
         </div>
       </div>
       
@@ -47,12 +54,11 @@
         v-for="asset in paginatedAssets" 
            :key="asset.id" 
         :asset="asset"
-        :is-selected="selectedAsset?.id === asset.id"
-        @select="selectAsset"
         @edit="showEditModal"
         @delete="confirmDelete"
         @verify="verifyCapabilities"
         @open-terminal="openTerminal"
+        @toggle="toggleAssetEnabled"
       />
     </div>
 
@@ -125,6 +131,7 @@ const assets = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
 const capabilityFilter = ref('')
+const enabledFilter = ref('')
 const currentPage = ref(1)
 const pageSize = ref(12)
 const selectedAsset = ref(null)
@@ -164,6 +171,19 @@ const filteredAssets = computed(() => {
       }
       if (capabilityFilter.value === 'ai') {
         return asset.ai_engine?.enabled
+      }
+      return true
+    })
+  }
+  
+  // 启用状态过滤
+  if (enabledFilter.value) {
+    result = result.filter(asset => {
+      if (enabledFilter.value === 'enabled') {
+        return asset.enabled !== false
+      }
+      if (enabledFilter.value === 'disabled') {
+        return asset.enabled === false
       }
       return true
     })
@@ -223,28 +243,22 @@ const fetchAssets = async () => {
     assets.value = data.map(asset => ({
       ...asset,
       isVerifying: false, // 添加验证状态标记
-      status: asset.status || 'PENDING' // 确保有默认状态
+      status: asset.status || 'PENDING', // 确保有默认状态
+      enabled: asset.enabled !== false // 确保有默认启用状态
     }))
     
-    // 对资产进行SSH连接验证
-    const sshVerifyPromises = assets.value
-      .filter(asset => asset.name !== "本地系统") // 排除本地系统资产
+    // 对资产进行状态验证
+    const verifyPromises = assets.value
+      .filter(asset => asset.name !== "本地系统" && asset.enabled !== false) // 排除本地系统资产和已禁用资产
       .map(asset => {
         // 标记为正在验证中
         asset.status = 'PENDING';
-        return verifySshConnection(asset)
-      })
-    
-    // 对已启用能力的资产进行自动验证
-    const verifyPromises = assets.value
-      .filter(asset => asset.lora_training?.enabled || asset.ai_engine?.enabled)
-      .map(asset => {
         asset.autoVerifying = true // 标记为自动验证
         return verifyCapabilities(asset)
       })
     
     // 并行执行所有验证
-    await Promise.all([...sshVerifyPromises, ...verifyPromises])
+    await Promise.all(verifyPromises)
     
   } catch (error) {
     console.error('获取资产列表失败:', error)
@@ -252,20 +266,50 @@ const fetchAssets = async () => {
   }
 }
 
-// 验证SSH连接
-const verifySshConnection = async (asset) => {
-  if (!asset || asset.name === "本地系统") return // 跳过本地系统资产
+// 验证资产能力
+const verifyCapabilities = async (asset) => {
+  if (asset.isVerifying) return // 如果正在验证中，直接返回
   
   try {
-    console.log("verifySshConnection",asset)
-    // 调用API验证SSH连接
-    await assetApi.verifySshConnection(asset)
-    // 更新资产状态为已连接
-    asset.status = 'CONNECTED'
+    asset.isVerifying = true
+    const results = await assetApi.verifyCapabilities(asset.id)
+    
+    // 更新SSH连接状态
+    if (results.ssh_connection) {
+      asset.status = 'CONNECTED'
+    } else {
+      asset.status = 'CONNECTION_ERROR'
+    }
+    
+    // 更新资产的验证状态
+    if (asset.lora_training?.enabled) {
+      asset.lora_training.verified = results.lora_training
+    }
+    if (asset.ai_engine?.enabled) {
+      asset.ai_engine.verified = results.ai_engine
+    }
+    
+    // 只在手动验证时显示提示
+    if (!asset.autoVerifying) {
+      if (results.ssh_connection) {
+        message.success('SSH连接和能力验证完成')
+      } else {
+        message.warning('SSH连接失败，请检查连接配置')
+      }
+    }
   } catch (error) {
-    console.error('SSH连接验证失败:', error)
-    // 更新资产状态为连接错误
+    // 更新状态为连接错误
     asset.status = 'CONNECTION_ERROR'
+    
+    // 只在手动验证时显示错误提示
+    if (!asset.autoVerifying) {
+      message.error(error.message || '验证失败')
+    } else {
+      console.error('自动验证失败:', error)
+    }
+  } finally {
+    asset.isVerifying = false
+    delete asset.autoVerifying
   }
 }
 
@@ -282,54 +326,12 @@ const confirmDelete = async (asset) => {
   }
 }
 
-// 验证资产能力
-const verifyCapabilities = async (asset) => {
-  if (asset.isVerifying) return // 如果正在验证中，直接返回
-  
-  try {
-    asset.isVerifying = true
-    const results = await assetApi.verifyCapabilities(asset.id)
-    
-    // 更新资产的验证状态
-    if (asset.lora_training?.enabled) {
-      asset.lora_training.verified = results.lora_training
-    }
-    if (asset.ai_engine?.enabled) {
-      asset.ai_engine.verified = results.ai_engine
-    }
-    
-    // 只在手动验证时显示提示
-    if (!asset.autoVerifying) {
-      if (results.lora_training || results.ai_engine) {
-        message.success('能力验证完成')
-      } else {
-        message.warning('能力验证未通过，请检查服务配置')
-      }
-    }
-  } catch (error) {
-    // 只在手动验证时显示错误提示
-    if (!asset.autoVerifying) {
-      message.error(error.message || '验证失败')
-    } else {
-      console.error('自动验证失败:', error)
-    }
-  } finally {
-    asset.isVerifying = false
-    delete asset.autoVerifying
-  }
-}
-
 // 显示编辑模态框
 const showEditModal = (asset) => {
   isEditing.value = true
   // 将资产数据赋值给assetForm以传递给表单组件
   assetForm.value = asset
   showAssetModal.value = true
-}
-
-// 选择资产
-const selectAsset = (asset) => {
-  selectedAsset.value = asset
 }
 
 // 显示新建资产弹窗
@@ -349,6 +351,24 @@ const openTerminal = (asset) => {
 const handleFormSuccess = async (result) => {
   console.log("handleFormSuccess",result)
   await fetchAssets()
+}
+
+// 切换资产启用状态
+const toggleAssetEnabled = async (asset) => {
+  try {
+    const newEnabledState = !asset.enabled
+    const result = await assetApi.toggleAssetStatus(asset.id, newEnabledState)
+    
+    // 更新本地资产状态
+    const index = assets.value.findIndex(a => a.id === asset.id)
+    if (index !== -1) {
+      assets.value[index].enabled = newEnabledState
+    }
+    
+    message.success(`资产已${newEnabledState ? '启用' : '禁用'}`)
+  } catch (error) {
+    message.error(error.message || `${asset.enabled ? '禁用' : '启用'}资产失败`)
+  }
 }
 
 // 在组件挂载时获取资产列表

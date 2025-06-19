@@ -20,6 +20,18 @@
             <span class="error-message" v-if="formErrors.name">{{ formErrors.name }}</span>
           </div>
           
+          <!-- 添加资产启用状态开关 -->
+          <div class="form-item">
+            <div class="config-switch-container">
+              <label>启用资产</label>
+              <switch-button v-model="assetForm.enabled" />
+            </div>
+            <div v-if="!assetForm.enabled" class="disabled-note">
+              <InformationCircleIcon class="info-icon" />
+              <span>禁用后，该资产将不会被用于训练或标记任务</span>
+            </div>
+          </div>
+          
           <!-- 非本地资源才显示基本信息字段 -->
           <template v-if="!isLocalResource">
             <div class="form-row">
@@ -322,8 +334,8 @@ const assetForm = ref({
   ssh_key_path: '',
   lora_training: {
     enabled: false,
-    port: null,
-    params: JSON.stringify({}, null, 2),
+    port: 28000,
+    params: {},
     headers: {
       "Authorization": "",
       "Content-Type": "application/json"
@@ -333,7 +345,7 @@ const assetForm = ref({
   },
   ai_engine: {
     enabled: false,
-    port: null,
+    port: 8188,
     headers: {
       "Authorization": "",
       "Content-Type": "application/json"
@@ -345,7 +357,8 @@ const assetForm = ref({
     verified: false
   },
   ssh_auth_type: 'KEY',
-  ssh_password: ''
+  ssh_password: '',
+  enabled: true
 })
 
 // 表单错误信息
@@ -441,8 +454,8 @@ const resetForm = () => {
     ssh_key_path: '',
     lora_training: {
       enabled: false,
-      port: null,
-      params: JSON.stringify({}, null, 2),
+      port: 28000,
+      params: {},
       headers: {
         "Authorization": "",
         "Content-Type": "application/json"
@@ -452,7 +465,7 @@ const resetForm = () => {
     },
     ai_engine: {
       enabled: false,
-      port: null,
+      port: 8188,
       headers: {
         "Authorization": "",
         "Content-Type": "application/json"
@@ -462,7 +475,8 @@ const resetForm = () => {
       retry_interval: 5,
       use_global_config: true,
       verified: false
-    }
+    },
+    enabled: true
   }
   formErrors.value = {}
 }
@@ -480,16 +494,10 @@ watch(() => props.asset, (newValue) => {
     
     // 处理lora_training的参数
     if (assetData.lora_training) {
-      // 处理params参数
+      // 将params对象的值赋给trainingParams
       if (assetData.lora_training.params) {
-        let params = assetData.lora_training.params
-        if (typeof params === 'string') {
-          try {
-            params = JSON.parse(params)
-          } catch (e) {
-            params = {}
-          }
-        }
+        // 确保params是对象类型
+        const params = assetData.lora_training.params;
         
         // 将params对象的值赋给trainingParams
         Object.keys(params).forEach(key => {
@@ -536,8 +544,8 @@ watch(trainingParams, (newParams) => {
     }
   })
   
-  // 更新params字段
-  assetForm.value.lora_training.params = JSON.stringify(filteredParams, null, 2)
+  // 直接更新params对象
+  assetForm.value.lora_training.params = filteredParams
 }, { deep: true })
 
 // 表单验证规则
@@ -774,113 +782,58 @@ const verifySshConnection = async () => {
 
 // 表单提交
 const handleSubmit = async () => {
-  if (!validateForm()) {
-    return
-  }
-
+  if (!validateForm()) return
+  
   try {
     isSubmitting.value = true
     
-    // 处理表单数据
-    const formData = {
-      ...assetForm.value,
-      // 对本地资源特殊处理
-      ...(isLocalResource.value ? {
-        // 本地资源固定这些字段
-        ip: '127.0.0.1',
-        ssh_port: 22,
-        ssh_username: 'local',
-        ssh_auth_type: 'KEY',
-        ssh_key_path: '',
-        ssh_password: ''
-      } : {
-        // 根据认证类型处理认证信息
-        ssh_password: assetForm.value.ssh_auth_type === 'PASSWORD' ? assetForm.value.ssh_password : undefined,
-        ssh_key_path: assetForm.value.ssh_auth_type === 'KEY' ? assetForm.value.ssh_key_path : undefined,
-      }),
-      
-      // 处理 Lora 训练能力配置
-      lora_training: assetForm.value.lora_training.enabled 
-        ? {
-            ...assetForm.value.lora_training,
-            // 处理JSON格式的字段
-            params: typeof assetForm.value.lora_training.params === 'string' 
-              ? JSON.parse(assetForm.value.lora_training.params) 
-              : assetForm.value.lora_training.params,
-            // 确保headers是对象格式
-            headers: typeof assetForm.value.lora_training.headers === 'string'
-              ? JSON.parse(assetForm.value.lora_training.headers)
-              : assetForm.value.lora_training.headers,
-            // 如果使用全局配置，只保留几个基本字段
-            ...(assetForm.value.lora_training.use_global_config ? {
-              use_global_config: true,
-              enabled: true,
-              verified: assetForm.value.lora_training.verified || false
-            } : {})
-          }
-        : { 
-            enabled: false, 
-            port: null, 
-            params: {}, 
-            headers: { "Authorization": "", "Content-Type": "application/json" },
-            use_global_config: true,
-            verified: false
-          },
-      
-      // 处理 AI 引擎能力配置
-      ai_engine: assetForm.value.ai_engine.enabled
-        ? {
-            ...assetForm.value.ai_engine,
-            // 确保headers是对象格式
-            headers: typeof assetForm.value.ai_engine.headers === 'string'
-              ? JSON.parse(assetForm.value.ai_engine.headers)
-              : assetForm.value.ai_engine.headers,
-            // 如果使用全局配置，只保留几个基本字段
-            ...(assetForm.value.ai_engine.use_global_config ? {
-              use_global_config: true,
-              enabled: true,
-              verified: assetForm.value.ai_engine.verified || false
-            } : {})
-          }
-        : { 
-            enabled: false, 
-            port: null, 
-            headers: { "Authorization": "", "Content-Type": "application/json" },
-            timeout: 300,
-            max_retries: 3,
-            retry_interval: 5,
-            use_global_config: true,
-            verified: false
-          }
+    // 构建提交的数据对象
+    const submitData = {
+      name: assetForm.value.name,
+      enabled: assetForm.value.enabled,
+      lora_training: {
+        enabled: assetForm.value.lora_training.enabled,
+        use_global_config: assetForm.value.lora_training.use_global_config,
+        port: parseInt(assetForm.value.lora_training.port),
+        headers: assetForm.value.lora_training.headers,
+        params: assetForm.value.lora_training.params
+      },
+      ai_engine: {
+        enabled: assetForm.value.ai_engine.enabled,
+        use_global_config: assetForm.value.ai_engine.use_global_config,
+        port: parseInt(assetForm.value.ai_engine.port),
+        headers: assetForm.value.ai_engine.headers,
+        params: assetForm.value.ai_engine.params
+      }
     }
-
+    
+    // 非本地资源添加SSH连接信息
+    if (!isLocalResource.value) {
+      submitData.ip = assetForm.value.ip
+      submitData.ssh_port = parseInt(assetForm.value.ssh_port)
+      submitData.ssh_username = assetForm.value.ssh_username
+      submitData.ssh_auth_type = assetForm.value.ssh_auth_type
+      
+      if (assetForm.value.ssh_auth_type === 'KEY') {
+        submitData.ssh_key_path = assetForm.value.ssh_key_path
+      } else {
+        submitData.ssh_password = assetForm.value.ssh_password
+      }
+    }
+    
     let result
     if (props.isEditing) {
-      result = await assetApi.updateAsset(formData.id, formData)
+      result = await assetApi.updateAsset(props.asset.id, submitData)
       message.success('资产更新成功')
     } else {
-      result = await assetApi.createAsset(formData)
+      result = await assetApi.createAsset(submitData)
       message.success('资产创建成功')
     }
     
-    close()
     emit('submit-success', result)
+    emit('update:modelValue', false)
   } catch (error) {
-    // 处理验证错误
-    if (error.response?.data?.detail) {
-      const errors = error.response.data.detail
-      errors.forEach(err => {
-        const field = err.loc[err.loc.length - 1]
-        const capability = err.loc[err.loc.length - 2]
-        if (capability === 'lora_training' || capability === 'ai_engine') {
-          formErrors.value[`${capability.split('_')[0]}_${field}`] = err.msg
-        } else {
-          formErrors.value[field] = err.msg
-        }
-      })
-    } else {
-      message.error(error.message || '操作失败')
-    }
+    message.error(error.message || '提交失败')
   } finally {
     isSubmitting.value = false
   }
@@ -1398,5 +1351,23 @@ select.mac-input:focus {
   opacity: 0.8;
   font-weight: normal;
   margin-left: 4px;
+}
+
+.disabled-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #FEF3C7;
+  color: #92400E;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.disabled-note .info-icon {
+  width: 16px;
+  height: 16px;
+  color: #92400E;
 }
 </style> 

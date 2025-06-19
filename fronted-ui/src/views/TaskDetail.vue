@@ -1100,6 +1100,11 @@ onUnmounted(() => {
   color: #ffffff;
 }
 
+.mac-btn.error:hover {
+  background-color: #c82020;
+  color: #ffffff;
+}
+
 .mac-btn.warning {
   background-color: #FEF3C7;
   color: #92400E;
@@ -1107,6 +1112,7 @@ onUnmounted(() => {
 
 .mac-btn.warning:hover {
   background-color: #FDE68A;
+  color: #78350F;
 }
 
 .mac-btn.warning:disabled {
@@ -1126,7 +1132,8 @@ onUnmounted(() => {
 }
 
 .mac-btn.secondary:hover {
-  background-color: #E5E7EB;
+  background-color: #D1D5DB;
+  color: #1F2937;
 }
 
 .mac-btn.secondary:disabled {
@@ -1136,7 +1143,8 @@ onUnmounted(() => {
 }
 
 .mac-btn:not(:disabled):hover {
-  background: var(--background-tertiary);
+  background: #E5E7EB;
+  color: #111827;
 }
 
 .header-actions {
@@ -1165,7 +1173,8 @@ onUnmounted(() => {
 }
 
 .mac-btn.danger:hover {
-  background-color: #fecaca;
+  background-color: #fca5a5;
+  color: #b91c1c;
 }
 
 /* 删除批量编辑模态框样式 */
@@ -1181,7 +1190,18 @@ onUnmounted(() => {
 }
 
 .mac-btn.info:hover {
-  background-color: #DBEAFE;
+  background-color: #BFDBFE;
+  color: #1D4ED8;
+}
+
+.mac-btn.primary {
+  background-color: #0A84FF;
+  color: #ffffff;
+}
+
+.mac-btn.primary:hover {
+  background-color: #0969DA;
+  color: #ffffff;
 }
 
 .auto-training-info {

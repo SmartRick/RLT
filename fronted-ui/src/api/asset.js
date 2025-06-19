@@ -55,5 +55,19 @@ export const assetApi = {
    */
   async verifySshConnection(data) {
     return request.post(`${BASE_URL}/verify-ssh`, data)
+  },
+
+  /**
+   * 切换资产启用状态
+   * @param {number} assetId 资产ID
+   * @param {boolean} enabled 是否启用
+   * @returns {Promise}
+   */
+  async toggleAssetStatus(assetId, enabled) {
+    return request({
+      url: `${BASE_URL}/${assetId}/toggle`,
+      method: 'post',
+      data: { enabled }
+    })
   }
 } 
