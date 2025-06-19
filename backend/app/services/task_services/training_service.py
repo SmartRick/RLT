@@ -213,23 +213,18 @@ class TrainingService:
             # 设置远程路径
             remote_path = task.mark_config['remote_output_dir'].replace('\\', '/')
             remote_train_data_dir = os.path.join(remote_path, f"{repeat_num}_rick").replace('\\', '/')
-            
-            # 设置远程输出路径
-            output_suffix = training_output_path.replace(Config.OUTPUT_DIR, '').replace('\\', '/')
-            remote_output_dir = f"{Config.REMOTE_OUTPUT_DIR}{output_suffix}"
-            
             task.add_log(f'远程训练数据目录: {remote_train_data_dir}', db=db)
             
-            # 保存远程输出路径到任务配置
-            if not task.training_config:
-                task.training_config = {}
-            task.training_config['remote_output_dir'] = remote_output_dir
+        # 设置远程输出路径
+        output_suffix = training_output_path.replace(Config.OUTPUT_DIR, '').replace('\\', '/')
+        remote_output_dir = f"{Config.REMOTE_OUTPUT_DIR}{output_suffix}"
+        training_config['remote_output_dir'] = remote_output_dir
         
         # 5. 对于远程资产，同步文件
         if asset and not asset.is_local and remote_path:
             TrainingService._sync_files_to_remote(task, asset, input_dir, remote_path, remote_train_data_dir, db)
             # 更新输入目录为远程目录
-            input_dir = remote_train_data_dir
+            input_dir = remote_path
         
         # 6. 更新训练配置
         training_config['train_data_dir'] = input_dir
@@ -275,6 +270,8 @@ class TrainingService:
             marking_asset_id=task.marking_asset_id,
             description=f"训练开始于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
+        # 设置任务的training_config属性，避免检测不到更新
+        setattr(task, 'training_config', training_config)
         db.add(execution_history)
         db.commit()
         db.refresh(execution_history)
@@ -313,6 +310,16 @@ class TrainingService:
         # 创建SSH客户端工具
         ssh_client = create_ssh_client_from_asset(asset)
         
+        # 在远程服务器上创建训练数据目录
+        success, message = ssh_client.mkdir(remote_train_data_dir)
+        if not success:
+            raise ValueError(f"创建远程训练数据目录失败: {message}")
+        
+        # 清空远程训练数据目录
+        result = ssh_client.execute_command(f"rm -rf {remote_train_data_dir}/*")
+        if result.returncode != 0:
+            task.add_log(f'清空目录警告: {result.stderr}', db=db)
+
         # 检查是否需要同步标记结果（如果训练和打标资产不同）
         if not task.marking_asset or task.marking_asset_id != asset.id:
             task.add_log('训练和打标资产不同，需要同步打标结果到训练资产...', db=db)
@@ -320,7 +327,8 @@ class TrainingService:
             # 上传打标结果
             success, message, stats = ssh_client.upload_directory(
                 local_path=input_dir,
-                remote_path=remote_path
+                remote_path=remote_train_data_dir,
+                recursive = False
             )
             
             if not success:
@@ -329,26 +337,6 @@ class TrainingService:
             task.add_log(f'打标结果同步成功: {message}', db=db)
         else:
             task.add_log('训练和打标使用相同资产，无需同步打标结果', db=db)
-        
-        # 在远程服务器上创建训练数据目录
-        task.add_log(f'在远程服务器上创建训练数据目录: {remote_train_data_dir}', db=db)
-        success, message = ssh_client.mkdir(remote_train_data_dir)
-        if not success:
-            raise ValueError(f"创建远程训练数据目录失败: {message}")
-        
-        # 清空远程训练数据目录
-        task.add_log(f'清空远程训练数据目录: {remote_train_data_dir}', db=db)
-        success, message = ssh_client.execute_command(f"rm -rf {remote_train_data_dir}/*")
-        if success.returncode != 0:
-            task.add_log(f'清空目录警告: {success.stderr}', db=db)
-        
-        # 复制文件到远程训练数据目录
-        task.add_log(f'复制文件到远程训练数据目录', db=db)
-        success, message = ssh_client.copy_remote_file(f"{remote_path}/*", remote_train_data_dir)
-        if not success:
-            raise ValueError(f"复制文件到远程训练数据目录失败: {message}")
-        
-        task.add_log(f'远程文件复制成功: {message}', db=db)
     
     @staticmethod
     def _upload_prompts_file(task, asset, local_file, remote_file, db):
@@ -364,7 +352,7 @@ class TrainingService:
         # 上传提示词文件
         success, message = ssh_client.upload_file(
             local_path=local_file,
-            remote_path=remote_file
+            remote_path=remote_file,
         )
         
         if success:
@@ -469,7 +457,6 @@ class TrainingService:
                 
                 # 记录开始监控
                 task.add_log(f'开始监控训练任务状态, training_task_id={training_task_id}', db=db)
-                
                 poll_interval = ConfigService.get_value('train_poll_interval', 30)
                 error_count = 0
                 max_error_retries = 10
@@ -538,7 +525,7 @@ class TrainingService:
                                     current_asset = complete_db.query(Asset).filter(Asset.id == asset_id).first()
                                     
                                     # 如果是非本地资产，需要下载训练结果
-                                    if current_asset and not current_asset.is_local and task.training_config and task.training_config.get('remote_output_dir'):
+                                    if current_asset and not current_asset.is_local and execution_history.training_config and execution_history.training_config.get('output_dir'):
                                         task.add_log('训练完成，开始从远程服务器同步结果...', db=complete_db)
                                         
                                         # 创建SSH客户端工具
@@ -546,8 +533,8 @@ class TrainingService:
                                         
                                         # 使用SSH客户端下载远程输出目录到本地
                                         success, message, stats = ssh_client.download_directory(
-                                            remote_path=task.training_config['remote_output_dir'],
-                                            local_path=task.training_output_path
+                                            remote_path=execution_history.training_config['output_dir'],
+                                            local_path=execution_history.training_output_path
                                         )
                                         
                                         if not success:
@@ -563,7 +550,7 @@ class TrainingService:
                                     task.add_log('训练任务成功完成', db=complete_db)
                                     
                                     # 记录输出文件路径
-                                    output_dir = task.training_output_path
+                                    output_dir = execution_history.training_output_path
                                     task.add_log(f'训练输出目录: {output_dir}', db=complete_db)
                                     
                                     # 获取训练结果

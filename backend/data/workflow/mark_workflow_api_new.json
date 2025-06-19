@@ -1,7 +1,7 @@
 {
     "35": {
         "inputs": {
-            "aspect_ratio": "2:3",
+            "aspect_ratio": "1:1",
             "proportional_width": 512,
             "proportional_height": 512,
             "method": "lanczos",
@@ -70,7 +70,7 @@
     },
     "155": {
         "inputs": {
-            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1_6_mark"
+            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1_3_mark"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -194,7 +194,7 @@
     },
     "210": {
         "inputs": {
-            "string": "Ink Peony"
+            "string": "Pink Dragon Baby"
         },
         "class_type": "Simple String",
         "_meta": {

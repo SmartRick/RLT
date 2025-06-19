@@ -131,4 +131,20 @@ def get_asset_ai_engine_headers(asset_id):
     headers = ConfigService.get_asset_ai_engine_headers(asset_id)
     if headers is None:
         return response_template("not_found", code=1004, msg="资产不存在")
-    return success_json(headers) 
+    return success_json(headers)
+
+@assets_bp.route('/<int:asset_id>/toggle', methods=['POST'])
+@exception_handler
+def toggle_asset(asset_id):
+    """开启或关闭资产"""
+    data = request.json
+    if 'enabled' not in data:
+        return error_json(2004, "请提供enabled参数")
+    
+    enabled = bool(data['enabled'])
+    asset = AssetService.toggle_asset_status(asset_id, enabled)
+    
+    if not asset:
+        return response_template("not_found", code=2002, msg="资产不存在")
+    
+    return success_json(asset.dict(), f"资产已{'启用' if enabled else '禁用'}") 

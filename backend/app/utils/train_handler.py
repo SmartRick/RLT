@@ -91,44 +91,24 @@ class TrainConfig:
     extra_params: Dict[str, Any] = field(default_factory=dict)
 
 class TrainRequestHandler:
-    def __init__(self, asset=None, asset_ip=None, training_port=None):
+    def __init__(self, asset=None):
         """
         初始化训练处理器
         :param asset: 资产对象，如果提供则从资产获取连接信息
         :param asset_ip: 资产IP地址，如果同时提供asset和asset_ip，优先使用asset_ip
         :param training_port: 训练端口，如果同时提供asset和training_port，优先使用training_port
         """
-        self.training_port = training_port or 28000  # 默认端口
-        self.asset_ip = asset_ip or '127.0.0.1'  # 默认IP
+        self.asset_ip = f'http://{asset.ip}'
+        self.training_port = asset.lora_training.get('port')
+        if asset.port_access_mode == 'DOMAIN':
+            # 域名访问模式
+            from ..utils.common import generate_domain_url
+            domain_url,port = generate_domain_url(asset.ip, self.training_port)
+            # 使用域名格式访问，端口设置为80
+            self.asset_ip = domain_url
+            self.training_port = port
         
-        if asset and not asset_ip:
-            # 根据资产的访问模式选择连接方式
-            self.training_port = asset.lora_training.get('port', 28000)
-            
-            if asset.is_local:
-                # 本地资产使用127.0.0.1
-                self.asset_ip = '127.0.0.1'
-            elif asset.port_access_mode == 'DOMAIN':
-                # 域名访问模式
-                from ..utils.common import generate_domain_url
-                domain_url = generate_domain_url(asset.ip, self.training_port)
-                if domain_url:
-                    # 使用域名格式访问，端口设置为80
-                    self.asset_ip = domain_url.replace('https://', '').replace('http://', '')
-                    self.training_port = 80
-                else:
-                    # 如果无法生成域名URL，使用IP
-                    self.asset_ip = asset.ip
-            else:
-                # 直连模式
-                self.asset_ip = asset.ip
-        
-        # 构建API基础URL
-        if self.training_port == 80:
-            # HTTP标准端口无需在URL中指定
-            self.api_base_url = f"http://{self.asset_ip}/api"
-        else:
-            self.api_base_url = f"http://{self.asset_ip}:{self.training_port}/api"
+        self.api_base_url = f"{self.asset_ip}:{self.training_port}/api"
 
     def train_request(self, train_config: TrainConfig) -> str:
         """
@@ -188,44 +168,37 @@ class TrainRequestHandler:
         logger.info(f"训练请求发送成功，task_id: {task_id}")
         return task_id
 
-    def check_status(self, task_id: str, train_config: Optional[TrainConfig] = None) -> str:
+    def check_status(self, task_id: str, train_config: Optional[TrainConfig] = None) -> Tuple[bool, bool, Dict[str, Any]]:
         """
         检查训练任务状态
         :param task_id: 任务ID
         :param train_config: 可选的训练配置参数
         :return: (is_completed, is_success, status_message)
         """
-        url = f"{self.api_base_url}/tasks"
-        logger.debug(f"检查训练任务状态: {url}")
-        
-        headers = {}
-        # 如果有自定义请求头，添加到headers
-        if train_config and hasattr(train_config, 'headers') and isinstance(train_config.headers, dict):
-            headers.update(train_config.headers)
-        
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # 检查响应是否有效
-        if data.get('status') != 'success' or 'data' not in data or 'tasks' not in data['data']:
-            logger.warning(f"任务状态响应格式无效: {data}")
-            raise ValueError("任务状态响应格式无效")
-        
-        # 查找指定ID的任务
-        task_info = None
-        for task in data['data']['tasks']:
-            if task.get('id') == task_id:
-                task_info = task
-                break
-        
-        # 如果没有找到任务
-        if not task_info:
-            logger.warning(f"未找到任务 {task_id} 的状态信息")
-            return "NOT_FOUND"
-
-        return task_info.get("status", "RUNNING")
+        try:
+            # 获取所有任务列表
+            tasks_data = self.get_tasks(train_config)
+            
+            # 从任务列表中查找指定任务
+            task_info = None
+            for task in tasks_data:
+                if task.get('id') == task_id:
+                    task_info = task
+                    break
+                    
+            # 如果没有找到任务，返回处理中状态
+            if not task_info:
+                return "NOT_FOUND"
+                
+            # 提取任务状态信息
+            task_status = task_info.get('status', '')
+            # 根据状态判断任务是否完成
+            return task_status
+                
+        except Exception as e:
+            logger.error(f"检查任务状态出错: {str(e)}", exc_info=True)
+            # 返回处理中状态，允许后续重试
+            raise e
         
     def cancel_training(self, task_id: str, train_config: Optional[TrainConfig] = None) -> bool:
         """
@@ -259,7 +232,7 @@ class TrainRequestHandler:
         获取所有训练日志key
         :return: 所有训练日志key的列表
         """
-        url = f"http://{self.asset_ip}:{self.training_port}/proxy/tensorboard/data/runs"
+        url = f"{self.asset_ip}:{self.training_port}/proxy/tensorboard/data/runs"
         logger.debug(f"获取所有训练日志key: {url}")
         
         headers = {
@@ -299,7 +272,7 @@ class TrainRequestHandler:
             raise ValueError(f"未找到与任务ID {task_id} 匹配的训练日志key")
             
         # 使用匹配到的key获取loss数据
-        url = f"http://{self.asset_ip}:{self.training_port}/proxy/tensorboard/experiment/defaultExperimentId/data/plugin/timeseries/timeSeries"
+        url = f"{self.asset_ip}:{self.training_port}/proxy/tensorboard/experiment/defaultExperimentId/data/plugin/timeseries/timeSeries"
         logger.debug(f"获取训练loss曲线数据: {url}")
         
         # 构建正确的multipart/form-data请求
@@ -319,4 +292,34 @@ class TrainRequestHandler:
         data = response.json()
         logger.debug(f"获取到训练loss曲线数据: {data}")
         
-        return data 
+        return data
+
+    def get_tasks(self, train_config: Optional[TrainConfig] = None) -> Dict:
+        """
+        获取所有训练任务列表
+        :param train_config: 可选的训练配置参数
+        :return: 任务列表数据
+        """
+        url = f"{self.api_base_url}/tasks"
+        logger.debug(f"获取训练任务列表: {url}")
+        
+        headers = {}
+        # 如果有自定义请求头，添加到headers
+        if train_config and hasattr(train_config, 'headers') and isinstance(train_config.headers, dict):
+            headers.update(train_config.headers)
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # 检查响应是否有效
+            if data.get('status') != 'success' or 'data' not in data:
+                logger.warning(f"训练任务列表响应格式无效: {data}")
+                raise ValueError("训练任务列表响应格式无效")
+            
+            # 标准化返回格式
+            return data.get('data', {}).get('tasks', [])
+        except Exception as e:
+            raise ValueError(f"获取训练任务列表失败: {str(e)}") 

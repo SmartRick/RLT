@@ -9,7 +9,9 @@ from ..utils.logger import setup_logger
 from ..utils.common import copy_attributes, generate_domain_url
 from ..services.terminal_service import TerminalService
 from ..models.constants import DOMAIN_ACCESS_CONFIG
-import socket
+from ..utils.train_handler import TrainRequestHandler
+from task_scheduler.comfyui_api import ComfyUIAPI,ComfyUIConfig
+from urllib.parse import urlparse
 
 logger = setup_logger('asset_service')
 
@@ -170,141 +172,75 @@ class AssetService:
                         logger.debug(f"资产 {asset_id} SSH连接验证失败: {ssh_message}")
                         # SSH连接失败，无需继续验证其他能力
                         return results
+
+                # 准备基本连接信息
+                # 对于本地资产，始终使用127.0.0.1
+                base_ip = '127.0.0.1' if asset.is_local else asset.ip
                     
                 # 验证Lora训练能力
                 if (capability_type is None or capability_type == 'lora_training') and asset.lora_training.get('enabled'):
                     try:
-                        # 准备连接参数
-                        port = asset.lora_training.get('port')
-                        
-                        # 如果是域名访问模式，尝试使用特殊域名格式
-                        domain_url = None
-                        if asset.port_access_mode == 'DOMAIN' and port:
-                            domain_url = generate_domain_url(asset.ip, port)
-                        
-                        # 对于本地资产，始终使用127.0.0.1
-                        url = '127.0.0.1' if asset.is_local else asset.ip
-                        
-                        logger.info(f"验证Lora训练能力: {url}:{port}")
-                        
-                        if port:
-                            # 如果是域名访问模式，先尝试连接特殊域名
-                            if asset.port_access_mode == 'DOMAIN' and domain_url:
-                                try:
-                                    # 从域名URL中提取主机名
-                                    hostname = domain_url.replace('https://', '').replace('http://', '').split('/')[0]
-                                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                    sock.settimeout(5)
-                                    sock.connect((hostname, 80))  # 使用HTTP默认端口
-                                    results['lora_training'] = True
-                                    asset.lora_training = {
-                                        **asset.lora_training,
-                                        'verified': True,
-                                    }
-                                    logger.info(f"Lora训练服务通过域名连接成功: {domain_url}")
-                                    sock.close()
-                                except Exception as e:
-                                    sock.close()
-                            
-                            # 如果域名模式连接失败或不是域名模式，尝试直接连接
-                            if not results['lora_training']:
-                                try:
-                                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                    sock.settimeout(5)
-                                    sock.connect((url, int(port)))
-                                    results['lora_training'] = True
-                                    asset.lora_training = {
-                                        **asset.lora_training,
-                                        'verified': True
-                                    }
-                                    logger.info(f"Lora训练服务直接连接成功: {url}:{port}")
-                                except Exception as e:
-                                    asset.lora_training = {
-                                        **asset.lora_training,
-                                        'verified': False,
-                                    }
-                                finally:
-                                    sock.close()
-                        else:
-                            asset.lora_training = {
-                                **asset.lora_training,
-                                'verified': False,
-                            }
+                        handler = TrainRequestHandler(asset)
+                        tasks_data = handler.get_tasks()
+                        results['lora_training'] = True
+                        asset.lora_training = {**asset.lora_training, 'verified': True}
+                        logger.info(f"Lora训练服务通过域名验证成功: {asset.ip}:{asset.lora_training.get('port')}")
                     except Exception as e:
-                        asset.lora_training = {
-                            **asset.lora_training,
-                            'verified': False,
-                        }
+                        asset.lora_training = {**asset.lora_training, 'verified': False}
 
                 # 验证AI引擎能力
                 if (capability_type is None or capability_type == 'ai_engine') and asset.ai_engine.get('enabled'):
                     try:
-                        # 准备连接参数
                         port = asset.ai_engine.get('port')
-                        
-                        # 如果是域名访问模式，尝试使用特殊域名格式
-                        domain_url = []
-                        if asset.port_access_mode == 'DOMAIN' and port:
-                            domain_url = generate_domain_url(asset.ip, port)
-                        
-                        # 对于本地资产，始终使用127.0.0.1
-                        url = '127.0.0.1' if asset.is_local else asset.ip
-                        
-                        logger.info(f"验证AI引擎能力: {url}:{port}")
-                        
-                        if port:
-                            # 如果是域名访问模式，先尝试连接特殊域名
-                            if asset.port_access_mode == 'DOMAIN' and domain_url:
-                                try:
-                                    # 从域名URL中提取主机名
-                                    hostname = domain_url.replace('https://', '').replace('http://', '').split('/')[0]
-                                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                    sock.settimeout(5)
-                                    sock.connect((hostname, 80))  # 使用HTTP默认端口
-                                    results['ai_engine'] = True
-                                    asset.ai_engine = {
-                                        **asset.ai_engine,
-                                        'verified': True,
-                                    }
-                                    logger.info(f"AI引擎服务通过域名连接成功: {domain_url}")
-                                    sock.close()
-                                except Exception as e:
-                                    sock.close()
+                        if not port:
+                            asset.ai_engine = {**asset.ai_engine, 'verified': False}
+                            logger.warning("AI引擎服务未配置端口")
+                        else:
+                            # 如果是域名访问模式，尝试使用特殊域名格式
+                            if asset.port_access_mode == 'DOMAIN':
+                                domain_url,port = generate_domain_url(asset.ip, port)
+                                if domain_url:
+                                    try:
+                                        comfy_config = ComfyUIConfig(
+                                            host=domain_url,
+                                            port=port
+                                        )
+                                        api = ComfyUIAPI(comfy_config)
+                                        stats = api.get_system_stats()
+                                        
+                                        if stats:
+                                            results['ai_engine'] = True
+                                            asset.ai_engine = {**asset.ai_engine, 'verified': True}
+                                            logger.info(f"AI引擎服务通过域名验证成功: {domain_url}")
+                                    except Exception as e:
+                                        logger.warning(f"通过域名验证AI引擎服务失败: {str(e)}")
                             
-                            # 如果域名模式连接失败或不是域名模式，尝试直接连接
+                            # 如果域名模式失败或不是域名模式，尝试直接连接
                             if not results['ai_engine']:
                                 try:
-                                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                    sock.settimeout(5)
-                                    sock.connect((url, int(port)))
-                                    results['ai_engine'] = True
-                                    asset.ai_engine = {
-                                        **asset.ai_engine,
-                                        'verified': True,
-                                        'domain_url': None  # 清除域名URL
-                                    }
-                                    logger.info(f"AI引擎服务直接连接成功: {url}:{port}")
+                                    comfy_config = ComfyUIConfig(
+                                        host=base_ip,
+                                        port=port
+                                    )
+                                    api = ComfyUIAPI(comfy_config)
+                                    stats = api.get_system_stats()
+                                    
+                                    if stats:
+                                        results['ai_engine'] = True
+                                        asset.ai_engine = {**asset.ai_engine, 'verified': True}
+                                        logger.info(f"AI引擎服务直接连接验证成功: {base_ip}:{port}")
+                                    else:
+                                        logger.warning("获取ComfyUI系统状态失败")
+                                        asset.ai_engine = {**asset.ai_engine, 'verified': False}
                                 except Exception as e:
-                                    asset.ai_engine = {
-                                        **asset.ai_engine,
-                                        'verified': False,
-                                    }
-                                finally:
-                                    sock.close()
-                        else:
-                            asset.ai_engine = {
-                                **asset.ai_engine,
-                                'verified': False,
-                            }
+                                    logger.warning(f"直接连接验证AI引擎服务失败: {str(e)}")
+                                    asset.ai_engine = {**asset.ai_engine, 'verified': False}
                     except Exception as e:
-                        asset.ai_engine = {
-                            **asset.ai_engine,
-                            'verified': False,
-                        }
+                        logger.warning(f"验证AI引擎能力时发生错误: {str(e)}")
+                        asset.ai_engine = {**asset.ai_engine, 'verified': False}
 
                 # 提交所有变更
                 db.commit()
-                # logger.info(f"资产 {asset_id} 能力验证结果: {results}")
                 return results
         except Exception as e:
             raise
@@ -329,8 +265,8 @@ class AssetService:
             available_assets = []
             
             with get_db() as db:
-                # 获取所有资产
-                assets = db.query(AssetModel).all()
+                # 获取所有已启用的资产
+                assets = db.query(AssetModel).filter(AssetModel.enabled == True).all()
                 
                 for asset in assets:
                     try:
@@ -368,4 +304,33 @@ class AssetService:
                 return None
         except Exception as e:
             logger.error(f"获取资产失败: {str(e)}")
+            return None
+
+    @staticmethod
+    def toggle_asset_status(asset_id: int, enabled: bool) -> Optional[Asset]:
+        """
+        开启或关闭资产
+        
+        Args:
+            asset_id: 资产ID
+            enabled: True表示启用，False表示禁用
+            
+        Returns:
+            更新后的资产对象，如果资产不存在则返回None
+        """
+        try:
+            with get_db() as db:
+                asset = db.query(AssetModel).filter(AssetModel.id == asset_id).first()
+                if not asset:
+                    logger.warning(f"资产不存在: {asset_id}")
+                    return None
+                
+                asset.enabled = enabled
+                logger.info(f"资产 {asset_id} ({asset.name}) 状态已更新为: {'启用' if enabled else '禁用'}")
+                
+                db.commit()
+                db.refresh(asset)
+                return Asset.from_orm(asset)
+        except Exception as e:
+            logger.error(f"更新资产状态失败: {str(e)}", exc_info=True)
             return None

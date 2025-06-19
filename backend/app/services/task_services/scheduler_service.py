@@ -14,14 +14,19 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 logger = setup_logger('scheduler_service')
-scheduler_lock = threading.RLock()
+scheduler_lock = threading.Lock()
 scheduler_thread = None
 scheduler_running = False
 
 # 添加线程池用于监控任务
 monitor_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="MonitorWorker")
 
+# 添加一个任务处理中的标记集合
+_processing_task_ids = set()
+_processing_lock = threading.Lock()
+
 class SchedulerService:
+
     @staticmethod
     def get_pending_tasks() -> Tuple[List[Task], List[Task]]:
         """
@@ -75,35 +80,56 @@ class SchedulerService:
         Args:
             task: 任务对象
         """
-        with get_db() as db:
-            task = db.query(Task).filter(Task.id == task.id).first()
-            if not task or task.status != TaskStatus.SUBMITTED:
+        # 检查任务是否已经在处理中
+        with _processing_lock:
+            task_key = f"marking_{task.id}"
+            if task_key in _processing_task_ids:
+                logger.info(f"标记任务 {task.id} 已在处理中，跳过本次处理")
                 return
-            
-            # 获取可用的标记资产
-            available_assets = MarkingService.get_available_marking_assets()
-            
-            if not available_assets:
-                logger.info(f"没有可用于标记的资产，任务 {task.id} 将继续等待")
-                return
+            # 标记任务为处理中
+            _processing_task_ids.add(task_key)
+        
+        try:
+            with get_db() as db:
+                task = db.query(Task).filter(Task.id == task.id).first()
+                if not task or task.status != TaskStatus.SUBMITTED:
+                    return
                 
-            # 获取第一个可用资产
-            asset = available_assets[0]
-            
-            # 分配资产并更新任务
-            task.marking_asset_id = asset.id
-            # 更新资产的任务计数
-            asset.marking_tasks_count += 1
-            db.commit()
-            
-            # 启动新线程执行标记任务处理
-            logger.info(f"为标记任务 {task.id} 分配资产 {asset.id} ({asset.name})")
-            
-            # 创建处理线程，并获取prompt_id以启动监控
-            def process_and_monitor():
+                # 获取可用的标记资产
+                available_assets = MarkingService.get_available_marking_assets()
+                
+                if not available_assets:
+                    logger.info(f"没有可用于标记的资产，任务 {task.id} 将继续等待")
+                    
+                    # 检查最近的日志，避免重复添加相同的等待消息
+                    recent_logs = task.get_all_logs(limit=5)
+                    wait_message = "任务正在等待可用标记资产中..."
+                    
+                    # 检查最近的日志中是否已有等待资源的消息
+                    if not any(log.get('message') == wait_message for log in recent_logs):
+                        # 添加任务日志，记录任务正在等待可用标记资产
+                        task.add_log(wait_message, db=db)
+                    
+                    return
+                    
+                # 获取第一个可用资产
+                asset = available_assets[0]
+                
+                # 分配资产并更新任务
+                task.marking_asset_id = asset.id
+                # 更新资产的任务计数
+                asset.marking_tasks_count += 1
+                db.commit()
+                
+                # 启动新线程执行标记任务处理
+                logger.info(f"为标记任务 {task.id} 分配资产 {asset.id} ({asset.name})")
+                
                 try:
                     # 执行标记处理
+                    start_time = time.time()
                     prompt_id = MarkingService._process_marking(task.id, asset.id)
+                    end_time = time.time()
+                    logger.info(f"标记任务 {task.id} 提交完成，耗时: {end_time - start_time:.2f}秒")
                     
                     # 如果获取到prompt_id，启动监控
                     if prompt_id:
@@ -116,14 +142,11 @@ class SchedulerService:
                         )
                 except Exception as e:
                     logger.error(f"标记任务 {task.id} 处理或启动监控失败: {str(e)}", exc_info=True)
-            
-            # 启动处理和监控线程
-            thread = threading.Thread(
-                target=process_and_monitor,
-                name=f"mark_task_{task.id}"
-            )
-            thread.daemon = True
-            thread.start()
+        finally:
+            # 处理完成后，移除任务处理中的标记
+            with _processing_lock:
+                _processing_task_ids.discard(task_key)
+    
     
     @staticmethod
     def _process_training_task(task: Task):
@@ -133,35 +156,53 @@ class SchedulerService:
         Args:
             task: 任务对象
         """
-        with get_db() as db:
-            task = db.query(Task).filter(Task.id == task.id).first()
-            if not task or task.status != TaskStatus.TRAINING:
+        # 检查任务是否已经在处理中
+        with _processing_lock:
+            task_key = f"training_{task.id}"
+            if task_key in _processing_task_ids:
+                logger.info(f"任务 {task.id} 已在处理中，跳过本次处理")
                 return
-            
-            # 获取可用的训练资产
-            available_assets = TrainingService.get_available_training_assets()
-            
-            if not available_assets:
-                logger.info(f"没有可用于训练的资产，任务 {task.id} 将继续等待")
-                return
+            # 标记任务为处理中
+            _processing_task_ids.add(task_key)
+        logger.info(f"开始处理训练任务 {task.id}》》》》》")
+        try:
+            with get_db() as db:
+                task = db.query(Task).filter(Task.id == task.id).first()
+                if not task or task.status != TaskStatus.TRAINING or task.training_asset_id:
+                    return
                 
-            # 获取第一个可用资产
-            asset = available_assets[0]
-            
-            # 分配资产并更新任务
-            task.training_asset_id = asset.id
-            # 更新资产的任务计数
-            asset.training_tasks_count += 1
-            db.commit()
-            
-            # 启动新线程执行训练任务处理和监控
-            logger.info(f"为训练任务 {task.id} 分配资产 {asset.id} ({asset.name})")
-            
-            # 创建处理线程，并获取training_task_id以启动监控
-            def process_and_monitor():
+                # 获取可用的训练资产
+                available_assets = TrainingService.get_available_training_assets()
+                
+                if not available_assets:
+                    logger.info(f"没有可用于训练的资产，任务 {task.id} 将继续等待")
+                    
+                    # 检查最近的日志，避免重复添加相同的等待消息
+                    recent_logs = task.get_all_logs(limit=5)
+                    wait_message = "任务正在等待可用训练资产中..."
+                    
+                    # 检查最近的日志中是否已有等待资源的消息
+                    if not any(log.get('message') == wait_message for log in recent_logs):
+                        # 添加任务日志，记录任务正在等待可用训练资产
+                        task.add_log(wait_message, db=db)
+                    return
+                    
                 try:
-                    # 执行训练处理
+                    # 获取第一个可用资产
+                    asset = available_assets[0]
+                    
+                    # 分配资产并更新任务
+                    logger.info(f"为训练任务 {task.id} 分配资产 {asset.id} ({asset.name})")
+                    task.training_asset_id = asset.id
+                    # 更新资产的任务计数
+                    asset.training_tasks_count += 1
+                    db.commit()
+                    
+                    # 执行训练处理并记录耗时
+                    start_time = time.time()
                     training_task_id = TrainingService._process_training(task.id, asset.id)
+                    end_time = time.time()
+                    logger.info(f"训练任务 {task.id} 提交完成，耗时: {end_time - start_time:.2f}秒")
                     
                     # 如果获取到training_task_id，启动监控
                     if training_task_id:
@@ -174,14 +215,10 @@ class SchedulerService:
                         )
                 except Exception as e:
                     logger.error(f"训练任务 {task.id} 处理或启动监控失败: {str(e)}", exc_info=True)
-            
-            # 启动处理和监控线程
-            thread = threading.Thread(
-                target=process_and_monitor,
-                name=f"train_task_{task.id}"
-            )
-            thread.daemon = True
-            thread.start()
+        finally:
+            # 处理完成后，移除任务处理中的标记
+            with _processing_lock:
+                _processing_task_ids.discard(task_key)
     
     @staticmethod
     def run_scheduler_once():
@@ -193,7 +230,6 @@ class SchedulerService:
             with scheduler_lock:
                 # 获取待处理的任务
                 submitted_tasks, training_tasks = SchedulerService.get_pending_tasks()
-                
                 # 处理提交的打标任务
                 for task in submitted_tasks:
                     SchedulerService.process_task(task)
@@ -213,8 +249,6 @@ class SchedulerService:
         """
         global scheduler_running
         
-        logger.info("任务调度器启动")
-        
         try:
             while scheduler_running:
                 try:
@@ -222,8 +256,8 @@ class SchedulerService:
                     SchedulerService.run_scheduler_once()
                     
                     # 等待一段时间再次执行
-                    time.sleep(5)  # 5秒检查一次
-                    
+                    time.sleep(10)  # 10秒检查一次，减少重复检查的频率
+                    # logger.info(f"调度器循环执行完成，当前线程ID: {threading.get_ident()}")
                 except Exception as loop_error:
                     logger.error(f"调度循环出错: {str(loop_error)}")
                     time.sleep(30)  # 错误后等待30秒再次尝试

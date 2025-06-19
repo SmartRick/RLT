@@ -21,6 +21,8 @@ class ComfyUIConfig:
     def __post_init__(self):
         if not self.client_id:
             self.client_id = str(uuid.uuid4())
+        if not self.host.startswith("http://"):
+            self.host = f"http://{self.host}"
         self.base_url = f"{self.host}:{self.port}"
 
 class ComfyUIAPI:

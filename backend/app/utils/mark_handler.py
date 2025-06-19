@@ -27,34 +27,20 @@ class MarkRequestHandler:
         初始化标记处理器
         :param asset: 资产对象，如果不提供则使用本地地址127.0.0.1:8188
         """
-        self.mark_port = 8188  # 默认端口
-        self.asset_ip = '127.0.0.1'  # 默认IP
+        self.asset_ip = f'http://{asset.ip}'
+        self.mark_port = asset.ai_engine.get('port', 8188)
         
-        if asset:
-            # 根据资产的访问模式选择连接方式
-            self.mark_port = asset.ai_engine.get('port', 8188)
-            
-            if asset.is_local:
-                # 本地资产使用127.0.0.1
-                self.asset_ip = '127.0.0.1'
-            elif asset.port_access_mode == 'DOMAIN':
-                # 域名访问模式
-                from ..utils.common import generate_domain_url
-                domain_url = generate_domain_url(asset.ip, self.mark_port)
-                if domain_url:
-                    # 使用域名格式访问，端口设置为80
-                    self.asset_ip = domain_url.replace('https://', '').replace('http://', '')
-                    self.mark_port = 80
-                else:
-                    # 如果无法生成域名URL，使用IP
-                    self.asset_ip = asset.ip
-            else:
-                # 直连模式
-                self.asset_ip = asset.ip
+        if asset.port_access_mode == 'DOMAIN':
+            # 域名访问模式
+            from ..utils.common import generate_domain_url
+            domain_url,port = generate_domain_url(asset.ip, self.mark_port)
+            # 使用域名格式访问，端口设置为80
+            self.asset_ip = domain_url
+            self.mark_port = port
             
         # 创建ComfyUIConfig和ComfyUIAPI实例
         self.comfy_config = ComfyUIConfig(
-            host=f"http://{self.asset_ip}",
+            host=self.asset_ip,
             port=self.mark_port,
             client_id="lora_tool"
         )

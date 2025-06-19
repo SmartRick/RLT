@@ -25,6 +25,11 @@ class Setting(Base):
                 'value': '5',
                 'description': '标记任务轮询间隔(秒)'
             },
+            'train_poll_interval': {
+                'type': 'integer',
+                'value': '15',
+                'description': '训练任务轮询间隔(秒)'
+            },
             'scheduling_minute': {
                 'type': 'integer',
                 'value': '5',

@@ -38,7 +38,7 @@ class Config:
     # 服务器配置
     HOST = '0.0.0.0'
     PORT = int(os.getenv('PORT', 5000))
-    DEBUG = os.getenv('FLASK_ENV', 'development') == 'development'
+    DEBUG = os.getenv('FLASK_ENV', 'dev') == 'dev'
     
     # 安全配置
     SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here')

@@ -87,7 +87,7 @@ def copy_attributes(source, target, attributes=None, ignore=None):
     
     return target
 
-def generate_domain_url(hostname: str, port: int) -> str:
+def generate_domain_url(hostname: str, port: int) -> tuple[str, int]:
     """
     根据主机名和端口生成域名URL
     
@@ -96,7 +96,7 @@ def generate_domain_url(hostname: str, port: int) -> str:
         port: 服务端口
         
     Returns:
-        str: 生成的域名URL，如果无法解析则返回None
+        tuple[str, int]: 生成的域名URL和端口，如果无法解析则返回None
     """
     from ..models.constants import DOMAIN_ACCESS_CONFIG
     
@@ -114,7 +114,11 @@ def generate_domain_url(hostname: str, port: int) -> str:
             
             # 添加协议前缀
             full_url = f"{DOMAIN_ACCESS_CONFIG['DEFAULT_PROTOCOL']}{container_domain}"
-            return full_url
+            
+            # 根据协议确定返回端口
+            return_port = 443 if DOMAIN_ACCESS_CONFIG['DEFAULT_PROTOCOL'].startswith('https') else 80
+            
+            return full_url, return_port
         
         return None
     except Exception as e:

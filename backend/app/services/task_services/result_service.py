@@ -60,7 +60,7 @@ class ResultService:
             result = {}
             # 遍历目录中的所有txt文件
             for filename in os.listdir(task.marked_images_path):
-                if filename.endswith('.txt'):
+                if filename.endswith('.txt') and filename != "sample_prompts.txt":
                     file_path = os.path.join(task.marked_images_path, filename)
                     try:
                         # 获取不带扩展名的文件名
@@ -421,13 +421,10 @@ class ResultService:
         
         if execution_history and execution_history.training_config:
             training_config = execution_history.training_config
-            logger.info(f"从执行历史记录中获取训练配置: {execution_history.id}")
         
         # 如果从执行历史记录中没有获取到配置，则回退到使用ConfigService
         if not training_config:
             training_config = ConfigService.get_task_training_config(task_id)
-            logger.info("从ConfigService获取训练配置")
-        
             if not training_config:
                 raise ValueError("无法获取训练配置")
             
@@ -479,8 +476,7 @@ class ResultService:
                 "image_count": image_count,
                 "repeat_num": repeat_num,
                 "max_epochs": max_epochs
-            },
-            "source": "live"
+            }
         }
         
         # 如果任务有执行历史记录ID，保存loss数据到历史记录

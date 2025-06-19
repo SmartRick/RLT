@@ -920,50 +920,79 @@ class SSHClientTool:
             ssh = self.get_connection()
             sftp = ssh.open_sftp()
             
-            # 递归上传目录
-            for root, dirs, files in os.walk(local_path):
-                # 计算当前目录相对路径
-                rel_path = os.path.relpath(root, local_path)
-                if rel_path == '.':
-                    rel_path = ''
-                
-                # 创建远程目录
-                if rel_path and recursive:
-                    remote_dir = os.path.join(remote_path, rel_path).replace('\\', '/')
-                    try:
-                        self.mkdir(remote_dir)
-                    except Exception as e:
-                        logger.error(f"创建远程目录失败: {remote_dir}, {str(e)}")
-                        stats['failed'] += 1
-                
-                # 上传文件
-                for file in files:
-                    local_file = os.path.join(root, file)
-                    if rel_path:
-                        remote_file = os.path.join(remote_path, rel_path, file).replace('\\', '/')
-                    else:
-                        remote_file = os.path.join(remote_path, file).replace('\\', '/')
+            if recursive:
+                # 递归上传目录
+                for root, dirs, files in os.walk(local_path):
+                    # 计算当前目录相对路径
+                    rel_path = os.path.relpath(root, local_path)
+                    if rel_path == '.':
+                        rel_path = ''
                     
-                    try:
-                        # 检查远程文件是否存在
+                    # 创建远程目录
+                    if rel_path:
+                        remote_dir = os.path.join(remote_path, rel_path).replace('\\', '/')
                         try:
-                            remote_stat = sftp.stat(remote_file)
-                            remote_size = remote_stat.st_size
-                            local_size = os.path.getsize(local_file)
-                            
-                            # 如果大小不同，则更新文件
-                            if remote_size != local_size:
+                            self.mkdir(remote_dir)
+                        except Exception as e:
+                            logger.error(f"创建远程目录失败: {remote_dir}, {str(e)}")
+                            stats['failed'] += 1
+                    
+                    # 上传文件
+                    for file in files:
+                        local_file = os.path.join(root, file)
+                        if rel_path:
+                            remote_file = os.path.join(remote_path, rel_path, file).replace('\\', '/')
+                        else:
+                            remote_file = os.path.join(remote_path, file).replace('\\', '/')
+                        
+                        try:
+                            # 检查远程文件是否存在
+                            try:
+                                remote_stat = sftp.stat(remote_file)
+                                remote_size = remote_stat.st_size
+                                local_size = os.path.getsize(local_file)
+                                
+                                # 如果大小不同，则更新文件
+                                if remote_size != local_size:
+                                    sftp.put(local_file, remote_file)
+                                    stats['updated'] += 1
+                                else:
+                                    stats['unchanged'] += 1
+                            except FileNotFoundError:
+                                # 远程文件不存在，直接上传
                                 sftp.put(local_file, remote_file)
-                                stats['updated'] += 1
-                            else:
-                                stats['unchanged'] += 1
-                        except FileNotFoundError:
-                            # 远程文件不存在，直接上传
-                            sftp.put(local_file, remote_file)
-                            stats['added'] += 1
-                    except Exception as e:
-                        logger.error(f"上传文件失败: {local_file} -> {remote_file}, {str(e)}")
-                        stats['failed'] += 1
+                                stats['added'] += 1
+                        except Exception as e:
+                            logger.error(f"上传文件失败: {local_file} -> {remote_file}, {str(e)}")
+                            stats['failed'] += 1
+            else:
+                # 非递归模式，只上传根目录下的文件
+                for item in os.listdir(local_path):
+                    local_item_path = os.path.join(local_path, item)
+                    remote_item_path = os.path.join(remote_path, item).replace('\\', '/')
+                    
+                    # 只处理文件，跳过目录
+                    if os.path.isfile(local_item_path):
+                        try:
+                            # 检查远程文件是否存在
+                            try:
+                                remote_stat = sftp.stat(remote_item_path)
+                                remote_size = remote_stat.st_size
+                                local_size = os.path.getsize(local_item_path)
+                                
+                                # 如果大小不同，则更新文件
+                                if remote_size != local_size:
+                                    sftp.put(local_item_path, remote_item_path)
+                                    stats['updated'] += 1
+                                else:
+                                    stats['unchanged'] += 1
+                            except FileNotFoundError:
+                                # 远程文件不存在，直接上传
+                                sftp.put(local_item_path, remote_item_path)
+                                stats['added'] += 1
+                        except Exception as e:
+                            logger.error(f"上传文件失败: {local_item_path} -> {remote_item_path}, {str(e)}")
+                            stats['failed'] += 1
             
             # 关闭SFTP会话
             sftp.close()
@@ -1002,45 +1031,77 @@ class SSHClientTool:
             ssh = self.get_connection()
             sftp = ssh.open_sftp()
             
-            # 递归下载目录
-            def download_dir(sftp, remote_dir, local_dir):
-                try:
-                    sftp.chdir(remote_dir)
-                    os.makedirs(local_dir, exist_ok=True)
-                    
-                    for entry in sftp.listdir_attr():
-                        remote_path = os.path.join(remote_dir, entry.filename).replace('\\', '/')
-                        local_path = os.path.join(local_dir, entry.filename)
+            if recursive:
+                # 递归下载目录
+                def download_dir(sftp, remote_dir, local_dir):
+                    try:
+                        sftp.chdir(remote_dir)
+                        os.makedirs(local_dir, exist_ok=True)
                         
-                        if stat.S_ISDIR(entry.st_mode):
-                            if recursive:
+                        for entry in sftp.listdir_attr():
+                            remote_path = os.path.join(remote_dir, entry.filename).replace('\\', '/')
+                            local_path = os.path.join(local_dir, entry.filename)
+                            
+                            if stat.S_ISDIR(entry.st_mode):
                                 download_dir(sftp, remote_path, local_path)
-                        else:
+                            else:
+                                try:
+                                    # 检查本地文件是否存在
+                                    if os.path.exists(local_path):
+                                        local_size = os.path.getsize(local_path)
+                                        remote_size = entry.st_size
+                                        
+                                        # 如果大小不同，则更新文件
+                                        if local_size != remote_size:
+                                            sftp.get(remote_path, local_path)
+                                            stats['updated'] += 1
+                                        else:
+                                            stats['unchanged'] += 1
+                                    else:
+                                        # 本地文件不存在，直接下载
+                                        sftp.get(remote_path, local_path)
+                                        stats['added'] += 1
+                                except Exception as e:
+                                    logger.error(f"下载文件失败: {remote_path} -> {local_path}, {str(e)}")
+                                    stats['failed'] += 1
+                    except Exception as e:
+                        logger.error(f"下载目录失败: {remote_dir}, {str(e)}")
+                        stats['failed'] += 1
+                
+                # 开始递归下载
+                download_dir(sftp, remote_path, local_path)
+            else:
+                # 非递归模式，只下载根目录下的文件
+                try:
+                    # 列出远程目录中的文件和文件夹
+                    for entry in sftp.listdir_attr(remote_path):
+                        remote_item_path = os.path.join(remote_path, entry.filename).replace('\\', '/')
+                        local_item_path = os.path.join(local_path, entry.filename)
+                        
+                        # 只处理文件，跳过目录
+                        if not stat.S_ISDIR(entry.st_mode):
                             try:
                                 # 检查本地文件是否存在
-                                if os.path.exists(local_path):
-                                    local_size = os.path.getsize(local_path)
+                                if os.path.exists(local_item_path):
+                                    local_size = os.path.getsize(local_item_path)
                                     remote_size = entry.st_size
                                     
                                     # 如果大小不同，则更新文件
                                     if local_size != remote_size:
-                                        sftp.get(remote_path, local_path)
+                                        sftp.get(remote_item_path, local_item_path)
                                         stats['updated'] += 1
                                     else:
                                         stats['unchanged'] += 1
                                 else:
                                     # 本地文件不存在，直接下载
-                                    sftp.get(remote_path, local_path)
+                                    sftp.get(remote_item_path, local_item_path)
                                     stats['added'] += 1
                             except Exception as e:
-                                logger.error(f"下载文件失败: {remote_path} -> {local_path}, {str(e)}")
+                                logger.error(f"下载文件失败: {remote_item_path} -> {local_item_path}, {str(e)}")
                                 stats['failed'] += 1
                 except Exception as e:
-                    logger.error(f"下载目录失败: {remote_dir}, {str(e)}")
+                    logger.error(f"列出远程目录失败: {remote_path}, {str(e)}")
                     stats['failed'] += 1
-            
-            # 开始下载
-            download_dir(sftp, remote_path, local_path)
             
             # 关闭SFTP会话
             sftp.close()

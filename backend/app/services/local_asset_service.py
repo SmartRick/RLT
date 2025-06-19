@@ -36,7 +36,8 @@ class LocalAssetService:
                     ssh_username=system_info["username"],
                     ssh_auth_type="KEY",  # 默认值，不重要
                     status="CONNECTED",  # 本地资产默认为已连接状态
-                    is_local=True  # 标记为本地资产
+                    is_local=True,  # 标记为本地资产
+                    enabled=True  # 启用本地资产
                 )
                 
                 # 设置本地资产的能力

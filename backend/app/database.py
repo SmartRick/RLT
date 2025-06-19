@@ -10,7 +10,15 @@ import sqlalchemy as sa
 logger = setup_logger('database')
 
 # 创建数据库引擎
-engine = create_engine(config.DATABASE_URL)
+# 如果是SQLite，添加check_same_thread=False参数
+if config.DATABASE_URL.startswith('sqlite'):
+    engine = create_engine(
+        config.DATABASE_URL,
+        connect_args={"check_same_thread": False}  # 允许多线程访问SQLite连接
+    )
+    logger.info("SQLite数据库已配置为多线程模式")
+else:
+    engine = create_engine(config.DATABASE_URL)
 
 # 创建会话工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

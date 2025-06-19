@@ -16,6 +16,7 @@ class Asset(Base):
     status = Column(String(20), default='PENDING')
     is_local = Column(Boolean, default=False, comment='是否为本地系统资产')
     port_access_mode = Column(String(20), default='DIRECT', comment='端口访问模式: DIRECT直连模式, DOMAIN域名模式')
+    enabled = Column(Boolean, default=True, comment='资产是否启用')
     
     # 存储为JSON字段，包含高级配置参数
     lora_training = Column(JSON, default={
@@ -69,5 +70,6 @@ class Asset(Base):
             'marking_tasks_count': self.marking_tasks_count,
             'training_tasks_count': self.training_tasks_count,
             'max_concurrent_tasks': self.max_concurrent_tasks,
-            'is_local': self.is_local
+            'is_local': self.is_local,
+            'enabled': self.enabled
         }

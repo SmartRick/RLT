@@ -144,8 +144,8 @@ class MarkingService:
                 # 准备输入输出目录
                 input_dir = os.path.join(Config.UPLOAD_DIR, str(task_id))
                 output_dir = task.marked_images_path
-                task.add_log(f'输入目录: {input_dir}')
-                task.add_log(f'输出目录: {output_dir}')
+                task.add_log(f'输入目录: {input_dir}',db)
+                task.add_log(f'输出目录: {output_dir}',db)
 
                 # 定义远程目录路径
                 remote_input_dir = f"{Config.REMOTE_UPLOAD_DIR}/{task_id}"
@@ -168,29 +168,28 @@ class MarkingService:
                 
                 # 如果不是本地资产，需要同步文件
                 if not asset.is_local:
-                    task.add_log('资产不是本地资产，需要同步文件...')
+                    task.add_log('资产不是本地资产，需要同步文件...',db)
                     
                     # 使用同步工具上传图片到远程服务器
-                    task.add_log(f'开始同步图片到远程服务器: {remote_input_dir}')
-                    success, message, stats = sync_directory(
-                        asset=asset,
+                    task.add_log(f'开始同步图片到远程服务器: {remote_input_dir}',db)
+                    # 创建SSH客户端工具
+                    ssh_client = create_ssh_client_from_asset(asset)
+                    # 下载打标结果
+                    success, message, stats = ssh_client.upload_directory(
                         local_path=input_dir,
-                        remote_path=remote_input_dir,
-                        sync_mode='upload',
-                        delete_extra=True
+                        remote_path=remote_input_dir
                     )
                     
                     if not success:
                         raise Exception(f"同步图片失败: {message}")
                     
-                    task.add_log(f'图片同步成功: {message}')
+                    task.add_log(f'图片同步成功: {message}',db)
                     
                     # 更新输入目录为远程目录
                     input_dir = remote_input_dir
                 
                 # 创建标记处理器
-                task.add_log(f'准备发送标记请求: task_id={task_id}, asset_id={asset_id}, asset_ip={asset.ip}')
-                db.commit()
+                task.add_log(f'准备发送标记请求: task_id={task_id}, asset_id={asset_id}, asset_ip={asset.ip}',db)
                 
                 try:
                     # 创建标记处理器，直接传入资产对象

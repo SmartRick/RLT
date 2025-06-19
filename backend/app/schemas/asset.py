@@ -52,6 +52,7 @@ class AssetCreate(BaseModel):
     lora_training: LoraTrainingConfig
     ai_engine: AIEngineConfig
     is_local: bool = Field(default=False, description="是否为本地系统资产")
+    enabled: bool = Field(default=True, description="是否启用")
 
     @validator('ip')
     def validate_ip(cls, v):
@@ -115,6 +116,7 @@ class Asset(BaseModel):
     created_at: datetime
     updated_at: datetime
     is_local: bool = False  # 添加本地系统标识
+    enabled: bool = True  # 添加启用状态标识
 
     class Config:
         orm_mode = True
@@ -139,7 +141,7 @@ class AssetUpdate(BaseModel):
     lora_training: Optional[LoraTrainingConfig] = None
     ai_engine: Optional[AIEngineConfig] = None
     is_local: Optional[bool] = None
-
+    enabled: Optional[bool] = None
     @validator('ip')
     def validate_ip(cls, v):
         if v is None:
