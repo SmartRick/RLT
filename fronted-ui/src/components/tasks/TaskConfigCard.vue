@@ -466,6 +466,9 @@ const props = defineProps({
   }
 });
 
+// 修改emit，发送配置对象而不仅是通知
+const emit = defineEmits(['config-changed']);
+
 // 组件状态
 const isLoading = ref(false);
 const saveConfigTimer = ref(null);
@@ -490,6 +493,8 @@ const fetchConfig = async () => {
     const data = await tasksApi.getTaskConfig(props.taskId);
     if (data) {
       config.value = data
+      // 组件挂载时获取配置后，也向父组件发送配置
+      emit('config-changed', data);
     }
   } catch (error) {
     console.error('获取任务配置失败:', error);
@@ -531,6 +536,9 @@ const saveConfig = () => {
 
       // 调用更新接口
       await tasksApi.updateTaskConfig(props.taskId, updateData);
+      
+      // 发送配置已更新事件
+      emit('config-changed', config.value);
     } catch (error) {
       console.error('保存任务配置失败:', error);
     } finally {
@@ -540,7 +548,8 @@ const saveConfig = () => {
 };
 
 // 监听整个config对象的变化，一次性处理所有配置更新
-watch(() => config.value, () => {
+watch(() => config.value, (newConfig) => {
+  // 在保存到后端的同时通知父组件配置已变更
   saveConfig();
 }, { deep: true, flush: 'post' });
 

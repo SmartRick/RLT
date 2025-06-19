@@ -155,6 +155,15 @@
                 <span v-else class="no-asset">暂无</span>
               </div>
             </div>
+            <div class="info-row">
+              <div class="info-item full-width training-steps">
+                <span class="label">预估训练步数</span>
+                <div class="training-steps-info">
+                  <div class="steps-value">{{ estimatedTrainingSteps }}</div>
+                  <div class="steps-formula">图片数量({{ task?.images?.length || 0 }}) × 重复次数({{ getRepeatNum }}) × 训练轮次({{ getMaxTrainEpochs }}) ÷ 批次大小({{ getTrainBatchSize }})</div>
+                </div>
+              </div>
+            </div>
             <div class="info-item full-width">
               <span class="label">描述</span>
               <p class="description">{{ task?.description || '暂无描述' }}</p>
@@ -167,6 +176,7 @@
           v-if="task" 
           :task-id="taskId" 
           :can-edit="canEditConfig" 
+          @config-changed="handleConfigChange"
         />
       </div>
     </div>
@@ -222,6 +232,7 @@ import {
   ClockIcon
 } from '@heroicons/vue/24/outline'
 import { tasksApi } from '@/api/tasks'
+import { settingsApi } from '@/api/settings'
 import { formatDate } from '@/utils/datetime'
 import message from '@/utils/message'
 import ImageGrid from '@/components/tasks/ImageGrid.vue'
@@ -257,6 +268,7 @@ const refreshTimer = ref(null)
 const REFRESH_INTERVAL = 5000 // 5秒刷新一次
 const statusUpdating = ref(false) // 添加状态更新标志
 const markedTexts = ref({}) // 打标文本数据
+const localConfig = ref(null) // 本地缓存的配置数据
 
 // 图片网格引用和批量操作相关
 const imageGridRef = ref(null)
@@ -273,6 +285,55 @@ const trainingModelImages = ref([]) // 训练模型预览图片数组
 const showAutoTrainingInfo = computed(() => {
   return task.value?.status === 'MARKED' && task.value?.auto_training === true
 })
+
+// 计算预估训练步数
+const estimatedTrainingSteps = computed(() => {
+  if (!task.value?.images?.length) return '0';
+  
+  const imageCount = task.value.images.length;
+  // 只使用从settings接口获取的配置和本地配置
+  const trainingConfig = task.value?.settings?.training_config || 
+                         localConfig.value?.training_config;
+  
+  if (!trainingConfig) return '计算中...';
+  
+  const maxTrainEpochs = trainingConfig.max_train_epochs || 10;
+  const trainBatchSize = trainingConfig.train_batch_size || 1;
+  const repeatNum = trainingConfig.repeat_num || 1;
+  
+  let steps = Math.floor(imageCount * repeatNum * maxTrainEpochs / trainBatchSize);
+  
+  // 如果是奇数，加1
+  if (steps % 2 !== 0) {
+    steps += 1;
+  }
+  
+  return steps.toLocaleString();
+});
+
+// 获取训练配置中的重复次数
+const getRepeatNum = computed(() => {
+  // 只使用从settings接口获取的配置和本地配置
+  const trainingConfig = task.value?.settings?.training_config || 
+                         localConfig.value?.training_config;
+  return trainingConfig?.repeat_num || 1;
+});
+
+// 获取训练配置中的最大训练轮次
+const getMaxTrainEpochs = computed(() => {
+  // 只使用从settings接口获取的配置和本地配置
+  const trainingConfig = task.value?.settings?.training_config || 
+                         localConfig.value?.training_config;
+  return trainingConfig?.max_train_epochs || 10;
+});
+
+// 获取训练配置中的批次大小
+const getTrainBatchSize = computed(() => {
+  // 只使用从settings接口获取的配置和本地配置
+  const trainingConfig = task.value?.settings?.training_config || 
+                         localConfig.value?.training_config;
+  return trainingConfig?.train_batch_size || 1;
+});
 
 // 计算是否可以查看训练详情
 const canViewTrainingDetails = computed(() => {
@@ -341,6 +402,9 @@ const fetchTask = async () => {
         }
       }
 
+      // 获取训练设置配置
+      await fetchTrainingSettings()
+      
       // 根据任务状态决定是否需要继续自动刷新
       if (needsAutoRefresh.value) {
         startAutoRefresh()
@@ -422,7 +486,6 @@ watch(() => task.value?.status, (newStatus, oldStatus) => {
       !['MARKED', 'TRAINING', 'COMPLETED'].includes(oldStatus)) {
       fetchMarkedTexts()
     }
-
     if (needsAutoRefresh.value) {
       startAutoRefresh()
     } else {
@@ -860,6 +923,36 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
   window.removeEventListener('resize', handleResize);
 })
+
+// 处理配置变更
+const handleConfigChange = (newConfig) => {
+  // 将配置卡片传来的配置同步到本地配置
+  if (!localConfig.value) localConfig.value = {};
+  
+  // 只关注训练配置，因为打标配置不影响步数计算
+  if (newConfig.training_config) {
+    localConfig.value.training_config = newConfig.training_config;
+  }
+};
+
+// 添加从settings接口获取训练配置的方法
+const fetchTrainingSettings = async () => {
+  if (!taskId.value) return;
+  
+  try {
+    const trainingConfig = await settingsApi.getTaskTrainingConfig(taskId.value);
+    if (trainingConfig) {
+      // 确保task.value有效
+      if (!task.value) task.value = {};
+      // 确保有settings对象
+      if (!task.value.settings) task.value.settings = {};
+      // 保存训练配置
+      task.value.settings.training_config = trainingConfig;
+    }
+  } catch (error) {
+    console.error('获取训练设置失败:', error);
+  }
+};
 </script>
 
 <style scoped>
@@ -1093,6 +1186,31 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--text-secondary);
   font-style: italic;
+}
+
+/* 预估训练步数样式 */
+.training-steps {
+  background-color: #f9f9fb;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.training-steps-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.steps-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: #0A84FF;
+}
+
+.steps-formula {
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.5;
 }
 
 .mac-btn.error {

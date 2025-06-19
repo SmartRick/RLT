@@ -1,4 +1,5 @@
 # LoRA 自动训练系统 - 前端界面
+# RICK lora训练器
 
 这是一个用于管理LoRA（Low-Rank Adaptation）模型训练的前端Web应用，提供了直观的用户界面来简化AI模型训练流程。该系统采用现代化的Mac风格UI设计，为用户提供流畅的操作体验。
 

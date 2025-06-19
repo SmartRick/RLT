@@ -125,7 +125,7 @@ class Config:
         'save_model_as': 'safetensors',
         'save_precision': 'fp16',
         'save_every_n_epochs': 2,
-        'max_train_epochs': 2,
+        'max_train_epochs': 10,
         'train_batch_size': 2,
         'gradient_checkpointing': True,
         'gradient_accumulation_steps': 1,
@@ -160,7 +160,7 @@ class Config:
         'cache_text_encoder_outputs': True,
         'cache_text_encoder_outputs_to_disk': True,
         'persistent_data_loader_workers': True,
-        'repeat_num':5,
+        'repeat_num':12,
         
         # 预览图生成参数（兼容旧版本）
         'generate_preview':True,#是否生成预览图
@@ -168,12 +168,12 @@ class Config:
         'max_image_tags': 5,               # 最多采用图片提示词数量
         'positive_prompts': 'masterpiece, best quality, 1girl, solo',
         'negative_prompts': 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry',
-        'sample_width': 512,
-        'sample_height': 768,
+        'sample_width': 768,
+        'sample_height': 1024,
         'sample_cfg': 7,
         'sample_steps': 24,
         'sample_seed': 1337,
-        'sample_sampler': 'euler_a',
+        'sample_sampler': 'euler',
         'sample_every_n_epochs': 2,
     }
     

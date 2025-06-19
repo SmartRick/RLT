@@ -231,6 +231,13 @@
       <h3 class="section-title">翻译配置</h3>
       
       <div class="form-row">
+        <div class="form-group toggle-group">
+          <div class="toggle-label">启用翻译功能</div>
+          <SwitchButton v-model="form.baidu_translate_config.enabled" />
+        </div>
+      </div>
+      
+      <div class="form-row">
         <div class="form-group">
           <label>
             <div class="label-text">百度翻译APP ID</div>
@@ -345,6 +352,7 @@ import KeyValueConfig from '@/components/common/KeyValueConfig.vue'
 import LoraTrainingParams from '@/components/common/LoraTrainingParams.vue'
 import SwitchButton from '@/components/common/SwitchButton.vue'
 import { useRouter, useRoute } from 'vue-router'
+import { translationConfig, updateTranslationConfig } from '@/utils/translationCache'
 
 const router = useRouter()
 const route = useRoute()
@@ -433,6 +441,7 @@ const form = ref({
   
   // 百度翻译配置
   baidu_translate_config: {
+    enabled: true,
     app_id: '20250327002316619',
     secret_key: '67qaSQg_WdfWqQFvx7ml',
     default_from: 'auto',
@@ -541,6 +550,15 @@ const fetchSettings = async () => {
     const data = await settingsApi.getSettings()
     form.value = data
     
+    // 同步翻译配置到translationCache模块
+    updateTranslationConfig({
+      enabled: form.value.baidu_translate_config.enabled,
+      app_id: form.value.baidu_translate_config.app_id,
+      secret_key: form.value.baidu_translate_config.secret_key,
+      default_from: form.value.baidu_translate_config.default_from,
+      default_to: form.value.baidu_translate_config.default_to
+    })
+    
     // 如果存在工作流路径，尝试获取文件信息
     if (form.value.mark_workflow_api && form.value.mark_workflow_api.includes('uploads/')) {
       try {
@@ -567,6 +585,16 @@ const handleSubmit = async () => {
   try {
     isSubmitting.value = true
     await settingsApi.updateSettings(form.value)
+    
+    // 更新翻译配置到translationCache模块
+    updateTranslationConfig({
+      enabled: form.value.baidu_translate_config.enabled,
+      app_id: form.value.baidu_translate_config.app_id,
+      secret_key: form.value.baidu_translate_config.secret_key,
+      default_from: form.value.baidu_translate_config.default_from,
+      default_to: form.value.baidu_translate_config.default_to
+    })
+    
     message.success('设置已保存')
   } catch (error) {
     message.error('保存设置失败')
@@ -599,6 +627,12 @@ const clearWorkflowFile = () => {
 const testTranslate = async () => {
   if (!testTranslateText.value) {
     message.warning('请输入要测试的文本')
+    return
+  }
+  
+  // 如果翻译功能被禁用，提示用户
+  if (!form.value.baidu_translate_config.enabled) {
+    message.warning('翻译功能已禁用，请先启用')
     return
   }
   

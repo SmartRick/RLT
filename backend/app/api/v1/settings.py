@@ -53,4 +53,22 @@ def get_common_mark_params():
 @exception_handler
 def get_flux_lora_params():
     """获取Flux-Lora特有参数列表"""
-    return success_json(FLUX_LORA_PARAMS) 
+    return success_json(FLUX_LORA_PARAMS)
+
+@settings_bp.route('/tasks/<int:task_id>/mark-config', methods=['GET'])
+@exception_handler
+def get_task_mark_config(task_id):
+    """获取任务的打标配置"""
+    mark_config = ConfigService.get_task_mark_config(task_id)
+    if mark_config is None:
+        return response_template("not_found", code=1004, msg="任务不存在或无法获取打标配置")
+    return success_json(mark_config)
+
+@settings_bp.route('/tasks/<int:task_id>/training-config', methods=['GET'])
+@exception_handler
+def get_task_training_config(task_id):
+    """获取任务的训练配置"""
+    training_config = ConfigService.get_task_training_config(task_id)
+    if training_config is None:
+        return response_template("not_found", code=1004, msg="任务不存在或无法获取训练配置")
+    return success_json(training_config) 

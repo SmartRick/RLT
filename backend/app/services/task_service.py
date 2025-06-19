@@ -56,6 +56,8 @@ class TaskService:
     get_execution_history = ResultService.get_execution_history
     get_execution_history_by_id = ResultService.get_execution_history_by_id
     delete_execution_history = ResultService.delete_execution_history
+    export_marked_files = ResultService.export_marked_files
+    import_marked_files = ResultService.import_marked_files
     
     # 调度器管理（委托给SchedulerService）
     init_scheduler = SchedulerService.init_scheduler

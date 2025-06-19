@@ -27,8 +27,8 @@ class TrainingService:
         """获取可用于训练的资产"""
         try:
             assets = AssetService.verify_all_assets('lora_training')
-            # 过滤出任务数量未达到上限的资产
-            return [asset for asset in assets if asset.training_tasks_count < asset.max_concurrent_tasks]
+            # 训练资产最大并发数固定为1
+            return [asset for asset in assets if asset.training_tasks_count < 1]
         except Exception as e:
             logger.error(f"获取可用训练资产失败: {str(e)}")
             return []

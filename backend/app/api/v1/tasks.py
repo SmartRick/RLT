@@ -1,14 +1,16 @@
-from flask import Blueprint, request, current_app
+from flask import Blueprint, request, current_app, send_file
 from werkzeug.utils import secure_filename
 import os
+import time
 from ...database import get_db
 from ...services.task_service import TaskService
 from ...services.config_service import ConfigService
 from ...utils.logger import setup_logger
 from ...utils.validators import validate_task_create, validate_file_upload
 from ...utils.response import success_json, error_json, exception_handler, response_template
-from ...models.task import Task, TaskImage
+from ...models.task import Task, TaskImage, TaskStatus
 from ...models.constants import COMMON_TRAINING_PARAMS, COMMON_MARK_PARAMS, FLUX_LORA_PARAMS
+import tempfile
 
 
 logger = setup_logger('tasks_api')
@@ -406,3 +408,163 @@ def batch_start_marking():
         except Exception as e:
             logger.error(f"批量提交标记失败: {str(e)}", exc_info=True)
             return error_json(2003, f"系统错误: {str(e)}")
+
+@tasks_bp.route('/<int:task_id>/export', methods=['GET'])
+@exception_handler
+def export_marked_files(task_id):
+    """
+    导出任务打标后的文件为ZIP压缩包
+    只有任务已完成打标才可导出
+    """
+    try:
+        # 导出打标文件
+        result = TaskService.export_marked_files(task_id)
+        
+        if not result:
+            return error_json(1009, "导出打标文件失败，可能任务未完成打标或没有可导出的文件")
+        
+        # 使用服务返回的文件路径和下载名称
+        zip_file_path = result["file_path"]
+        download_name = result["download_name"]
+        
+        # 返回文件下载
+        return send_file(
+            zip_file_path,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype='application/zip'
+        )
+    except Exception as e:
+        logger.error(f"导出打标文件失败: {str(e)}", exc_info=True)
+        return error_json(1010, f"导出打标文件失败: {str(e)}")
+
+@tasks_bp.route('/import', methods=['POST'])
+@exception_handler
+def import_marked_files():
+    """
+    导入打标文件（ZIP文件）
+    可以选择导入到已有任务或创建新任务
+    """
+    try:
+        # 检查是否有文件上传
+        if 'file' not in request.files:
+            return response_template("bad_request", msg="没有上传文件")
+            
+        file = request.files['file']
+        if file.filename == '':
+            return response_template("bad_request", msg="未选择文件")
+            
+        # 获取任务ID（可选）
+        task_id = request.form.get('task_id')
+        if task_id:
+            try:
+                task_id = int(task_id)
+            except ValueError:
+                return response_template("bad_request", msg="无效的任务ID")
+        else:
+            task_id = None
+            
+        # 检查文件类型
+        if not file.filename.lower().endswith('.zip'):
+            return response_template("bad_request", msg="仅支持ZIP格式的文件")
+            
+        # 保存上传文件到临时目录
+        temp_dir = tempfile.mkdtemp()
+        temp_file_path = os.path.join(temp_dir, secure_filename(file.filename))
+        file.save(temp_file_path)
+        
+        try:
+            # 导入文件
+            with get_db() as db:
+                result = TaskService.import_marked_files(
+                    db=db,
+                    task_id=task_id,
+                    file_path=temp_file_path,
+                    original_name=file.filename,
+                    is_zip=True
+                )
+                
+            # 清理临时文件
+            try:
+                os.remove(temp_file_path)
+                os.rmdir(temp_dir)
+            except:
+                pass
+                
+            if result.get('success', False):
+                return success_json(result, result.get('message', '导入成功'))
+            else:
+                return error_json(1011, result.get('message', '导入失败'))
+                
+        except Exception as e:
+            # 清理临时文件
+            try:
+                os.remove(temp_file_path)
+                os.rmdir(temp_dir)
+            except:
+                pass
+            raise e
+            
+    except Exception as e:
+        logger.error(f"导入打标文件失败: {str(e)}", exc_info=True)
+        return error_json(1012, f"导入打标文件失败: {str(e)}")
+
+@tasks_bp.route('/<int:task_id>/import', methods=['POST'])
+@exception_handler
+def import_marked_files_to_task(task_id):
+    """
+    导入打标文件到指定任务
+    """
+    try:
+        # 检查是否有文件上传
+        if 'file' not in request.files:
+            return response_template("bad_request", msg="没有上传文件")
+            
+        file = request.files['file']
+        if file.filename == '':
+            return response_template("bad_request", msg="未选择文件")
+            
+        # 检查文件类型
+        if not file.filename.lower().endswith('.zip'):
+            return response_template("bad_request", msg="仅支持ZIP格式的文件")
+            
+        # 保存上传文件到临时目录
+        temp_dir = tempfile.mkdtemp()
+        temp_file_path = os.path.join(temp_dir, secure_filename(file.filename))
+        file.save(temp_file_path)
+        
+        try:
+            # 导入文件
+            with get_db() as db:
+                result = TaskService.import_marked_files(
+                    db=db,
+                    task_id=task_id,
+                    file_path=temp_file_path,
+                    original_name=file.filename,
+                    is_zip=True
+                )
+                
+            # 清理临时文件
+            try:
+                os.remove(temp_file_path)
+                os.rmdir(temp_dir)
+            except:
+                pass
+                
+            if result.get('success', False):
+                return success_json(result, result.get('message', '导入成功'))
+            else:
+                return error_json(1011, result.get('message', '导入失败'))
+                
+        except Exception as e:
+            # 清理临时文件
+            try:
+                os.remove(temp_file_path)
+                os.rmdir(temp_dir)
+            except:
+                pass
+            raise e
+            
+    except Exception as e:
+        logger.error(f"导入打标文件失败: {str(e)}", exc_info=True)
+        return error_json(1012, f"导入打标文件失败: {str(e)}")

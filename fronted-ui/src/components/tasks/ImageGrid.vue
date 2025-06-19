@@ -155,7 +155,7 @@
           />
           
           <!-- 翻译结果显示区域 -->
-          <div class="translation-container">
+          <div class="translation-container" v-if="translationConfig.enabled">
             <div class="translation-header">
               <span class="translation-title">中文翻译参考：</span>
               <div v-if="isTranslating" class="translation-loading">
@@ -253,7 +253,7 @@ import HighlightEditableDiv from '@/components/common/HighlightEditableDiv.vue'
 import TextTooltip from '@/components/common/TextTooltip.vue'
 import message from '@/utils/message'
 import { highlightMarkedText } from '@/utils/textFormatters'
-import { getTranslation } from '@/utils/translationCache'
+import { getTranslation, translationConfig } from '@/utils/translationCache'
 
 const props = defineProps({
   images: {
@@ -421,6 +421,12 @@ const isTranslating = ref(false) // 添加翻译中状态
 
 // 翻译当前编辑的文本
 const translateEditingText = async () => {
+  // 如果翻译功能被禁用，直接返回
+  if (!translationConfig.value.enabled) {
+    translatedText.value = ''
+    return
+  }
+  
   if (!editingTextContent.value) {
     translatedText.value = ''
     return
@@ -778,6 +784,9 @@ let lastHoveredFilename = null // 记录最后悬停的文件名
 
 // 显示完整提示词的浮动框
 const showFullTextTooltip = (event, filename) => {
+  // 如果翻译功能被禁用，不需要处理翻译
+  const shouldTranslate = translationConfig.value.enabled
+  
   // 如果是相同文件，不重新触发处理，直接保持显示状态
   if (showFullTextTooltipContent.value && filename === lastHoveredFilename) {
     // 如果已经显示且文件名相同，只需更新触发元素位置
@@ -804,11 +813,11 @@ const showFullTextTooltip = (event, filename) => {
   }
   
   // 直接处理内容显示，无需延迟
-  processTooltipContent(event, filename)
+  processTooltipContent(event, filename, shouldTranslate)
 }
 
 // 处理提示词内容并显示提示框
-const processTooltipContent = async (event, filename) => {
+const processTooltipContent = async (event, filename, shouldTranslate = true) => {
   if (!gridContainer.value) return // 确保网格容器存在
   
   // 保存触发元素引用
@@ -823,8 +832,8 @@ const processTooltipContent = async (event, filename) => {
   // 显示提示词框
   showFullTextTooltipContent.value = true
 
-  // 如果有内容，则尝试获取翻译
-  if (fullTextContent.value) {
+  // 如果有内容且应该翻译，则尝试获取翻译
+  if (fullTextContent.value && shouldTranslate) {
     isTooltipTranslating.value = true
     // 使用全局翻译缓存服务
     const { text } = await getTranslation(fullTextContent.value, 'zh', 'en')

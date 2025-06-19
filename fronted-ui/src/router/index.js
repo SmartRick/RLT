@@ -120,7 +120,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   // 设置页面标题
   if (to.meta.title) {
-    document.title = `${to.meta.title} - 管理系统`
+    document.title = `${to.meta.title} - RLT`
   }
   
   // TODO: 添加实际的权限验证逻辑

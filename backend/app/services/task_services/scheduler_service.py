@@ -119,6 +119,7 @@ class SchedulerService:
                 task.marking_asset_id = asset.id
                 # 更新资产的任务计数
                 asset.marking_tasks_count += 1
+                db.add(asset)
                 db.commit()
                 
                 # 启动新线程执行标记任务处理
@@ -196,6 +197,7 @@ class SchedulerService:
                     task.training_asset_id = asset.id
                     # 更新资产的任务计数
                     asset.training_tasks_count += 1
+                    db.add(asset)
                     db.commit()
                     
                     # 执行训练处理并记录耗时

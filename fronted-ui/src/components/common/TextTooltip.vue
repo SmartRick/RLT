@@ -20,7 +20,7 @@
             </div>
             <div class="tooltip-text" v-html="content"></div>
           </div>
-          <div class="tooltip-section">
+          <div class="tooltip-section" v-if="translationEnabled">
             <div class="tooltip-title">
               {{ translationTitle }}：
               <span v-if="isTranslating" class="tooltip-loading">
@@ -54,6 +54,7 @@
 import { ref, defineProps, defineEmits, watch, onUnmounted, computed, nextTick } from 'vue'
 import message from '@/utils/message'
 import { stripHtml } from '@/utils/textFormatters'
+import { translationConfig } from '@/utils/translationCache'
 
 const props = defineProps({
   // 控制组件显示与隐藏
@@ -119,6 +120,8 @@ const tooltipRef = ref(null)
 let hideTimer = null
 let isHoveringTooltip = false // 跟踪鼠标是否在提示框上
 
+// 计算属性：是否启用翻译功能
+const translationEnabled = computed(() => translationConfig.value.enabled)
 
 // 计算提示框样式，包括位置
 const computedTooltipStyle = computed(() => {

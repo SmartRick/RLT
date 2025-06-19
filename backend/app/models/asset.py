@@ -51,7 +51,7 @@ class Asset(Base):
     # 添加任务计数字段
     marking_tasks_count = Column(Integer, default=0, comment='当前标记任务数')
     training_tasks_count = Column(Integer, default=0, comment='当前训练任务数')
-    max_concurrent_tasks = Column(Integer, default=2, comment='最大并发任务数')
+    max_concurrent_tasks = Column(Integer, default=10, comment='最大并发任务数（标记任务最大10个，训练任务最大1个）')
     
     def to_dict(self):
         return {

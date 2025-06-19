@@ -17,10 +17,13 @@
       </div>
 
       <div class="right-section">
-        <button class="user-menu mac-btn">
-          <UserCircleIcon class="user-icon" />
-          管理员
-        </button>
+        <div class="logo-container">
+          <img src="@/assets/logo.png" alt="RLT Logo" class="logo-img" />
+          <div class="logo-text-container">
+            <span class="logo-text">RICK LORA TRAINER(RLT)</span>
+            <span class="logo-subtitle">RICK 风格模型训练器</span>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -39,7 +42,6 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { routes } from '@/router'
 import {
-  UserCircleIcon,
   ServerIcon,
   Cog6ToothIcon,
   ChartBarIcon
@@ -193,28 +195,36 @@ const isRouteActive = (path) => {
   align-items: center;
 }
 
-.user-menu {
+.logo-container {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  color: #1c1c1e;
+  gap: 8px;
+}
+
+.logo-img {
+  width: 30px;
+  height: 30px;
+}
+
+.logo-text-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.logo-text {
   font-size: 14px;
-  background: transparent;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  transition: all 0.2s ease;
+  font-weight: 600;
+  width: 100%;
 }
 
-.user-menu:hover {
-  background: rgba(0, 0, 0, 0.05);
-}
-
-.user-icon {
-  width: 20px;
-  height: 20px;
-  color: #1c1c1e;
+.logo-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  color: #666;
+  width: 100%;
+  text-align: center;
+  letter-spacing: 3px;
 }
 
 .main-content {

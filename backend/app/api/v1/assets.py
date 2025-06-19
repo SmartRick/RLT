@@ -131,7 +131,7 @@ def get_asset_ai_engine_headers(asset_id):
     headers = ConfigService.get_asset_ai_engine_headers(asset_id)
     if headers is None:
         return response_template("not_found", code=1004, msg="资产不存在")
-    return success_json(headers)
+    return success_json(headers) 
 
 @assets_bp.route('/<int:asset_id>/toggle', methods=['POST'])
 @exception_handler

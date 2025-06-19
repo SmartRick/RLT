@@ -25,8 +25,8 @@ class MarkingService:
         """获取可用于标记的资产"""
         try:
             assets = AssetService.verify_all_assets('ai_engine')
-            # 过滤出任务数量未达到上限的资产
-            return [asset for asset in assets if asset.marking_tasks_count < asset.max_concurrent_tasks]
+            # 标记资产最大并发数固定为10
+            return [asset for asset in assets if asset.marking_tasks_count < 10]
         except Exception as e:
             logger.error(f"获取可用标记资产失败: {str(e)}")
             return []

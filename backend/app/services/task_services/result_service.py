@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
 from sqlalchemy.orm import Session
 from ...models.task import Task, TaskStatus, TaskExecutionHistory, TaskImage
@@ -11,6 +11,10 @@ import re
 from ...models.asset import Asset
 from ...services.task_services.base_task_service import BaseTaskService
 from ...services.config_service import ConfigService
+import json
+import zipfile
+import tempfile
+import time
 
 logger = setup_logger('result_service')
 
@@ -696,3 +700,171 @@ class ResultService:
             logger.error(f"删除执行历史记录失败: {str(e)}", exc_info=True)
             db.rollback()
             raise e
+
+    @staticmethod
+    def export_marked_files(task_id: int) -> Optional[Dict]:
+        """
+        导出打标后的文件为ZIP压缩包
+        
+        Args:
+            task_id: 任务ID
+            
+        Returns:
+            包含ZIP文件路径和下载文件名的字典，如果任务不存在或未打标则返回None
+        """
+        try:
+            with get_db() as db:
+                task = db.query(Task).filter(Task.id == task_id).first()
+                if not task:
+                    logger.warning(f"任务不存在: {task_id}")
+                    return None
+                    
+                # 检查任务是否已完成打标
+                if task.status not in [TaskStatus.MARKED, TaskStatus.COMPLETED, TaskStatus.TRAINING, TaskStatus.TRAINED]:
+                    logger.warning(f"任务 {task_id} 尚未完成打标，当前状态: {task.status}")
+                    return None
+                
+                # 检查打标输出目录是否存在
+                if not task.marked_images_path or not os.path.exists(task.marked_images_path):
+                    logger.warning(f"任务 {task_id} 的打标输出目录不存在: {task.marked_images_path}")
+                    return None
+                    
+                # 创建临时文件用于存储ZIP
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+                temp_file.close()
+                
+                # 创建ZIP文件
+                with zipfile.ZipFile(temp_file.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    # 遍历打标输出目录中的所有文件
+                    for root, dirs, files in os.walk(task.marked_images_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            # 计算相对路径，保持目录结构
+                            arcname = os.path.relpath(file_path, task.marked_images_path)
+                            # 添加文件到ZIP（不包含子目录）
+                            if os.path.dirname(arcname) == '':
+                                zipf.write(file_path, arcname)
+                
+                # 生成下载文件名（包含任务名称）
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                # 确保任务名称中不包含非法字符
+                safe_task_name = re.sub(r'[\\/*?:"<>|]', "_", task.name)
+                download_name = f"{safe_task_name}_marked_files_{timestamp}.zip"
+                
+                logger.info(f"任务 {task_id} ({task.name}) 的打标文件已导出到: {temp_file.name}")
+                return {
+                    "file_path": temp_file.name,
+                    "download_name": download_name
+                }
+                
+        except Exception as e:
+            logger.error(f"导出任务 {task_id} 打标文件失败: {str(e)}", exc_info=True)
+            return None
+
+    @staticmethod
+    def import_marked_files(db: Session, task_id: Optional[int], file_path: str, original_name: str, is_zip: bool = True) -> Dict:
+        """
+        导入打标文件（ZIP压缩包或文件夹）
+        
+        Args:
+            db: 数据库会话
+            task_id: 任务ID，如果为None则创建新任务
+            file_path: 上传文件的临时路径
+            original_name: 原始文件名或文件夹名（用于创建任务名称）
+            is_zip: 是否为ZIP文件，False表示已解压的文件夹
+            
+        Returns:
+            包含导入结果的字典
+        """
+        try:
+            imported_files = []
+            name_without_ext = os.path.splitext(original_name)[0]
+            task_name = name_without_ext
+            
+            # 创建新任务或获取现有任务
+            if task_id is None:
+                # 创建新任务
+                task = Task(
+                    name=task_name,
+                    status=TaskStatus.SUBMITTED,
+                    description=f"从 {original_name} 导入的任务"
+                )
+                db.add(task)
+                db.flush()  # 获取任务ID
+                task_id = task.id
+                
+                # 创建任务目录结构
+                BaseTaskService._create_task_directories(task)
+                db.commit()
+                
+                logger.info(f"已创建新任务: {task_id} - {task_name}")
+            else:
+                # 获取现有任务
+                task = db.query(Task).filter(Task.id == task_id).first()
+                if not task:
+                    return {
+                        "success": False,
+                        "message": f"任务 {task_id} 不存在"
+                    }
+                
+                # 任务必须处于UPLOADED或SUBMITTED状态才能导入
+                if task.status not in [TaskStatus.UPLOADED, TaskStatus.SUBMITTED]:
+                    return {
+                        "success": False,
+                        "message": f"任务状态为 {task.status}，不能导入打标文件"
+                    }
+                
+                # 确保任务有标记目录
+                if not task.marked_images_path:
+                    # 初始化目录
+                    BaseTaskService._create_task_directories(task)
+                    db.commit()
+            
+            # 创建或确保marked_images_path存在
+            if not os.path.exists(task.marked_images_path):
+                os.makedirs(task.marked_images_path, exist_ok=True)
+            
+            # 处理ZIP文件
+            if is_zip:
+                # 解压文件到marked_images_path
+                with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                    for file_info in zip_ref.infolist():
+                        # 跳过目录和以.开头的隐藏文件
+                        if file_info.filename.endswith('/') or os.path.basename(file_info.filename).startswith('.'):
+                            continue
+                        
+                        # 只提取根目录下的文件，不包含子目录
+                        if '/' not in file_info.filename and '\\' not in file_info.filename:
+                            zip_ref.extract(file_info, task.marked_images_path)
+                            imported_files.append(file_info.filename)
+            else:
+                # 复制文件夹中的文件到marked_images_path
+                src_files = os.listdir(file_path)
+                for file_name in src_files:
+                    src_file_path = os.path.join(file_path, file_name)
+                    # 只复制文件，不包含目录和隐藏文件
+                    if os.path.isfile(src_file_path) and not file_name.startswith('.'):
+                        dst_file_path = os.path.join(task.marked_images_path, file_name)
+                        import shutil
+                        shutil.copy2(src_file_path, dst_file_path)
+                        imported_files.append(file_name)
+            
+            # 更新任务状态为已标记
+            task.update_status(TaskStatus.MARKED, f"已导入 {len(imported_files)} 个打标文件", db=db)
+            
+            # 返回结果
+            return {
+                "success": True,
+                "message": f"成功导入 {len(imported_files)} 个打标文件",
+                "task_id": task.id,
+                "task_name": task.name,
+                "imported_files": imported_files
+            }
+            
+        except Exception as e:
+            logger.error(f"导入打标文件失败: {str(e)}", exc_info=True)
+            db.rollback()
+            return {
+                "success": False,
+                "message": f"导入打标文件失败: {str(e)}"
+            }

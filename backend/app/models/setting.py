@@ -73,6 +73,7 @@ class Setting(Base):
             'baidu_translate_config': {
                 'type': 'json',
                 'value': json.dumps({
+                    'enabled': False,
                     'app_id': '20250327002316619',
                     'secret_key': '67qaSQg_WdfWqQFvx7ml',
                     'api_url': 'https://fanyi-api.baidu.com/api/trans/vip/translate',
