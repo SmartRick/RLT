@@ -46,10 +46,6 @@
           <PlayIcon class="btn-icon" />
           开始训练
         </button>
-        <div v-if="showAutoTrainingInfo" class="auto-training-info">
-          <InformationCircleIcon class="info-icon" />
-          自动训练已开启
-        </div>
         <button v-if="canStop" class="mac-btn error" :disabled="isLoading" @click="handleStop">
           <StopIcon class="btn-icon" />
           终止任务
@@ -235,6 +231,7 @@ import { tasksApi } from '@/api/tasks'
 import { settingsApi } from '@/api/settings'
 import { formatDate } from '@/utils/datetime'
 import message from '@/utils/message'
+import { emitter } from '@/utils/eventBus'
 import ImageGrid from '@/components/tasks/ImageGrid.vue'
 import ImageUploader from '@/components/tasks/ImageUploader.vue'
 import ImageViewer from '@/components/tasks/ImageViewer.vue'
@@ -281,10 +278,6 @@ const showTrainingDetailsModal = ref(false)
 const previewSource = ref('task') // 'task' 或 'training'
 const trainingModelImages = ref([]) // 训练模型预览图片数组
 
-// 自动训练提示信息
-const showAutoTrainingInfo = computed(() => {
-  return task.value?.status === 'MARKED' && task.value?.auto_training === true
-})
 
 // 计算预估训练步数
 const estimatedTrainingSteps = computed(() => {
@@ -591,6 +584,9 @@ const handleSubmitMarking = async () => {
 
     message.success('标记任务已提交')
     task.value = response
+    
+    // 触发全局事件，通知TaskList组件刷新
+    emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
     message.error(error)
   } finally {
@@ -605,6 +601,9 @@ const handleStartTraining = async () => {
     const response = await tasksApi.startTraining(taskId.value)
     message.success('开始训练')
     task.value = response
+    
+    // 触发全局事件，通知TaskList组件刷新
+    emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
     // message.error(error)
   } finally {
@@ -619,6 +618,12 @@ const handleRestart = async () => {
     const response = await tasksApi.restartTask(taskId.value)
     message.success('任务已重启')
     task.value = response
+    
+    // 重启任务后立即完整获取任务信息
+    await fetchTask()
+    
+    // 触发全局事件，通知TaskList组件刷新
+    emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
     // message.error(error)
   } finally {
@@ -633,6 +638,9 @@ const handleCancel = async () => {
     const response = await tasksApi.cancelTask(taskId.value)
     message.success('任务已取消')
     task.value = response
+    
+    // 触发全局事件，通知TaskList组件刷新
+    emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
     // message.error(error)
   } finally {
@@ -647,6 +655,12 @@ const handleStop = async () => {
     const response = await tasksApi.stopTask(taskId.value)
     message.success('任务已终止')
     task.value = response
+    
+    // 终止任务后立即完整获取任务信息
+    await fetchTask()
+    
+    // 触发全局事件，通知TaskList组件刷新
+    emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
     message.error('终止任务失败')
   } finally {

@@ -80,6 +80,7 @@ const props = defineProps({
 const chartContainer = ref(null)
 const chart = ref(null)
 const isComponentMounted = ref(false)
+const updateTimer = ref(null) // 添加防抖定时器
 
 // 计算属性
 const hasData = computed(() => props.lossData && props.lossData.length > 0)
@@ -366,6 +367,8 @@ const updateChart = () => {
             }
           }
         ]
+      }, {
+        notMerge: false // 使用合并模式而不是完全替换
       })
     }
   } catch (error) {
@@ -389,9 +392,8 @@ const handleResize = () => {
 // 监听lossData变化，更新图表
 watch(() => props.lossData, () => {
   if (isComponentMounted.value) {
-    console.log('从数据监听中更新')
     nextTick(() => {
-      updateChart()
+        updateChart()
     })
   }
 }, { deep: true })
@@ -399,11 +401,23 @@ watch(() => props.lossData, () => {
 // 组件挂载时
 onMounted(() => {
   isComponentMounted.value = true
+  nextTick(() => {
+    if (props.lossData.length > 0) {
+      initChart()
+      updateChart()
+    }
+  })
 })
 
 // 组件卸载时
 onUnmounted(() => {
   isComponentMounted.value = false
+  
+  // 清除防抖定时器
+  if (updateTimer.value) {
+    clearTimeout(updateTimer.value)
+    updateTimer.value = null
+  }
   
   // 移除窗口大小变化监听
   window.removeEventListener('resize', handleResize)

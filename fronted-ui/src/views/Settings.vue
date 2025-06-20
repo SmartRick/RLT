@@ -128,11 +128,6 @@
           <div class="toggle-label">自动裁剪</div>
           <SwitchButton v-model="form.mark_config.auto_crop" />
         </div>
-        
-        <div class="form-group toggle-group">
-          <div class="toggle-label">自动标签</div>
-          <SwitchButton v-model="form.mark_config.auto_tag" />
-        </div>
       </div>
       
       <div class="form-row">
@@ -166,12 +161,23 @@
           <label>
             <div class="label-text">默认裁剪比例</div>
           </label>
-          <select v-model="form.mark_config.default_crop_ratio" class="mac-input">
-            <option v-for="ratio in form.mark_config.crop_ratios" :key="ratio" :value="ratio">
+          <select v-model="form.mark_config.crop_ratio" class="mac-input">
+            <option v-for="ratio in form.mark_config.available_crop_ratios" :key="ratio" :value="ratio">
               {{ ratio }}
             </option>
           </select>
         </div>
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <div class="label-text">打标算法</div>
+        </label>
+        <select v-model="form.mark_config.mark_algorithm" class="mac-input">
+          <option v-for="algorithm in form.mark_config.available_algorithms" :key="algorithm" :value="algorithm">
+            {{ algorithm }}
+          </option>
+        </select>
       </div>
     </div>
 
@@ -424,11 +430,24 @@ const form = ref({
   // 标记配置
   mark_config: {
     auto_crop: true,
-    auto_tag: true,
-    crop_ratios: [],
-    default_crop_ratio: '1:1',
+    available_crop_ratios: ['1:1', '3:2', '4:3', '2:3', '16:9', '9:16'],
+    crop_ratio: '1:1',
     max_tags: 20,
-    min_confidence: 0.6
+    min_confidence: 0.6,
+    mark_algorithm: 'wd-v1-4-convnext-tagger-v2',
+    available_algorithms: [
+      'wd-vit-tagger-v3',
+      'wd-swinv2-tagger-v3',
+      'wd-convnext-tagger-v3',
+      'wd-v1-4-moat-tagger-v2',
+      'wd-v1-4-convnextv2-tagger-v2',
+      'wd-v1-4-convnext-tagger-v2',
+      'wd-v1-4-convnext-tagger',
+      'wd-v1-4-vit-tagger-v2',
+      'wd-v1-4-swinv2-tagger-v2',
+      'wd-v1-4-vit-tagger',
+      'joycaption2'
+    ]
   },
   
   // AI引擎配置

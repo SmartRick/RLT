@@ -42,3 +42,4 @@ pnpm-debug.log*
 /dist/
 build/
 data/
+__pycache__/

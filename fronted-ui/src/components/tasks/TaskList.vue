@@ -177,7 +177,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { 
   MagnifyingGlassIcon, 
@@ -195,6 +195,7 @@ import {
 import { tasksApi } from '@/api/tasks'
 import { formatDate } from '@/utils/datetime'
 import message from '@/utils/message'
+import { emitter } from '@/utils/eventBus'
 import { 
   getStatusText as getStatusTextUtil, 
   getStatusClass as getStatusClassUtil, 
@@ -523,6 +524,20 @@ watch(() => route.path, (newPath) => {
     fetchTasks()
   }
 }, { immediate: true })
+
+// 组件挂载时获取任务列表并添加事件监听
+onMounted(() => {
+  // 监听任务状态变化事件
+  emitter.on('task-status-changed', (taskId) => {
+    console.log('收到任务状态变化事件:', taskId)
+    fetchTasks() // 刷新任务列表
+  })
+})
+
+// 组件卸载时移除事件监听
+onUnmounted(() => {
+  emitter.off('task-status-changed')
+})
 
 // 暴露方法给父组件
 defineExpose({

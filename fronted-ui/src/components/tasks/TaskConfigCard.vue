@@ -57,7 +57,7 @@
                 <span class="label-en">default_crop_ratio</span>
               </label>
               <select v-model="config.mark_config.default_crop_ratio" class="mac-input" :disabled="!canEdit">
-                <option v-for="ratio in config.mark_config.crop_ratios" :key="ratio" :value="ratio">{{ ratio }}</option>
+                <option v-for="ratio in defaultMarkConfig.crop_ratios" :key="ratio" :value="ratio">{{ ratio }}</option>
               </select>
             </div>
           </div>
@@ -78,6 +78,16 @@
             </label>
             <input type="number" v-model.number="config.mark_config.max_tags" min="1" max="100" class="mac-input"
               :disabled="!canEdit" />
+          </div>
+
+          <div class="form-group">
+            <label>
+              <span class="label-text">打标算法</span>
+              <span class="label-en">mark_algorithm</span>
+            </label>
+            <select v-model="config.mark_config.mark_algorithm" class="mac-input" :disabled="!canEdit">
+              <option v-for="algorithm in defaultMarkConfig.available_algorithms" :key="algorithm" :value="algorithm">{{ algorithm }}</option>
+            </select>
           </div>
         </div>
       </div>
@@ -452,7 +462,21 @@ const defaultMarkConfig = {
   default_crop_ratio: '1:1',
   min_confidence: 0.6,
   max_tags: 20,
-  trigger_words: ''
+  trigger_words: '',
+  mark_algorithm: 'wd-v1-4-convnext-tagger-v2',
+  available_algorithms: [
+    'wd-vit-tagger-v3',
+    'wd-swinv2-tagger-v3',
+    'wd-convnext-tagger-v3',
+    'wd-v1-4-moat-tagger-v2',
+    'wd-v1-4-convnextv2-tagger-v2',
+    'wd-v1-4-convnext-tagger-v2',
+    'wd-v1-4-convnext-tagger',
+    'wd-v1-4-vit-tagger-v2',
+    'wd-v1-4-swinv2-tagger-v2',
+    'wd-v1-4-vit-tagger',
+    'joycaption2'
+  ]
 };
 
 const props = defineProps({

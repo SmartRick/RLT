@@ -70,11 +70,25 @@ class Config:
     # 打标全局配置
     MARK_CONFIG = {
         'auto_crop': True,  # 是否自动裁剪图片
-        'crop_ratios': ['1:1', '3:2', '4:3', '2:3', '16:9', '9:16'],  # 裁剪比例选项
-        'default_crop_ratio': '1:1',  # 默认裁剪比例
+        'crop_ratio': '1:1',  # 默认裁剪比例
+        'available_crop_ratios':['1:1', '3:2', '4:3', '2:3', '16:9', '9:16'],
         'min_confidence': 0.6,  # 自动标签最小置信度
         'max_tags': 300,  # 最大标签数量
-        'trigger_words': ''  # 触发词
+        'trigger_words': '',  # 触发词
+        'mark_algorithm': 'wd-v1-4-convnext-tagger-v2',  # 默认打标算法
+        'available_algorithms': [  # 可用的打标算法列表
+            'wd-vit-tagger-v3',
+            'wd-swinv2-tagger-v3',
+            'wd-convnext-tagger-v3',
+            'wd-v1-4-moat-tagger-v2',
+            'wd-v1-4-convnextv2-tagger-v2',
+            'wd-v1-4-convnext-tagger-v2',
+            'wd-v1-4-convnext-tagger',
+            'wd-v1-4-vit-tagger-v2',
+            'wd-v1-4-swinv2-tagger-v2',
+            'wd-v1-4-vit-tagger',
+            'joycaption2'
+        ]
     }
     
     # 请求头全局配置
@@ -116,7 +130,7 @@ class Config:
         'loss_type': 'l2',
         'guidance_scale': 1,
         'prior_loss_weight': 1,
-        'resolution': '512,512',
+        'resolution': '768,768',
         'enable_bucket': True,
         'min_bucket_reso': 256,
         'max_bucket_reso': 1024,
@@ -164,8 +178,8 @@ class Config:
         
         # 预览图生成参数（兼容旧版本）
         'generate_preview':True,#是否生成预览图
-        'use_image_tags': False,           # 是否使用图片标签生成预览图
-        'max_image_tags': 5,               # 最多采用图片提示词数量
+        'use_image_tags': True,           # 是否使用图片标签生成预览图
+        'max_image_tags': 1,               # 最多采用图片提示词数量
         'positive_prompts': 'masterpiece, best quality, 1girl, solo',
         'negative_prompts': 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry',
         'sample_width': 768,

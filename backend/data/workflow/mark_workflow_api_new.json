@@ -1,7 +1,7 @@
 {
     "35": {
         "inputs": {
-            "aspect_ratio": "1:1",
+            "aspect_ratio": "2:3",
             "proportional_width": 512,
             "proportional_height": 512,
             "method": "lanczos",
@@ -70,7 +70,7 @@
     },
     "155": {
         "inputs": {
-            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\2_3_mark"
+            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1_7_mark"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -80,7 +80,7 @@
     "168": {
         "inputs": {
             "source": [
-                "220",
+                "226",
                 0
             ],
             "to_replace": ". This is ",
@@ -128,7 +128,7 @@
             "save_mode": "Overwrite",
             "file_mode": "Windows",
             "file_format": "na",
-            "seed": 419647298251938,
+            "seed": 126166310172827,
             "TextFileNames": [
                 "219",
                 0
@@ -155,7 +155,7 @@
             ],
             "image_format": "png",
             "image_quality": 100,
-            "seed": 986268145008344,
+            "seed": 654270775057616,
             "images": [
                 "209",
                 0
@@ -168,7 +168,7 @@
     },
     "208": {
         "inputs": {
-            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\uploads\\2"
+            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\uploads\\1"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -194,7 +194,7 @@
     },
     "210": {
         "inputs": {
-            "string": "Ink Dragon"
+            "string": "Moonlight girl"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -227,7 +227,8 @@
             ],
             "image_load_cap": 0,
             "start_index": 0,
-            "load_always": true
+            "load_always": true,
+            "sort_method": "None"
         },
         "class_type": "LoadImageListFromDir //Inspire",
         "_meta": {
@@ -255,29 +256,11 @@
                 1
             ],
             "split_by": ".",
-            "from_right": "true"
+            "from_right": "false"
         },
         "class_type": "JWStringSplit",
         "_meta": {
             "title": "String Split"
-        }
-    },
-    "220": {
-        "inputs": {
-            "model": "wd-v1-4-moat-tagger-v2",
-            "threshold": 0.6,
-            "character_threshold": 0.8500000000000002,
-            "replace_underscore": false,
-            "trailing_comma": false,
-            "exclude_tags": "",
-            "image": [
-                "217",
-                0
-            ]
-        },
-        "class_type": "WD14Tagger|pysssss",
-        "_meta": {
-            "title": "WD14反推提示词"
         }
     },
     "223": {
@@ -292,6 +275,34 @@
         "class_type": "JWStringReplace",
         "_meta": {
             "title": "String Replace"
+        }
+    },
+    "226": {
+        "inputs": {
+            "caption_type": "Descriptive",
+            "caption_length": "long",
+            "low_vram": true,
+            "joy_two_pipeline": [
+                "227",
+                0
+            ],
+            "image": [
+                "217",
+                0
+            ]
+        },
+        "class_type": "Joy_caption_two",
+        "_meta": {
+            "title": "Joy Caption Two"
+        }
+    },
+    "227": {
+        "inputs": {
+            "model": "John6666/Llama-3.1-8B-Lexi-Uncensored-V2-nf4"
+        },
+        "class_type": "Joy_caption_two_load",
+        "_meta": {
+            "title": "Joy Caption Two Load"
         }
     }
 }
