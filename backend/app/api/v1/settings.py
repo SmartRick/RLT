@@ -72,3 +72,21 @@ def get_task_training_config(task_id):
     if training_config is None:
         return response_template("not_found", code=1004, msg="任务不存在或无法获取训练配置")
     return success_json(training_config) 
+
+@settings_bp.route('/assets/<int:asset_id>/training-config', methods=['GET'])
+@exception_handler
+def get_asset_lora_config(asset_id):
+    """获取资产的Lora训练配置"""
+    config = ConfigService.get_asset_lora_config(asset_id)
+    if config is None:
+        return response_template("not_found", code=1004, msg="资产不存在或获取配置失败")
+    return success_json(config)
+
+@settings_bp.route('/assets/<int:asset_id>/ai-engine-config', methods=['GET'])
+@exception_handler
+def get_asset_ai_engine_config(asset_id):
+    """获取资产的AI引擎配置"""
+    config = ConfigService.get_asset_ai_engine_config(asset_id)
+    if config is None:
+        return response_template("not_found", code=1004, msg="资产不存在或获取配置失败")
+    return success_json(config) 

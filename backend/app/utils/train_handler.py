@@ -8,88 +8,6 @@ from dataclasses import dataclass, field
 
 logger = setup_logger('train_handler')
 
-@dataclass
-class TrainConfig:
-    """训练配置参数类"""
-    # 基础配置
-    model_train_type: str = "flux-lora"
-    train_data_dir: str = ""
-    output_name: str = ""
-    output_dir: str = ""
-    
-    # 模型路径
-    pretrained_model_name_or_path: str = ""
-    ae: str = ""
-    clip_l: str = ""
-    t5xxl: str = ""
-    
-    # 训练参数
-    resolution: str = "768,768"
-    enable_bucket: bool = True
-    min_bucket_reso: int = 256
-    max_bucket_reso: int = 2048
-    bucket_reso_steps: int = 64
-    bucket_no_upscale: bool = True
-    
-    # 保存配置
-    save_model_as: str = "safetensors"
-    save_precision: str = "bf16"
-    save_every_n_epochs: int = 2
-    
-    # 训练超参数
-    max_train_epochs: int = 10
-    train_batch_size: int = 2
-    gradient_checkpointing: bool = True
-    gradient_accumulation_steps: int = 1
-    network_train_unet_only: bool = True
-    network_train_text_encoder_only: bool = False
-    
-    # 学习率相关
-    learning_rate: float = 0.0001
-    unet_lr: float = 0.0001
-    text_encoder_lr: float = 0.00001
-    lr_scheduler: str = "cosine_with_restarts"
-    lr_warmup_steps: int = 0
-    lr_scheduler_num_cycles: int = 1
-    
-    # 网络配置
-    optimizer_type: str = "AdamW8bit"
-    network_module: str = "networks.lora_flux"
-    network_dim: int = 32
-    network_alpha: int = 32
-    
-    # 日志配置
-    log_with: str = "tensorboard"
-    logging_dir: str = "./logs"
-    
-    # 其他配置
-    caption_extension: str = ".txt"
-    shuffle_caption: bool = False
-    keep_tokens: int = 0
-    seed: int = 1337
-    clip_skip: int = 2
-    mixed_precision: str = "bf16"
-    fp8_base: bool = True
-    sdpa: bool = True
-    lowram: bool = False
-    cache_latents: bool = True
-    cache_latents_to_disk: bool = True
-    cache_text_encoder_outputs: bool = True
-    cache_text_encoder_outputs_to_disk: bool = True
-    persistent_data_loader_workers: bool = True
-    
-    # 高级参数
-    timestep_sampling: str = "sigmoid"
-    sigmoid_scale: int = 1
-    model_prediction_type: str = "raw"
-    discrete_flow_shift: int = 1
-    loss_type: str = "l2"
-    guidance_scale: int = 1
-    prior_loss_weight: int = 1
-    
-    # 额外字段，用于存储任意其他参数
-    extra_params: Dict[str, Any] = field(default_factory=dict)
-
 class TrainRequestHandler:
     def __init__(self, asset=None):
         """
@@ -110,7 +28,7 @@ class TrainRequestHandler:
         
         self.api_base_url = f"{self.asset_ip}:{self.training_port}/api"
 
-    def train_request(self, train_config: TrainConfig) -> str:
+    def train_request(self, train_config: Dict[str, Any],train_headers: Optional[Dict[str, Any]] = None) -> str:
         """
         发送训练请求
         :param train_config: 训练配置参数
@@ -119,30 +37,17 @@ class TrainRequestHandler:
         # 构建请求
         url = f"{self.api_base_url}/run"
         
-        # 将TrainConfig对象转换为字典
-        payload = {}
-        for key, value in train_config.__dict__.items():
-            if key != 'extra_params':
-                payload[key] = value
-        
-        # 添加额外参数
-        if hasattr(train_config, 'extra_params'):
-            for key, value in train_config.extra_params.items():
-                payload[key] = value
-        
         headers = {
             "Content-Type": "application/json",
             "Accept": "*/*"
         }
-        
-        # 如果有自定义请求头，添加到headers
-        if hasattr(train_config, 'headers') and isinstance(train_config.headers, dict):
-            headers.update(train_config.headers)
+        if train_headers:
+            headers.update(train_headers)
         
         logger.debug(f"发送训练请求到 {url}")
         
         # 发送请求
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
+        response = requests.post(url, json=train_config, headers=headers, timeout=60)
         response.raise_for_status()
         
         data = response.json()
@@ -168,7 +73,7 @@ class TrainRequestHandler:
         logger.info(f"训练请求发送成功，task_id: {task_id}")
         return task_id
 
-    def check_status(self, task_id: str, train_config: Optional[TrainConfig] = None) -> Tuple[bool, bool, Dict[str, Any]]:
+    def check_status(self, task_id: str, train_headers: Optional[Dict[str, Any]] = None) -> Tuple[bool, bool, Dict[str, Any]]:
         """
         检查训练任务状态
         :param task_id: 任务ID
@@ -177,7 +82,7 @@ class TrainRequestHandler:
         """
         try:
             # 获取所有任务列表
-            tasks_data = self.get_tasks(train_config)
+            tasks_data = self.get_tasks(train_headers)
             
             # 从任务列表中查找指定任务
             task_info = None
@@ -200,7 +105,7 @@ class TrainRequestHandler:
             # 返回处理中状态，允许后续重试
             raise e
         
-    def cancel_training(self, task_id: str, train_config: Optional[TrainConfig] = None) -> bool:
+    def cancel_training(self, task_id: str, train_headers: Optional[Dict[str,any]] = None) -> bool:
         """
         取消训练任务
         :param task_id: 任务ID
@@ -211,9 +116,8 @@ class TrainRequestHandler:
         logger.debug(f"取消训练任务: {url}")
         
         headers = {}
-        # 如果有自定义请求头，添加到headers
-        if train_config and hasattr(train_config, 'headers') and isinstance(train_config.headers, dict):
-            headers.update(train_config.headers)
+        if train_headers:
+            headers.update(train_headers)
         
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
@@ -294,7 +198,7 @@ class TrainRequestHandler:
         
         return data
 
-    def get_tasks(self, train_config: Optional[TrainConfig] = None) -> Dict:
+    def get_tasks(self, train_headers: Optional[Dict[str, Any]] = None) -> Dict:
         """
         获取所有训练任务列表
         :param train_config: 可选的训练配置参数
@@ -304,9 +208,8 @@ class TrainRequestHandler:
         logger.debug(f"获取训练任务列表: {url}")
         
         headers = {}
-        # 如果有自定义请求头，添加到headers
-        if train_config and hasattr(train_config, 'headers') and isinstance(train_config.headers, dict):
-            headers.update(train_config.headers)
+        if train_headers:
+            headers.update(train_headers)
         
         try:
             response = requests.get(url, headers=headers, timeout=30)

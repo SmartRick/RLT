@@ -23,15 +23,10 @@
             <ClockIcon class="btn-icon" />
             训练历史
           </button>
-          
+
           <!-- 使用新组件 -->
-          <TrainingHistoryDropdown
-            :visible="showHistoryDropdown"
-            :records="trainingHistory"
-            :loading="isLoadingHistory"
-            :position="historyDropdownPosition"
-            @select="openHistoryDetails"
-          />
+          <TrainingHistoryDropdown :visible="showHistoryDropdown" :records="trainingHistory" :loading="isLoadingHistory"
+            :position="historyDropdownPosition" @select="openHistoryDetails" />
         </div>
 
         <button v-if="canViewTrainingDetails" class="mac-btn info" @click="showTrainingDetailsModal = true">
@@ -156,7 +151,8 @@
                 <span class="label">预估训练步数</span>
                 <div class="training-steps-info">
                   <div class="steps-value">{{ estimatedTrainingSteps }}</div>
-                  <div class="steps-formula">图片数量({{ task?.images?.length || 0 }}) × 重复次数({{ getRepeatNum }}) × 训练轮次({{ getMaxTrainEpochs }}) ÷ 批次大小({{ getTrainBatchSize }})</div>
+                  <div class="steps-formula">图片数量({{ task?.images?.length || 0 }}) × 重复次数({{ getRepeatNum }}) × 训练轮次({{
+                    getMaxTrainEpochs }}) ÷ 批次大小({{ getTrainBatchSize }})</div>
                 </div>
               </div>
             </div>
@@ -168,12 +164,7 @@
         </div>
 
         <!-- 任务配置卡片 -->
-        <TaskConfigCard 
-          v-if="task" 
-          :task-id="taskId" 
-          :can-edit="canEditConfig" 
-          @config-changed="handleConfigChange"
-        />
+        <TaskConfigCard v-if="task" :task-id="taskId" :can-edit="canEditConfig" @config-changed="handleConfigChange" />
       </div>
     </div>
 
@@ -189,7 +180,8 @@
       :images="previewSource === 'task' ? getTaskImagesUrls() : trainingModelImages" />
 
     <!-- 训练详情模态框 -->
-    <BaseModal v-model="showTrainingDetailsModal" :width="70" :loading="false" :showFooter="false" :preventKeydownClose="showPreview">
+    <BaseModal v-model="showTrainingDetailsModal" :width="70" :loading="false" :showFooter="false"
+      :preventKeydownClose="showPreview">
       <template #body>
         <TrainingDetails :taskId="taskId" :taskName="task?.name || ''" :isTraining="task?.status === 'TRAINING'"
           @preview-image="handlePreview" @model-images-change="updateTrainingModelImages" />
@@ -197,14 +189,11 @@
     </BaseModal>
 
     <!-- 训练历史详情模态框 -->
-    <BaseModal v-model="showHistoryDetailsModal" :width="70" :loading="false" :showFooter="false" :preventKeydownClose="showPreview">
+    <BaseModal v-model="showHistoryDetailsModal" :width="70" :loading="false" :showFooter="false"
+      :preventKeydownClose="showPreview">
       <template #body>
-        <TrainingHistoryDetails 
-          v-if="selectedHistoryRecord"
-          :historyRecord="selectedHistoryRecord" 
-          :taskName="task?.name || ''"
-          @preview-image="handlePreview"
-        />
+        <TrainingHistoryDetails v-if="selectedHistoryRecord" :historyRecord="selectedHistoryRecord"
+          :taskName="task?.name || ''" @preview-image="handlePreview" />
       </template>
     </BaseModal>
   </div>
@@ -278,55 +267,47 @@ const showTrainingDetailsModal = ref(false)
 const previewSource = ref('task') // 'task' 或 'training'
 const trainingModelImages = ref([]) // 训练模型预览图片数组
 
-
 // 计算预估训练步数
 const estimatedTrainingSteps = computed(() => {
   if (!task.value?.images?.length) return '0';
-  
+
   const imageCount = task.value.images.length;
-  // 只使用从settings接口获取的配置和本地配置
-  const trainingConfig = task.value?.settings?.training_config || 
-                         localConfig.value?.training_config;
-  
-  if (!trainingConfig) return '计算中...';
-  
-  const maxTrainEpochs = trainingConfig.max_train_epochs || 10;
-  const trainBatchSize = trainingConfig.train_batch_size || 1;
-  const repeatNum = trainingConfig.repeat_num || 1;
-  
-  let steps = Math.floor(imageCount * repeatNum * maxTrainEpochs / trainBatchSize);
-  
-  // 如果是奇数，加1
-  if (steps % 2 !== 0) {
-    steps += 1;
+
+  // 如果没有配置，返回计算中
+  if (!task.value?.settings?.training_config && !localConfig.value?.training_config) {
+    return '计算中...';
   }
+
+  // 获取训练参数
+  const repeat_num = getTrainingConfigParam('repeat_num', 1);
+  const max_train_epochs = getTrainingConfigParam('max_train_epochs', 10);
+  const train_batch_size = getTrainingConfigParam('train_batch_size', 1);
   
-  return steps.toLocaleString();
+  // 计算步数
+  let steps = Math.floor(imageCount * repeat_num * max_train_epochs / train_batch_size);
+
+  // 如果是奇数，加1
+  return (steps + (steps % 2)).toLocaleString();
 });
+
+// 获取训练配置参数的通用函数
+const getTrainingConfigParam = (paramName, defaultValue) => {
+  const useGlobalConfig = localConfig.value?.use_global_training_config === true;
+  const settingConfig = task.value?.settings?.training_config;
+  const trainingConfig = useGlobalConfig ?
+    settingConfig :
+    localConfig.value?.training_config || settingConfig;
+  return trainingConfig?.[paramName] || settingConfig?.[paramName] || defaultValue;
+};
 
 // 获取训练配置中的重复次数
-const getRepeatNum = computed(() => {
-  // 只使用从settings接口获取的配置和本地配置
-  const trainingConfig = task.value?.settings?.training_config || 
-                         localConfig.value?.training_config;
-  return trainingConfig?.repeat_num || 1;
-});
+const getRepeatNum = computed(() => getTrainingConfigParam('repeat_num', 1));
 
 // 获取训练配置中的最大训练轮次
-const getMaxTrainEpochs = computed(() => {
-  // 只使用从settings接口获取的配置和本地配置
-  const trainingConfig = task.value?.settings?.training_config || 
-                         localConfig.value?.training_config;
-  return trainingConfig?.max_train_epochs || 10;
-});
+const getMaxTrainEpochs = computed(() => getTrainingConfigParam('max_train_epochs', 10));
 
 // 获取训练配置中的批次大小
-const getTrainBatchSize = computed(() => {
-  // 只使用从settings接口获取的配置和本地配置
-  const trainingConfig = task.value?.settings?.training_config || 
-                         localConfig.value?.training_config;
-  return trainingConfig?.train_batch_size || 1;
-});
+const getTrainBatchSize = computed(() => getTrainingConfigParam('train_batch_size', 1));
 
 // 计算是否可以查看训练详情
 const canViewTrainingDetails = computed(() => {
@@ -397,7 +378,7 @@ const fetchTask = async () => {
 
       // 获取训练设置配置
       await fetchTrainingSettings()
-      
+
       // 根据任务状态决定是否需要继续自动刷新
       if (needsAutoRefresh.value) {
         startAutoRefresh()
@@ -584,7 +565,7 @@ const handleSubmitMarking = async () => {
 
     message.success('标记任务已提交')
     task.value = response
-    
+
     // 触发全局事件，通知TaskList组件刷新
     emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
@@ -601,7 +582,7 @@ const handleStartTraining = async () => {
     const response = await tasksApi.startTraining(taskId.value)
     message.success('开始训练')
     task.value = response
-    
+
     // 触发全局事件，通知TaskList组件刷新
     emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
@@ -618,10 +599,10 @@ const handleRestart = async () => {
     const response = await tasksApi.restartTask(taskId.value)
     message.success('任务已重启')
     task.value = response
-    
+
     // 重启任务后立即完整获取任务信息
     await fetchTask()
-    
+
     // 触发全局事件，通知TaskList组件刷新
     emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
@@ -638,7 +619,7 @@ const handleCancel = async () => {
     const response = await tasksApi.cancelTask(taskId.value)
     message.success('任务已取消')
     task.value = response
-    
+
     // 触发全局事件，通知TaskList组件刷新
     emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
@@ -655,10 +636,10 @@ const handleStop = async () => {
     const response = await tasksApi.stopTask(taskId.value)
     message.success('任务已终止')
     task.value = response
-    
+
     // 终止任务后立即完整获取任务信息
     await fetchTask()
-    
+
     // 触发全局事件，通知TaskList组件刷新
     emitter.emit('task-status-changed', taskId.value)
   } catch (error) {
@@ -849,11 +830,11 @@ const getTaskImagesUrls = () => {
 // 获取训练历史
 const fetchTrainingHistory = async () => {
   if (!taskId.value) return;
-  
+
   try {
     isLoadingHistory.value = true;
     const data = await tasksApi.getTaskTrainingHistory(taskId.value);
-    console.log("历史记录",data)
+    console.log("历史记录", data)
     if (data) {
       trainingHistory.value = data;
     }
@@ -868,13 +849,13 @@ const fetchTrainingHistory = async () => {
 // 切换历史记录下拉菜单
 const toggleHistoryDropdown = async () => {
   showHistoryDropdown.value = !showHistoryDropdown.value;
-  
+
   if (showHistoryDropdown.value) {
     // 加载历史数据
     if (trainingHistory.value.length === 0) {
       await fetchTrainingHistory();
     }
-    
+
     // 计算下拉菜单位置
     nextTick(() => {
       updateHistoryDropdownPosition();
@@ -888,9 +869,9 @@ const toggleHistoryDropdown = async () => {
 // 更新历史下拉菜单位置
 const updateHistoryDropdownPosition = () => {
   if (!historyBtn.value) return;
-  
+
   const btnRect = historyBtn.value.getBoundingClientRect();
-  
+
   historyDropdownPosition.value = {
     top: `${btnRect.bottom + window.scrollY + 8}px`,
     left: `${btnRect.right - 280 + window.scrollX}px`, // 右对齐，假设下拉菜单宽度为280px
@@ -900,8 +881,8 @@ const updateHistoryDropdownPosition = () => {
 
 // 修改点击外部区域关闭下拉菜单处理函数
 const handleClickOutside = (event) => {
-  if (historyBtn.value && !historyBtn.value.contains(event.target) && 
-      !event.target.closest('.history-dropdown')) {
+  if (historyBtn.value && !historyBtn.value.contains(event.target) &&
+    !event.target.closest('.history-dropdown')) {
     showHistoryDropdown.value = false;
     document.removeEventListener('click', handleClickOutside);
   }
@@ -942,17 +923,15 @@ onUnmounted(() => {
 const handleConfigChange = (newConfig) => {
   // 将配置卡片传来的配置同步到本地配置
   if (!localConfig.value) localConfig.value = {};
-  
+  console.log("更新配置", newConfig)
   // 只关注训练配置，因为打标配置不影响步数计算
-  if (newConfig.training_config) {
-    localConfig.value.training_config = newConfig.training_config;
-  }
+  localConfig.value = newConfig;
 };
 
 // 添加从settings接口获取训练配置的方法
 const fetchTrainingSettings = async () => {
   if (!taskId.value) return;
-  
+
   try {
     const trainingConfig = await settingsApi.getTaskTrainingConfig(taskId.value);
     if (trainingConfig) {
@@ -1206,7 +1185,7 @@ const fetchTrainingSettings = async () => {
 .training-steps {
   background-color: #f9f9fb;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px 8px;
 }
 
 .training-steps-info {

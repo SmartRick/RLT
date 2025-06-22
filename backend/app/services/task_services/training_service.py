@@ -7,7 +7,7 @@ from ...database import get_db
 from ...utils.logger import setup_logger
 from ...services.config_service import ConfigService
 from ...utils.file_handler import generate_unique_folder_path
-from ...utils.train_handler import TrainRequestHandler, TrainConfig
+from ...utils.train_handler import TrainRequestHandler
 from ...utils.common import copy_attributes
 from ...utils.ssh import create_ssh_client_from_asset, SSHClientTool
 from ...services.asset_service import AssetService
@@ -34,49 +34,74 @@ class TrainingService:
             return []
             
     @staticmethod
-    def start_training(db: Session, task_id: int) -> Optional[Dict]:
+    def start_training(db: Session, task_id: int) -> Dict[str, Any]:
         """启动训练流程"""
-        try:
-            task = db.query(Task).filter(Task.id == task_id).first()
-            if not task:
-                raise ValueError("任务不存在")
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise ValueError("任务不存在")
+        
+        # 检查当前状态
+        if task.status != TaskStatus.MARKED:
+            raise ValueError(f"当前任务状态为{task.status}，无法启动训练")
             
-            # 检查当前状态
-            if task.status == TaskStatus.TRAINING:
-                # 如果任务已经是训练状态，检查是否已分配资产
-                if task.training_asset_id:
-                    # 已经分配了资产，说明训练已经开始，不需要重复处理
-                    return {
-                        'warning': "任务已经在训练中",
-                        'task': task.to_dict()
-                    }
-                # 如果是TRAINING状态但没有分配资产，说明任务在队列中等待处理，不需要操作
-                return {
-                    'info': "任务正在等待分配训练资产",
-                    'task': task.to_dict()
-                }
-            elif task.status != TaskStatus.MARKED:
-                # 非法状态转换
-                raise ValueError(f"任务状态 {task.status} 不允许开始训练")
+        # 获取训练配置，校验模型路径
+        training_config = ConfigService.get_task_training_config(task_id)
+        if not training_config:
+            raise ValueError("无法获取训练配置")
+        
+        # 创建任务训练配置的副本
+        temp_config = task.training_config.copy() if task.training_config else {}
+        
+        # 检查模型训练类型和对应模型路径
+        model_train_type = training_config.get('model_train_type')
+        network_module_updated = False
+        
+        if model_train_type == 'flux-lora':
+            model_path = training_config.get('flux_model_path')
+            if not model_path:
+                raise ValueError("flux-lora训练类型需要设置有效的flux模型路径")
             
-            # 更新任务状态为TRAINING，但不分配资产，由调度器处理
-            task.update_status(TaskStatus.TRAINING, '准备开始训练', db=db)
+            # 检查网络模块是否匹配
+            flux_network_modules = ['networks.lora_flux', 'networks.oft_flux', 'lycoris.kohya']
+            network_module = training_config.get('network_module')
+            if network_module not in flux_network_modules:
+                temp_config['network_module'] = 'networks.lora_flux'
+                network_module_updated = True
+                logger.info(f"已将任务{task_id}的网络模块修正为networks.lora_flux")
+                
+        elif model_train_type == 'sd-lora' or model_train_type == 'sdxl-lora':
+            # 检查对应模型路径
+            if model_train_type == 'sd-lora':
+                model_path = training_config.get('sd_model_path')
+                if not model_path:
+                    raise ValueError("sd-lora训练类型需要设置有效的SD模型路径")
+            else:  # sdxl-lora
+                model_path = training_config.get('sdxl_model_path')
+                if not model_path:
+                    raise ValueError("sdxl-lora训练类型需要设置有效的SDXL模型路径")
             
-            return task.to_dict()
-            
-        except ValueError as e:
-            logger.warning(f"开始训练失败: {str(e)}")
-            return {
-                'error': str(e),
-                'error_type': 'VALIDATION_ERROR'
-            }
-        except Exception as e:
-            logger.error(f"开始训练失败: {str(e)}")
-            return {
-                'error': f"系统错误: {str(e)}",
-                'error_type': 'SYSTEM_ERROR'
-            }
-            
+            # 两种类型都使用相同的网络模块列表
+            sd_network_modules = ['networks.lora', 'networks.dylora', 'networks.oft', 'lycoris.kohya']
+            network_module = training_config.get('network_module')
+            if network_module not in sd_network_modules:
+                temp_config['network_module'] = 'networks.lora'
+                network_module_updated = True
+                logger.info(f"已将任务{task_id}的网络模块修正为networks.lora")
+        else:
+            raise ValueError(f"不支持的模型训练类型: {model_train_type}")
+        
+        # 如果网络模块被更新，使用setattr设置回任务对象
+        if network_module_updated:
+            logger.info(f"更新任务{task_id}的训练配置: {temp_config}")
+            setattr(task, 'training_config', temp_config)
+            db.add(task)
+            db.commit()
+            logger.info(f"成功保存任务{task_id}的更新后的训练配置")
+        
+        # 更新任务状态
+        task.update_status(TaskStatus.TRAINING, '准备开始训练', db=db)
+        return task.to_dict()
+    
     @staticmethod
     def _generate_sample_prompts(task_id: int, training_config: Dict) -> str:
         """
@@ -191,11 +216,7 @@ class TrainingService:
         input_dir = task.marked_images_path
         training_output_path = generate_unique_folder_path(Config.OUTPUT_DIR, task_id, 'train')
         task.training_output_path = training_output_path
-        
-        # 检查输入目录
-        if not os.path.exists(input_dir):
-            raise ValueError(f"标记图片目录不存在: {input_dir}")
-        
+
         # 3. 创建训练数据目录
         repeat_num = training_config.get('repeat_num', 10)
         train_data_dir = os.path.join(task.marked_images_path, f"{repeat_num}_rick")
@@ -232,7 +253,6 @@ class TrainingService:
         training_config['output_name'] = task.name
         
         # 7. 处理生成预览图的配置
-        business_params = ['use_image_tags', 'max_image_tags', 'generate_preview']
         if training_config.get('generate_preview'):
             # 生成sample_prompts.txt文件
             prompts_file = TrainingService._generate_sample_prompts(task_id, training_config)
@@ -247,23 +267,13 @@ class TrainingService:
                 else:
                     # 本地资产，直接使用本地文件路径
                     training_config['prompt_file'] = prompts_file
-        else:
-            # 如果不生成预览图，移除相关参数
-            sample_args = ['positive_prompts', 'negative_prompts', 'sample_width', 'sample_height', 
-                          'sample_cfg', 'sample_steps', 'sample_seed', 'sample_sampler', 'sample_every_n_epochs']
-            business_params.extend(sample_args)
         
-        # 8. 移除业务参数
-        for param in business_params:
-            if param in training_config:
-                training_config.pop(param)
-        
-        # 9. 创建执行历史记录
+        # 8. 创建执行历史记录
         execution_history = TaskExecutionHistory(
             task_id=task_id,
             status='RUNNING',
             mark_config=mark_config,
-            training_config=training_config,
+            training_config=training_config,  # 保存原始业务配置
             marked_images_path=task.marked_images_path,
             training_output_path=training_output_path,
             training_asset_id=asset.id if asset else None,
@@ -361,6 +371,56 @@ class TrainingService:
             task.add_log(f'提示词文件上传失败: {message}，将使用默认提示词', db=db)
     
     @staticmethod
+    def _convert_training_config(training_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        将业务配置转换为训练配置
+        
+        Args:
+            training_config: 业务配置
+            
+        Returns:
+            转换后的训练配置
+        """
+        # 创建配置的副本，避免修改原始配置
+        config = training_config.copy()
+        
+        # 1. 根据模型训练类型设置预训练模型路径
+        model_train_type = config.get('model_train_type')
+        if model_train_type == 'flux-lora':
+            config['pretrained_model_name_or_path'] = config.get('flux_model_path')
+        elif model_train_type == 'sd-lora':
+            config['pretrained_model_name_or_path'] = config.get('sd_model_path')
+        elif model_train_type == 'sdxl-lora':
+            config['pretrained_model_name_or_path'] = config.get('sdxl_model_path')
+        
+        # 2. 移除业务参数
+        business_params = ['use_image_tags', 'max_image_tags', 'generate_preview','flux_model_path','sd_model_path','sdxl_model_path','remote_output_dir','repeat_num']
+        
+        # 如果不生成预览图，移除相关参数
+        if not config.get('generate_preview'):
+            sample_args = ['positive_prompts', 'negative_prompts', 'sample_width', 'sample_height', 
+                          'sample_cfg', 'sample_steps', 'sample_seed', 'sample_sampler', 'sample_every_n_epochs']
+            business_params.extend(sample_args)
+            
+        # 如果训练类型不为flux，移除相关独立配置
+        if model_train_type != 'flux-lora':
+            flux_params = ['ae', 'clip_l', 't5xxl', 'timestep_sampling', 'sigmoid_scale', 
+                          'discrete_flow_shift', 'model_prediction_type', 'loss_type', 
+                          'guidance_scale', 'train_t5xxl', 'fp8_base', 'cache_text_encoder_outputs', 'cache_text_encoder_outputs_to_disk']
+            business_params.extend(flux_params)
+        # 如果训练类型不为sd，移除相关独立配置
+        if model_train_type != 'sd-lora':
+            sd_params = ['v2']
+            business_params.extend(sd_params)
+        
+        # 移除所有业务参数
+        for param in business_params:
+            if param in config:
+                config.pop(param)
+                
+        return config
+    
+    @staticmethod
     def _process_training(task_id: int, asset_id: int):
         """处理训练任务"""
         try:
@@ -375,8 +435,14 @@ class TrainingService:
                 task.add_log(f'开始处理训练任务，使用资产: {asset.name}', db=db)
 
                 # 准备训练执行历史记录和配置
-                training_config = TrainingService._prepare_training_execution_history(task_id, db, asset)
-
+                business_config = TrainingService._prepare_training_execution_history(task_id, db, asset)
+                
+                # 将业务配置转换为训练配置
+                training_config = TrainingService._convert_training_config(business_config)
+                
+                # 获取训练请求头
+                training_headers = ConfigService.get_asset_lora_headers(asset.id)
+                
                 # 创建训练处理器，直接传入资产对象
                 handler = TrainRequestHandler(asset)
                 
@@ -384,20 +450,9 @@ class TrainingService:
                 task.add_log(f'准备发送训练请求: task_id={task_id}, asset_id={asset_id}, asset_ip={asset.ip}', db=db)
                 
                 try:
-                    # 创建基础TrainConfig对象
-                    train_config = TrainConfig(
-                        train_data_dir=training_config['train_data_dir'],
-                        output_dir=training_config['output_dir'],
-                        output_name=training_config['output_name']
-                    )
-                    
-                    # 从训练配置中拷贝参数到train_config对象
-                    if training_config and isinstance(training_config, dict):
-                        copy_attributes(training_config, train_config)
-                    
                     # 发送训练请求
                     logger.info(f"发送训练请求: task_id={task_id}, asset_id={asset_id}")
-                    task_id_str = handler.train_request(train_config)
+                    task_id_str = handler.train_request(training_config, training_headers)
                     
                     if not task_id_str:
                         task.add_log('没有获取到有效的训练任务ID', db=db)
@@ -473,8 +528,8 @@ class TrainingService:
                             handler = TrainRequestHandler(current_asset)
                             
                             # 获取训练状态
-                            training_config = ConfigService.get_task_training_config(task_id)
-                            status = handler.check_status(training_task_id, training_config)
+                            training_headers = ConfigService.get_asset_lora_headers(asset.id)
+                            status = handler.check_status(training_task_id, training_headers)
                             logger.info(f"检查训练任务状态: {status}")
                         
                         # 判断任务状态

@@ -119,7 +119,12 @@ class Config:
         'train_data_dir':'./input', #任务独立设置
         'output_dir': './output',   #任务独立设置
         'output_name':'rick',   #任务独立设置
-        'pretrained_model_name_or_path': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/unet/flux/flux1-dev-fp8.safetensors',
+        'v2':False, # 是否使用v2模型
+        'train_t5xxl':False, # 是否训练t5xxl模型
+        'pretrained_model_name_or_path': '',
+        'flux_model_path':'L:/ComfyUI-aki-v1.6/ComfyUI/models/unet/flux/flux1-dev-fp8.safetensors',
+        'sd_model_path':'L:/ComfyUI-aki-v1.6/ComfyUI/models/checkpoints/SD1.5/majicMIX realistic 麦橘写实_v7.safetensors',
+        'sdxl_model_path':'L:/ComfyUI-aki-v1.6/ComfyUI/models/checkpoints/SDXL/LEOSAM HelloWorld 新世界 _ SDXL大模型_v7.0.safetensors',
         'ae': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/vae/ae.sft',
         'clip_l': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/clip/clip_l.safetensors',
         't5xxl': 'L:/ComfyUI-aki-v1.6/ComfyUI/models/clip/t5xxl_fp8_e4m3fn.safetensors',
@@ -146,7 +151,7 @@ class Config:
         'network_train_unet_only': False,
         'network_train_text_encoder_only': False,
         'learning_rate': 0.0001,
-        'unet_lr': 0.0005,
+        'unet_lr': 0.0001,
         'text_encoder_lr': 0.00001,
         'lr_scheduler': 'cosine_with_restarts',
         'lr_warmup_steps': 0,
@@ -177,7 +182,7 @@ class Config:
         'repeat_num':12,
         
         # 预览图生成参数（兼容旧版本）
-        'generate_preview':True,#是否生成预览图
+        'generate_preview':True,            #是否生成预览图
         'use_image_tags': True,           # 是否使用图片标签生成预览图
         'max_image_tags': 1,               # 最多采用图片提示词数量
         'positive_prompts': 'masterpiece, best quality, 1girl, solo',

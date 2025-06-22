@@ -1,4 +1,4 @@
-import { computed, reactive } from 'vue';
+import { computed, reactive, watch } from 'vue';
 
 // 参数定义，可以被多个组件引用
 export const PARAM_SECTIONS = [
@@ -10,18 +10,58 @@ export const PARAM_SECTIONS = [
       {
         name: 'model_train_type',
         label: '模型训练类型',
-        type: 'text',
+        type: 'select',
+        options: [
+          { value: 'flux-lora', label: 'Flux-Lora' },
+          { value: 'sd-lora', label: 'SD1.5-Lora' },
+          { value: 'sdxl-lora', label: 'SDXL-Lora' }
+        ],
         placeholder: 'flux-lora',
         default: 'flux-lora',
         full: true
       },
       {
-        name: 'pretrained_model_name_or_path',
-        label: '预训练模型路径',
+        name: 'flux_model_path',
+        label: 'Flux模型路径',
         type: 'text',
         placeholder: './sd-models/flux1-dev.safetensors',
         default: '',
-        full: true
+        full: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
+      },
+      {
+        name: 'sd_model_path',
+        label: 'SD1.5模型路径',
+        type: 'text',
+        placeholder: './sd-models/v1-5-pruned-emaonly.safetensors',
+        default: '',
+        full: true,
+        depends: 'model_train_type=sd-lora',
+        theme: 'sd'
+      },
+      {
+        name: 'sdxl_model_path',
+        label: 'SDXL模型路径',
+        type: 'text',
+        placeholder: './sd-models/sdxl-base-1.0.safetensors',
+        default: '',
+        full: true,
+        depends: 'model_train_type=sdxl-lora',
+        theme: 'sdxl'
+      },
+      {
+        name: 'v2',
+        label: 'SD2.0+版本',
+        type: 'select',
+        options: [
+          { value: false, label: '否' },
+          { value: true, label: '是' }
+        ],
+        default: false,
+        half: true,
+        depends: 'model_train_type=sd-lora',
+        theme: 'sd'
       },
       {
         name: 'ae',
@@ -29,7 +69,9 @@ export const PARAM_SECTIONS = [
         type: 'text',
         placeholder: './sd-models/ae.sft',
         default: '',
-        half: true
+        half: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
       },
       {
         name: 'clip_l',
@@ -37,7 +79,9 @@ export const PARAM_SECTIONS = [
         type: 'text',
         placeholder: './sd-models/clip_l.safetensors',
         default: '',
-        half: true
+        half: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
       },
       {
         name: 't5xxl',
@@ -45,7 +89,22 @@ export const PARAM_SECTIONS = [
         type: 'text',
         placeholder: './sd-models/t5xxl_fp8_e4m3fn.safetensors',
         default: '',
-        full: true
+        full: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
+      },
+      {
+        name: 'train_t5xxl',
+        label: '训练T5XXL',
+        type: 'select',
+        options: [
+          { value: 'false', label: '否' },
+          { value: 'true', label: '是' }
+        ],
+        default: 'false',
+        half: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
       },
       {
         name: 'timestep_sampling',
@@ -57,7 +116,9 @@ export const PARAM_SECTIONS = [
           { value: 'uniform_noise', label: 'uniform_noise' }
         ],
         default: 'sigmoid',
-        half: true
+        half: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
       },
       {
         name: 'sigmoid_scale',
@@ -65,7 +126,9 @@ export const PARAM_SECTIONS = [
         type: 'number',
         placeholder: '1',
         default: 1,
-        half: true
+        half: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
       },
       {
         name: 'model_prediction_type',
@@ -77,7 +140,9 @@ export const PARAM_SECTIONS = [
           { value: 'epsilon', label: 'epsilon' }
         ],
         default: 'raw',
-        half: true
+        half: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
       },
       {
         name: 'discrete_flow_shift',
@@ -85,7 +150,9 @@ export const PARAM_SECTIONS = [
         type: 'number',
         placeholder: '1',
         default: 1,
-        half: true
+        half: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
       },
       {
         name: 'loss_type',
@@ -97,7 +164,9 @@ export const PARAM_SECTIONS = [
           { value: 'huber', label: 'huber' }
         ],
         default: 'l2',
-        half: true
+        half: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
       },
       {
         name: 'guidance_scale',
@@ -106,7 +175,9 @@ export const PARAM_SECTIONS = [
         placeholder: '1',
         step: 0.1,
         default: 1,
-        half: true
+        half: true,
+        depends: 'model_train_type=flux-lora',
+        theme: 'flux'
       },
       {
         name: 'resolution',
@@ -152,10 +223,10 @@ export const PARAM_SECTIONS = [
         label: '梯度检查点',
         type: 'select',
         options: [
-          { value: 'true', label: '启用' },
-          { value: 'false', label: '禁用' }
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
         ],
-        default: 'true',
+        default: true,
         half: true
       },
       {
@@ -171,10 +242,10 @@ export const PARAM_SECTIONS = [
         label: '仅训练Unet',
         type: 'select',
         options: [
-          { value: 'false', label: '否' },
-          { value: 'true', label: '是' }
+          { value: false, label: '否' },
+          { value: true, label: '是' }
         ],
-        default: 'false',
+        default: false,
         half: true
       },
       {
@@ -182,16 +253,35 @@ export const PARAM_SECTIONS = [
         label: '仅训练文本编码器',
         type: 'select',
         options: [
-          { value: 'false', label: '否' },
-          { value: 'true', label: '是' }
+          { value: false, label: '否' },
+          { value: true, label: '是' }
         ],
-        default: 'false',
+        default: false,
         half: true
       },
       {
         name: 'network_module',
         label: '网络模块',
-        type: 'text',
+        type: 'select',
+        options_by_type: {
+          'flux-lora': [
+            { value: 'networks.lora_flux', label: 'networks.lora_flux' },
+            { value: 'networks.oft_flux', label: 'networks.oft_flux' },
+            { value: 'lycoris.kohya', label: 'lycoris.kohya' }
+          ],
+          'sd-lora': [
+            { value: 'networks.lora', label: 'networks.lora' },
+            { value: 'networks.dylora', label: 'networks.dylora' },
+            { value: 'networks.oft', label: 'networks.oft' },
+            { value: 'lycoris.kohya', label: 'lycoris.kohya' }
+          ],
+          'sdxl-lora': [
+            { value: 'networks.lora', label: 'networks.lora' },
+            { value: 'networks.dylora', label: 'networks.dylora' },
+            { value: 'networks.oft', label: 'networks.oft' },
+            { value: 'lycoris.kohya', label: 'lycoris.kohya' }
+          ]
+        },
         placeholder: 'networks.lora_flux',
         default: 'networks.lora_flux',
         full: true
@@ -343,10 +433,10 @@ export const PARAM_SECTIONS = [
         label: '生成预览图',
         type: 'select',
         options: [
-          { value: 'true', label: '是' },
-          { value: 'false', label: '否' }
+          { value: true, label: '是' },
+          { value: false, label: '否' }
         ],
-        default: 'true',
+        default: true,
         half: true
       },
       {
@@ -363,10 +453,10 @@ export const PARAM_SECTIONS = [
         label: '使用图片标签',
         type: 'select',
         options: [
-          { value: 'false', label: '否' },
-          { value: 'true', label: '是' }
+          { value: false, label: '否' },
+          { value: true, label: '是' }
         ],
-        default: 'false',
+        default: false,
         half: true,
         depends: 'generate_preview=true'
       },
@@ -474,10 +564,10 @@ export const PARAM_SECTIONS = [
         label: '启用桶排序',
         type: 'select',
         options: [
-          { value: 'true', label: '是' },
-          { value: 'false', label: '否' }
+          { value: true, label: '是' },
+          { value: false, label: '否' }
         ],
-        default: 'true',
+        default: true,
         half: true
       },
       {
@@ -485,10 +575,10 @@ export const PARAM_SECTIONS = [
         label: '无桶放大',
         type: 'select',
         options: [
-          { value: 'true', label: '是' },
-          { value: 'false', label: '否' }
+          { value: true, label: '是' },
+          { value: false, label: '否' }
         ],
-        default: 'true',
+        default: true,
         half: true
       },
       {
@@ -552,21 +642,22 @@ export const PARAM_SECTIONS = [
         label: 'FP8基础',
         type: 'select',
         options: [
-          { value: 'true', label: '启用' },
-          { value: 'false', label: '禁用' }
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
         ],
-        default: 'true',
-        half: true
+        default: true,
+        half: true,
+        depends: 'model_train_type=flux-lora'
       },
       {
         name: 'sdpa',
         label: 'SDPA优化',
         type: 'select',
         options: [
-          { value: 'true', label: '启用' },
-          { value: 'false', label: '禁用' }
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
         ],
-        default: 'true',
+        default: true,
         half: true
       }
     ]
@@ -582,10 +673,10 @@ export const PARAM_SECTIONS = [
         label: '低内存模式',
         type: 'select',
         options: [
-          { value: 'false', label: '禁用' },
-          { value: 'true', label: '启用' }
+          { value: false, label: '禁用' },
+          { value: true, label: '启用' }
         ],
-        default: 'false',
+        default: false,
         half: true
       },
       {
@@ -593,10 +684,10 @@ export const PARAM_SECTIONS = [
         label: '缓存潜变量',
         type: 'select',
         options: [
-          { value: 'true', label: '启用' },
-          { value: 'false', label: '禁用' }
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
         ],
-        default: 'true',
+        default: true,
         half: true
       },
       {
@@ -604,10 +695,10 @@ export const PARAM_SECTIONS = [
         label: '潜变量缓存到磁盘',
         type: 'select',
         options: [
-          { value: 'true', label: '启用' },
-          { value: 'false', label: '禁用' }
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
         ],
-        default: 'true',
+        default: true,
         half: true
       },
       {
@@ -615,32 +706,34 @@ export const PARAM_SECTIONS = [
         label: '缓存文本编码器输出',
         type: 'select',
         options: [
-          { value: 'true', label: '启用' },
-          { value: 'false', label: '禁用' }
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
         ],
-        default: 'true',
-        half: true
+        default: true,
+        half: true,
+        depends: 'model_train_type=flux-lora'
       },
       {
         name: 'cache_text_encoder_outputs_to_disk',
         label: '文本编码器输出缓存到磁盘',
         type: 'select',
         options: [
-          { value: 'true', label: '启用' },
-          { value: 'false', label: '禁用' }
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
         ],
-        default: 'true',
-        half: true
+        default: true,
+        half: true,
+        depends: 'model_train_type=flux-lora'
       },
       {
         name: 'persistent_data_loader_workers',
         label: '持久数据加载器工作线程',
         type: 'select',
         options: [
-          { value: 'true', label: '启用' },
-          { value: 'false', label: '禁用' }
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
         ],
-        default: 'true',
+        default: true,
         half: true
       }
     ]
@@ -664,10 +757,10 @@ export const PARAM_SECTIONS = [
         label: '随机打乱标题',
         type: 'select',
         options: [
-          { value: 'false', label: '禁用' },
-          { value: 'true', label: '启用' }
+          { value: false, label: '禁用' },
+          { value: true, label: '启用' }
         ],
-        default: 'false',
+        default: false,
         half: true
       },
       {
@@ -715,10 +808,10 @@ export const PARAM_SECTIONS = [
         label: '全FP16精度',
         type: 'select',
         options: [
-          { value: 'false', label: '禁用' },
-          { value: 'true', label: '启用' }
+          { value: false, label: '禁用' },
+          { value: true, label: '启用' }
         ],
-        default: 'false',
+        default: false,
         half: true
       },
       {
@@ -726,10 +819,10 @@ export const PARAM_SECTIONS = [
         label: '全BF16精度',
         type: 'select',
         options: [
-          { value: 'true', label: '启用' },
-          { value: 'false', label: '禁用' }
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
         ],
-        default: 'true',
+        default: true,
         half: true
       }
     ]

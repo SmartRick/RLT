@@ -5,7 +5,6 @@ from ..models.task import Task
 from ..models.asset import Asset
 from ..schemas.setting import SettingUpdate
 from ..utils.logger import setup_logger
-from ..config import config
 import json
 
 logger = setup_logger('config_service')

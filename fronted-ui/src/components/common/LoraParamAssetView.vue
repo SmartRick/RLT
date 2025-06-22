@@ -11,13 +11,15 @@
           <!-- 特殊参数：单独一行显示 -->
           <div v-if="shouldShowParam(param, modelValue) && 
                    (param.name === 'model_train_type' || 
-                    param.name === 'pretrained_model_name_or_path' ||
+                    param.name === 'flux_model_path' ||
+                    param.name === 'sd_model_path' ||
+                    param.name === 'sdxl_model_path' ||
                     param.name === 'ae' ||
                     param.name === 'clip_l' ||
                     param.name === 't5xxl')"
                class="param-item param-item-full">
             <label>
-              <div class="label-text">{{ param.label }}</div>
+              <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
               <span class="param-name">{{ param.name }}</span>
             </label>
             
@@ -28,6 +30,7 @@
                 @input="updateValue(param.name, $event.target.value)"
                 :placeholder="param.placeholder" 
                 class="mac-input" 
+                :class="getThemeClass(param)"
                 :disabled="disabled" 
               />
             </template>
@@ -40,6 +43,7 @@
                 :placeholder="param.placeholder" 
                 :step="param.step" 
                 class="mac-input"
+                :class="getThemeClass(param)"
                 :disabled="disabled" 
               />
             </template>
@@ -49,10 +53,11 @@
                 :value="modelValue[param.name]"
                 @change="updateValue(param.name, $event.target.value)" 
                 class="mac-input"
+                :class="getThemeClass(param)"
                 :disabled="disabled"
               >
                 <option 
-                  v-for="option in param.options" 
+                  v-for="option in getParamOptions(param, modelValue)" 
                   :key="option.value" 
                   :value="option.value"
                 >
@@ -66,7 +71,7 @@
           <div v-else-if="shouldShowParam(param, modelValue) && param.type === 'textarea'"
                class="param-item param-item-full">
             <label>
-              <div class="label-text">{{ param.label }}</div>
+              <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
               <span class="param-name">{{ param.name }}</span>
             </label>
             
@@ -75,6 +80,7 @@
               @input="updateValue(param.name, $event.target.value)"
               :placeholder="param.placeholder" 
               class="mac-textarea" 
+              :class="getThemeClass(param)"
               :rows="param.rows || 2"
               :disabled="disabled"
             ></textarea>
@@ -83,7 +89,7 @@
           <!-- 默认情况：一行两个配置 -->
           <div v-else-if="shouldShowParam(param, modelValue)" class="param-item-half">
             <label>
-              <div class="label-text">{{ param.label }}</div>
+              <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
               <span class="param-name">{{ param.name }}</span>
             </label>
             
@@ -94,6 +100,7 @@
                 @input="updateValue(param.name, $event.target.value)"
                 :placeholder="param.placeholder" 
                 class="mac-input" 
+                :class="getThemeClass(param)"
                 :disabled="disabled" 
               />
             </template>
@@ -106,6 +113,7 @@
                 :placeholder="param.placeholder" 
                 :step="param.step" 
                 class="mac-input"
+                :class="getThemeClass(param)"
                 :disabled="disabled" 
               />
             </template>
@@ -115,10 +123,11 @@
                 :value="modelValue[param.name]"
                 @change="updateValue(param.name, $event.target.value)" 
                 class="mac-input"
+                :class="getThemeClass(param)"
                 :disabled="disabled"
               >
                 <option 
-                  v-for="option in param.options" 
+                  v-for="option in getParamOptions(param, modelValue)" 
                   :key="option.value" 
                   :value="option.value"
                 >
@@ -141,7 +150,7 @@
             <template v-for="param in subsection.params" :key="param.name">
               <div v-if="shouldShowParam(param, modelValue)" class="param-item-half">
                 <label>
-                  <div class="label-text">{{ param.label }}</div>
+                  <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
                   <span class="param-name">{{ param.name }}</span>
                 </label>
                 
@@ -151,6 +160,7 @@
                     @input="updateValue(param.name, $event.target.value)"
                     :placeholder="param.placeholder" 
                     class="mac-input" 
+                    :class="getThemeClass(param)"
                     :disabled="disabled" 
                   />
                 </template>
@@ -163,6 +173,7 @@
                     :placeholder="param.placeholder" 
                     :step="param.step" 
                     class="mac-input"
+                    :class="getThemeClass(param)"
                     :disabled="disabled" 
                   />
                 </template>
@@ -172,10 +183,11 @@
                     :value="modelValue[param.name]"
                     @change="updateValue(param.name, $event.target.value)" 
                     class="mac-input"
+                    :class="getThemeClass(param)"
                     :disabled="disabled"
                   >
                     <option 
-                      v-for="option in param.options" 
+                      v-for="option in getParamOptions(param, modelValue)" 
                       :key="option.value" 
                       :value="option.value"
                     >
@@ -196,7 +208,7 @@
                          param.name === 'negative_prompt')"
                    class="param-item param-item-full">
                 <label>
-                  <div class="label-text">{{ param.label }}</div>
+                  <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
                   <span class="param-name">{{ param.name }}</span>
                 </label>
                 
@@ -205,6 +217,7 @@
                   @input="updateValue(param.name, $event.target.value)"
                   :placeholder="param.placeholder" 
                   class="mac-textarea" 
+                  :class="getThemeClass(param)"
                   :rows="param.rows || 2"
                   :disabled="disabled"
                 ></textarea>
@@ -213,7 +226,7 @@
               <!-- 默认情况：一行两个配置 -->
               <div v-else-if="shouldShowParam(param, modelValue)" class="param-item-half">
                 <label>
-                  <div class="label-text">{{ param.label }}</div>
+                  <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
                   <span class="param-name">{{ param.name }}</span>
                 </label>
                 
@@ -223,6 +236,7 @@
                     @input="updateValue(param.name, $event.target.value)"
                     :placeholder="param.placeholder" 
                     class="mac-input" 
+                    :class="getThemeClass(param)"
                     :disabled="disabled" 
                   />
                 </template>
@@ -235,6 +249,7 @@
                     :placeholder="param.placeholder" 
                     :step="param.step" 
                     class="mac-input"
+                    :class="getThemeClass(param)"
                     :disabled="disabled" 
                   />
                 </template>
@@ -244,10 +259,11 @@
                     :value="modelValue[param.name]"
                     @change="updateValue(param.name, $event.target.value)" 
                     class="mac-input"
+                    :class="getThemeClass(param)"
                     :disabled="disabled"
                   >
                     <option 
-                      v-for="option in param.options" 
+                      v-for="option in getParamOptions(param, modelValue)" 
                       :key="option.value" 
                       :value="option.value"
                     >
@@ -265,7 +281,7 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, computed } from 'vue';
+import { defineProps, defineEmits, computed, onMounted } from 'vue';
 import { PARAM_SECTIONS, useLoraParams } from '../../composables/useLoraParams';
 
 const props = defineProps({
@@ -287,12 +303,58 @@ const emit = defineEmits(['update:modelValue']);
 
 const { shouldShowParam } = useLoraParams();
 
+// 添加判断值是否存在的辅助函数
+const hasValue = (value) => {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  if (typeof value === 'number') return true; // 数字类型（包括0）视为有值
+  if (typeof value === 'boolean') return true; // 布尔值（包括false）视为有值
+  return true;
+};
+
+// 根据参数主题获取对应的CSS类
+const getThemeClass = (param) => {
+  if (param.theme === 'flux') return 'theme-flux';
+  if (param.theme === 'sd') return 'theme-sd';
+  if (param.theme === 'sdxl') return 'theme-sdxl';
+  return '';
+};
+
+// 获取参数选项的方法
+const getParamOptions = (param, modelValue) => {
+  // 如果参数有标准options属性，直接使用
+  if (param.options) {
+    return param.options;
+  } 
+  // 如果参数有options_by_type属性，根据当前model_train_type选择对应的选项列表
+  else if (param.options_by_type && modelValue.model_train_type) {
+    return param.options_by_type[modelValue.model_train_type] || [];
+  }
+  
+  return [];
+};
+
 // 更新值的方法，避免直接修改props
 const updateValue = (key, value) => {
-  emit('update:modelValue', {
+  const updatedModel = {
     ...props.modelValue,
     [key]: value
-  });
+  };
+  
+  // 如果更新的是model_train_type，则同时更新依赖的默认值
+  if (key === 'model_train_type') {
+    // 根据不同的训练类型设置对应的网络模块默认值
+    if (value === 'flux-lora' && 
+        !['networks.lora_flux', 'networks.oft_flux', 'lycoris.kohya'].includes(updatedModel.network_module)) {
+      updatedModel.network_module = 'networks.lora_flux';
+    } 
+    else if ((value === 'sd-lora' || value === 'sdxl-lora') && 
+             !['networks.lora', 'networks.dylora', 'networks.oft', 'lycoris.kohya'].includes(updatedModel.network_module)) {
+      updatedModel.network_module = 'networks.lora';
+    }
+  }
+  
+  emit('update:modelValue', updatedModel);
 };
 
 // 根据showAllParams过滤可见的分节
@@ -318,6 +380,17 @@ const getSubsections = (section) => {
     subsection.subsection && subsection.parent === section.id
   );
 };
+
+// 在组件挂载时，根据当前model_train_type设置依赖默认值
+onMounted(() => {
+  if (props.modelValue.model_train_type) {
+    // 创建一个新对象，避免直接修改props
+    const updatedModel = { ...props.modelValue };
+    
+    // 调用updateValue更新依赖的默认值
+    updateValue('model_train_type', updatedModel.model_train_type);
+  }
+});
 </script>
 
 <style scoped>
@@ -408,6 +481,34 @@ const getSubsections = (section) => {
   cursor: not-allowed;
 }
 
+/* 不同模型类型的主题样式 */
+.theme-flux {
+  border-color: #0A84FF;
+}
+
+.theme-flux:focus {
+  border-color: #0A84FF;
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.2);
+}
+
+.theme-sd {
+  border-color: #30D158;
+}
+
+.theme-sd:focus {
+  border-color: #30D158;
+  box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.2);
+}
+
+.theme-sdxl {
+  border-color: #FF9F0A;
+}
+
+.theme-sdxl:focus {
+  border-color: #FF9F0A;
+  box-shadow: 0 0 0 2px rgba(255, 159, 10, 0.2);
+}
+
 .param-name {
   font-size: 11px;
   color: #6B7280;
@@ -428,6 +529,17 @@ label {
   font-size: 12px;
   color: #6B7280;
   font-weight: normal;
+}
+
+.label-text.has-value::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #007AFF;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 .params-subsection {

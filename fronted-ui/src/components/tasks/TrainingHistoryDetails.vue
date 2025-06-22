@@ -102,7 +102,11 @@
           
           <div class="config-grid">
             <template v-if="historyRecord.mark_config">
-              <div v-for="(value, key) in historyRecord.mark_config" :key="`mark-${key}`" class="config-item">
+              <div 
+                v-for="(value, key) in filteredMarkConfig" 
+                :key="`mark-${key}`" 
+                class="config-item"
+              >
                 <div class="config-label-container">
                   <div class="config-label">{{ formatConfigKey(key) }}</div>
                   <div class="param-name">{{ key }}</div>
@@ -230,6 +234,19 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['preview-image']);
+
+// 过滤打标配置参数
+const filteredMarkConfig = computed(() => {
+  if (!props.historyRecord.mark_config) return {};
+  
+  const result = {};
+  for (const [key, value] of Object.entries(props.historyRecord.mark_config)) {
+    if (key !== 'available_algorithms' && key !== 'available_crop_ratios') {
+      result[key] = value;
+    }
+  }
+  return result;
+});
 
 // 标签页配置
 const tabs = [

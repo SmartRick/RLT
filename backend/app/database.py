@@ -4,7 +4,6 @@ from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
 from .config import config
 from .utils.logger import setup_logger
-import sqlalchemy as sa
 
 # 设置日志记录器
 logger = setup_logger('database')
@@ -53,5 +52,9 @@ def init_db():
             logger.info(f"本地资产初始化成功: ID={local_asset.id}, 名称={local_asset.name}")
         else:
             logger.warning("本地资产初始化失败")
+        
+        # 初始化系统设置
+        from .services.config_service import ConfigService
+        ConfigService.init_settings()
     except Exception as e:
         logger.error(f"初始化本地资产时出错: {str(e)}", exc_info=True) 

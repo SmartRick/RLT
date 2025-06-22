@@ -30,9 +30,6 @@ def create_app():
     # 初始化数据库
     init_db()
     
-    # 初始化系统设置
-    ConfigService.init_settings()
-    
     # 启用CORS
     CORS(app)
     

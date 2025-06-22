@@ -469,6 +469,7 @@ const form = ref({
   
   // Lora训练配置
   lora_training_config: {
+    model_train_type: 'flux-lora',
     pretrained_model_name_or_path: '',
     ae: '',
     clip_l: '',
@@ -527,7 +528,9 @@ const form = ref({
     caption_extension: '.txt',
     shuffle_caption: false,
     keep_tokens: 0,
-    max_token_length: 255
+    max_token_length: 255,
+    v2: false,
+    train_t5xxl: false
   },
   lora_training_headers: {}
 })

@@ -324,31 +324,16 @@ const handleDragEnter = (event) => {
   
   dragCounter.value++
   
-  // 检查是否拖拽的是图片文件
-  if (event.dataTransfer.items && event.dataTransfer.items.length > 0) {
-    const isAllImages = Array.from(event.dataTransfer.items).every(item => 
-      item.kind === 'file' && item.type.startsWith('image/')
-    )
-    
-    if (isAllImages) {
-      isDragging.value = true
-    }
-  }
+  // 只要有拖拽动作就显示提示，不需要检查是否都是图片
+  isDragging.value = true
 }
 
 // 处理拖拽悬停事件
 const handleDragOver = (event) => {
   event.preventDefault()
   
-  // 设置正确的拖放效果
-  if (event.dataTransfer.items && event.dataTransfer.items.length > 0) {
-    const isAllImages = Array.from(event.dataTransfer.items).every(item => 
-      item.kind === 'file' && item.type.startsWith('image/')
-    )
-    
-    // 只有在可上传状态下才允许放置
-    event.dataTransfer.dropEffect = isAllImages && canDragUpload.value ? 'copy' : 'none'
-  }
+  // 只有在可上传状态下才允许放置
+  event.dataTransfer.dropEffect = canDragUpload.value ? 'copy' : 'none'
 }
 
 // 处理拖拽离开事件
@@ -368,34 +353,30 @@ const handleDragLeave = (event) => {
 // 处理拖拽放下事件
 const handleDrop = (event) => {
   event.preventDefault()
-  
-  // 重置拖拽状态
-  isDragging.value = false
   dragCounter.value = 0
+  isDragging.value = false
   
   if (!canDragUpload.value) {
     message.warning('当前状态不允许上传图片')
     return
   }
   
-  // 获取拖拽的文件
-  const files = event.dataTransfer.files
-  if (files.length === 0) return
-  
-  // 检查是否都是图片文件
-  const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'))
-  
-  if (imageFiles.length === 0) {
-    message.warning('请上传图片文件')
-    return
+  if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+    // 过滤图片文件
+    const imageFiles = Array.from(event.dataTransfer.files).filter(file => {
+      const isImage = file.type.startsWith('image/')
+      if (!isImage) {
+        console.warn(`跳过非图片文件: ${file.name}`)
+      }
+      return isImage
+    })
+    
+    if (imageFiles.length > 0) {
+      emit('upload-files', imageFiles)
+    } else {
+      message.warning('未发现有效的图片文件')
+    }
   }
-  
-  if (imageFiles.length !== files.length) {
-    message.warning(`已过滤掉 ${files.length - imageFiles.length} 个非图片文件`)
-  }
-  
-  // 发送事件通知父组件处理上传
-  emit('upload-files', imageFiles)
 }
 
 // 处理预览

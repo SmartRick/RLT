@@ -47,6 +47,12 @@
                 <CubeIcon class="detail-icon" />
                 {{ getModelCount(record) }} 个模型
               </div>
+              <div class="history-model-type" v-if="record.training_config?.model_train_type">
+                <DocumentIcon class="detail-icon" :class="getModelTypeClass(record.training_config.model_train_type)" />
+                <span :class="getModelTypeClass(record.training_config.model_train_type)">
+                  {{ getModelTypeLabel(record.training_config.model_train_type) }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -65,7 +71,8 @@ import {
   ArrowPathIcon,
   ClipboardDocumentIcon,
   PauseCircleIcon,
-  PlayCircleIcon
+  PlayCircleIcon,
+  DocumentIcon
 } from '@heroicons/vue/24/outline';
 import { getStatusText, getStatusClass } from '@/utils/taskStatus';
 
@@ -139,6 +146,28 @@ const getModelCount = (record) => {
     return record.training_results.models.length;
   }
   return 0;
+};
+
+// 获取模型类型标签
+const getModelTypeLabel = (modelTrainType) => {
+  const typeMap = {
+    'flux-lora': 'FLUX',
+    'sd-lora': 'SD1.5',
+    'sdxl-lora': 'SDXL'
+  };
+  
+  return typeMap[modelTrainType] || modelTrainType;
+};
+
+// 获取模型类型类
+const getModelTypeClass = (modelTrainType) => {
+  const typeMap = {
+    'flux-lora': 'model-type-flux',
+    'sd-lora': 'model-type-sd',
+    'sdxl-lora': 'model-type-sdxl'
+  };
+  
+  return typeMap[modelTrainType] || '';
 };
 </script>
 
@@ -300,6 +329,12 @@ const getModelCount = (record) => {
   opacity: 0.7;
 }
 
+.detail-icon.model-type-flux,
+.detail-icon.model-type-sd,
+.detail-icon.model-type-sdxl {
+  opacity: 1;
+}
+
 .history-loading, .history-empty {
   padding: 32px 16px;
   display: flex;
@@ -330,4 +365,28 @@ const getModelCount = (record) => {
     transform: rotate(360deg);
   }
 }
+
+/* 自定义文本样式 */
+:deep(.red-comma) {
+  color: #ff3333;
+  font-weight: bold;
+}
+
+/* 模型类型样式 */
+.model-type-flux {
+  color: #0A84FF;
+  font-weight: 500;
+}
+
+.model-type-sd {
+  color: #30D158;
+  font-weight: 500;
+}
+
+.model-type-sdxl {
+  color: #FF9F0A;
+  font-weight: 500;
+}
+
+/* 滚动条样式 */
 </style> 

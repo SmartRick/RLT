@@ -95,7 +95,7 @@ python run.py
 
 # 启动前端
 cd fronted-ui
-npm run dev
+npm run serve
 ```
 
 ## 使用指南

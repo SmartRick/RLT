@@ -174,14 +174,13 @@ def start_marking(task_id):
 @exception_handler
 def start_training(task_id):
     """开始训练"""
-    with get_db() as db:
-        result = TaskService.start_training(db, task_id)
-        if result:
-            if 'error' in result:
-                error_code = 2002 if result.get('error_type') == 'SYSTEM_ERROR' else 1002
-                return error_json(error_code, result['error'], result.get('task'))
-            return success_json(result)
-        return error_json(msg="开始训练失败")
+    try:
+        with get_db() as db:
+            result = TaskService.start_training(db, task_id)
+        return success_json(result)
+    except Exception as e:
+        logger.error(f"开始训练失败: {str(e)}", exc_info=True)
+        return error_json(msg=str(e))
 
 @tasks_bp.route('/<int:task_id>/stop', methods=['POST'])
 @exception_handler

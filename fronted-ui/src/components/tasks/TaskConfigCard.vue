@@ -26,10 +26,10 @@
       <!-- 触发词配置，不受全局配置开关影响，始终显示 -->
       <div class="form-group full-width trigger-words-section">
         <label>
-          <span class="label-text">触发词</span>
+          <span class="label-text" :class="{'has-value': hasValue(config.mark_config.trigger_words)}">触发词</span>
           <span class="label-en">trigger_words</span>
         </label>
-        <textarea v-model="config.mark_config.trigger_words" placeholder="输入触发词，用逗号分隔" rows="3" class="mac-textarea"
+        <textarea v-model="config.mark_config.trigger_words" :placeholder="getPlaceholder('mark', 'trigger_words')" rows="3" class="mac-textarea"
           :disabled="!canEdit"></textarea>
       </div>
 
@@ -42,18 +42,21 @@
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">自动裁剪图片</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.mark_config.auto_crop)}">自动裁剪图片</span>
                 <span class="label-en">auto_crop</span>
               </label>
               <div class="switch-wrapper">
-                <input type="checkbox" id="auto_crop" v-model="config.mark_config.auto_crop" class="toggle-checkbox"
+                <input type="checkbox" id="auto_crop" 
+                  :checked="getBoolValue(config.mark_config.auto_crop)" 
+                  @change="config.mark_config.auto_crop = $event.target.checked"
+                  class="toggle-checkbox"
                   :disabled="!canEdit" />
                 <label for="auto_crop" class="toggle-label"></label>
               </div>
             </div>
             <div class="form-group">
               <label>
-                <span class="label-text">默认裁剪比例</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.mark_config.default_crop_ratio)}">默认裁剪比例</span>
                 <span class="label-en">default_crop_ratio</span>
               </label>
               <select v-model="config.mark_config.default_crop_ratio" class="mac-input" :disabled="!canEdit">
@@ -64,7 +67,7 @@
 
           <div class="form-group">
             <label>
-              <span class="label-text">自动标签最小置信度</span>
+              <span class="label-text" :class="{'has-value': hasValue(config.mark_config.min_confidence)}">自动标签最小置信度</span>
               <span class="label-en">min_confidence</span>
             </label>
             <input type="range" v-model.number="config.mark_config.min_confidence" min="0" max="1" step="0.01"
@@ -73,16 +76,16 @@
           </div>
           <div class="form-group">
             <label>
-              <span class="label-text">最大标签数量</span>
+              <span class="label-text" :class="{'has-value': hasValue(config.mark_config.max_tags)}">最大标签数量</span>
               <span class="label-en">max_tags</span>
             </label>
             <input type="number" v-model.number="config.mark_config.max_tags" min="1" max="100" class="mac-input"
-              :disabled="!canEdit" />
+              :placeholder="getPlaceholder('mark', 'max_tags')" :disabled="!canEdit" />
           </div>
 
           <div class="form-group">
             <label>
-              <span class="label-text">打标算法</span>
+              <span class="label-text" :class="{'has-value': hasValue(config.mark_config.mark_algorithm)}">打标算法</span>
               <span class="label-en">mark_algorithm</span>
             </label>
             <select v-model="config.mark_config.mark_algorithm" class="mac-input" :disabled="!canEdit">
@@ -112,10 +115,81 @@
       </div>
       <div v-else class="training-config">
         <div class="config-form">
+          <!-- 模型训练类型选择放在最前面 -->
+          <div class="form-group">
+            <label>
+              <span class="label-text" :class="{'has-value': hasValue(config.training_config.model_train_type)}">模型训练类型</span>
+              <span class="label-en">model_train_type</span>
+            </label>
+            <select v-model="config.training_config.model_train_type" class="mac-input" :disabled="!canEdit">
+              <option value="flux-lora">Flux-Lora</option>
+              <option value="sd-lora">SD1.5-Lora</option>
+              <option value="sdxl-lora">SDXL-Lora</option>
+            </select>
+          </div>
+          
+          <!-- 根据选择的模型类型显示对应的模型路径输入框 -->
+          <div class="form-group" v-if="config.training_config.model_train_type === 'flux-lora'">
+            <label>
+              <span class="label-text" :class="{'has-value': hasValue(config.training_config.flux_model_path)}">Flux模型路径</span>
+              <span class="label-en">flux_model_path</span>
+            </label>
+            <input v-model="config.training_config.flux_model_path" :placeholder="getPlaceholder('training', 'flux_model_path')" class="mac-input theme-flux"
+              :disabled="!canEdit" />
+          </div>
+          
+          <div class="form-group" v-if="config.training_config.model_train_type === 'sd-lora'">
+            <label>
+              <span class="label-text" :class="{'has-value': hasValue(config.training_config.sd_model_path)}">SD1.5模型路径</span>
+              <span class="label-en">sd_model_path</span>
+            </label>
+            <input v-model="config.training_config.sd_model_path" :placeholder="getPlaceholder('training', 'sd_model_path')" class="mac-input theme-sd"
+              :disabled="!canEdit" />
+          </div>
+          
+          <div class="form-group" v-if="config.training_config.model_train_type === 'sdxl-lora'">
+            <label>
+              <span class="label-text" :class="{'has-value': hasValue(config.training_config.sdxl_model_path)}">SDXL模型路径</span>
+              <span class="label-en">sdxl_model_path</span>
+            </label>
+            <input v-model="config.training_config.sdxl_model_path" :placeholder="getPlaceholder('training', 'sdxl_model_path')" class="mac-input theme-sdxl"
+              :disabled="!canEdit" />
+          </div>
+          
+          <!-- Flux特有的模型路径输入框 -->
+          <div v-if="config.training_config.model_train_type === 'flux-lora'">
+            <div class="form-row">
+              <div class="form-group">
+                <label>
+                  <span class="label-text" :class="{'has-value': hasValue(config.training_config.ae)}">自动编码器路径</span>
+                  <span class="label-en">ae</span>
+                </label>
+                <input v-model="config.training_config.ae" :placeholder="getPlaceholder('training', 'ae')" class="mac-input theme-flux"
+                  :disabled="!canEdit" />
+              </div>
+              <div class="form-group">
+                <label>
+                  <span class="label-text" :class="{'has-value': hasValue(config.training_config.clip_l)}">CLIP-L模型路径</span>
+                  <span class="label-en">clip_l</span>
+                </label>
+                <input v-model="config.training_config.clip_l" :placeholder="getPlaceholder('training', 'clip_l')" class="mac-input theme-flux"
+                  :disabled="!canEdit" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.t5xxl)}">T5XXL模型路径</span>
+                <span class="label-en">t5xxl</span>
+              </label>
+              <input v-model="config.training_config.t5xxl" :placeholder="getPlaceholder('training', 't5xxl')" class="mac-input theme-flux"
+                :disabled="!canEdit" />
+            </div>
+          </div>
+          
           <!-- 最重要的两个参数放在最前面 -->
           <div class="form-group">
             <label>
-              <span class="label-text">最大训练轮次</span>
+              <span class="label-text" :class="{'has-value': hasValue(config.training_config.max_train_epochs)}">最大训练轮次</span>
               <span class="label-en">max_train_epochs</span>
             </label>
             <input type="range" v-model.number="config.training_config.max_train_epochs" min="1" max="20" step="1"
@@ -125,7 +199,7 @@
 
           <div class="form-group">
             <label>
-              <span class="label-text">图片重复次数</span>
+              <span class="label-text" :class="{'has-value': hasValue(config.training_config.repeat_num)}">图片重复次数</span>
               <span class="label-en">repeat_num</span>
             </label>
             <input type="range" v-model.number="config.training_config.repeat_num" min="1" max="50" step="1"
@@ -137,18 +211,19 @@
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">批量大小</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.train_batch_size)}">批量大小</span>
                 <span class="label-en">train_batch_size</span>
               </label>
-              <input type="number" v-model.number="config.training_config.train_batch_size" min="1" placeholder="1"
+              <input type="number" v-model.number="config.training_config.train_batch_size" min="1" 
+                :placeholder="getPlaceholder('training', 'train_batch_size')"
                 class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
               <label>
-                <span class="label-text">分辨率</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.resolution)}">分辨率</span>
                 <span class="label-en">resolution</span>
               </label>
-              <input v-model="config.training_config.resolution" placeholder="512,512" class="mac-input"
+              <input v-model="config.training_config.resolution" :placeholder="getPlaceholder('training', 'resolution')" class="mac-input"
                 :disabled="!canEdit" />
             </div>
           </div>
@@ -156,18 +231,20 @@
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">网络维度 (Dim)</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.network_dim)}">网络维度 (Dim)</span>
                 <span class="label-en">network_dim</span>
               </label>
-              <input type="number" v-model.number="config.training_config.network_dim" min="1" placeholder="64"
+              <input type="number" v-model.number="config.training_config.network_dim" min="1" 
+                :placeholder="getPlaceholder('training', 'network_dim')"
                 class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
               <label>
-                <span class="label-text">网络Alpha值</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.network_alpha)}">网络Alpha值</span>
                 <span class="label-en">network_alpha</span>
               </label>
-              <input type="number" v-model.number="config.training_config.network_alpha" min="1" placeholder="32"
+              <input type="number" v-model.number="config.training_config.network_alpha" min="1" 
+                :placeholder="getPlaceholder('training', 'network_alpha')"
                 class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
@@ -175,35 +252,35 @@
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">基础学习率</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.learning_rate)}">基础学习率</span>
                 <span class="label-en">learning_rate</span>
               </label>
               <input type="number" v-model.number="config.training_config.learning_rate" step="0.0001" min="0"
-                placeholder="0.0001" class="mac-input" :disabled="!canEdit" />
+                :placeholder="getPlaceholder('training', 'learning_rate')" class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">Unet学习率</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.unet_lr)}">Unet学习率</span>
                 <span class="label-en">unet_lr</span>
               </label>
               <input type="number" v-model.number="config.training_config.unet_lr" step="0.0001" min="0"
-                placeholder="0.0005" class="mac-input" :disabled="!canEdit" />
+                :placeholder="getPlaceholder('training', 'unet_lr')" class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
               <label>
-                <span class="label-text">文本编码器学习率</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.text_encoder_lr)}">文本编码器学习率</span>
                 <span class="label-en">text_encoder_lr</span>
               </label>
               <input type="number" v-model.number="config.training_config.text_encoder_lr" step="0.00001" min="0"
-                placeholder="0.00001" class="mac-input" :disabled="!canEdit" />
+                :placeholder="getPlaceholder('training', 'text_encoder_lr')" class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
 
           <div class="form-group">
             <label>
-              <span class="label-text">学习率调度器</span>
+              <span class="label-text" :class="{'has-value': hasValue(config.training_config.lr_scheduler)}">学习率调度器</span>
               <span class="label-en">lr_scheduler</span>
             </label>
             <select v-model="config.training_config.lr_scheduler" class="mac-input" :disabled="!canEdit">
@@ -217,7 +294,7 @@
           </div>
           <div class="form-group">
             <label>
-              <span class="label-text">优化器类型</span>
+              <span class="label-text" :class="{'has-value': hasValue(config.training_config.optimizer_type)}">优化器类型</span>
               <span class="label-en">optimizer_type</span>
             </label>
             <select v-model="config.training_config.optimizer_type" class="mac-input" :disabled="!canEdit">
@@ -232,37 +309,40 @@
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">预热步数</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.lr_warmup_steps)}">预热步数</span>
                 <span class="label-en">lr_warmup_steps</span>
               </label>
-              <input type="number" v-model.number="config.training_config.lr_warmup_steps" min="0" placeholder="0"
+              <input type="number" v-model.number="config.training_config.lr_warmup_steps" min="0" 
+                :placeholder="getPlaceholder('training', 'lr_warmup_steps')"
                 class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
               <label>
-                <span class="label-text">学习率循环次数</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.lr_scheduler_num_cycles)}">学习率循环次数</span>
                 <span class="label-en">lr_scheduler_num_cycles</span>
               </label>
               <input type="number" v-model.number="config.training_config.lr_scheduler_num_cycles" min="1"
-                placeholder="1" class="mac-input" :disabled="!canEdit" />
+                :placeholder="getPlaceholder('training', 'lr_scheduler_num_cycles')" class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">每N轮保存一次</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.save_every_n_epochs)}">每N轮保存一次</span>
                 <span class="label-en">save_every_n_epochs</span>
               </label>
-              <input type="number" v-model.number="config.training_config.save_every_n_epochs" min="1" placeholder="1"
+              <input type="number" v-model.number="config.training_config.save_every_n_epochs" min="1" 
+                :placeholder="getPlaceholder('training', 'save_every_n_epochs')"
                 class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
               <label>
-                <span class="label-text">每N轮采样一次</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.sample_every_n_epochs)}">每N轮采样一次</span>
                 <span class="label-en">sample_every_n_epochs</span>
               </label>
-              <input type="number" v-model.number="config.training_config.sample_every_n_epochs" min="1" placeholder="1"
+              <input type="number" v-model.number="config.training_config.sample_every_n_epochs" min="1" 
+                :placeholder="getPlaceholder('training', 'sample_every_n_epochs')"
                 class="mac-input" :disabled="!canEdit" />
             </div>
           </div>
@@ -270,18 +350,20 @@
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">CLIP跳过层数</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.clip_skip)}">CLIP跳过层数</span>
                 <span class="label-en">clip_skip</span>
               </label>
-              <input type="number" v-model.number="config.training_config.clip_skip" min="1" max="12" placeholder="1"
+              <input type="number" v-model.number="config.training_config.clip_skip" min="1" max="12" 
+                :placeholder="getPlaceholder('training', 'clip_skip')"
                 class="mac-input" :disabled="!canEdit" />
             </div>
             <div class="form-group">
               <label>
-                <span class="label-text">随机种子</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.seed)}">随机种子</span>
                 <span class="label-en">seed</span>
               </label>
-              <input type="number" v-model.number="config.training_config.seed" placeholder="42" class="mac-input"
+              <input type="number" v-model.number="config.training_config.seed" 
+                :placeholder="getPlaceholder('training', 'seed')" class="mac-input"
                 :disabled="!canEdit" />
             </div>
           </div>
@@ -289,7 +371,7 @@
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">混合精度</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.mixed_precision)}">混合精度</span>
                 <span class="label-en">mixed_precision</span>
               </label>
               <select v-model="config.training_config.mixed_precision" class="mac-input" :disabled="!canEdit">
@@ -308,7 +390,7 @@
           <div class="form-row">
             <div class="form-group">
               <label>
-                <span class="label-text">生成预览图</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.generate_preview)}">生成预览图</span>
                 <span class="label-en">generate_preview</span>
               </label>
               <div class="switch-wrapper">
@@ -319,7 +401,7 @@
             </div>
             <div class="form-group" v-if="config.training_config.generate_preview">
               <label>
-                <span class="label-text">使用图片标签</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.use_image_tags)}">使用图片标签</span>
                 <span class="label-en">use_image_tags</span>
               </label>
               <div class="switch-wrapper">
@@ -334,34 +416,37 @@
             <div class="form-row" v-if="config.training_config.use_image_tags">
               <div class="form-group">
                 <label>
-                  <span class="label-text">最多采用图片提示词数量</span>
+                  <span class="label-text" :class="{'has-value': hasValue(config.training_config.max_image_tags)}">最多采用图片提示词数量</span>
                   <span class="label-en">max_image_tags</span>
                 </label>
-                <input type="number" v-model.number="config.training_config.max_image_tags" min="0" placeholder="5"
+                <input type="number" v-model.number="config.training_config.max_image_tags" min="0" 
+                  :placeholder="getPlaceholder('training', 'max_image_tags')"
                   class="mac-input" :disabled="!canEdit" />
               </div>
             </div>
 
             <div class="form-group full-width">
               <label>
-                <span class="label-text">正向提示词</span>
-                <span class="label-en">positive_prompt</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.positive_prompts)}">正向提示词</span>
+                <span class="label-en">positive_prompts</span>
               </label>
-              <textarea v-model="config.training_config.positive_prompt" placeholder="输入正向提示词" rows="2"
+              <textarea v-model="config.training_config.positive_prompts" 
+                :placeholder="getPlaceholder('training', 'positive_prompts')" rows="2"
                 class="mac-textarea" :disabled="!canEdit"></textarea>
             </div>
 
             <div class="form-group full-width">
               <label>
-                <span class="label-text">负向提示词</span>
-                <span class="label-en">negative_prompt</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.negative_prompts)}">负向提示词</span>
+                <span class="label-en">negative_prompts</span>
               </label>
-              <textarea v-model="config.training_config.negative_prompt" placeholder="输入负向提示词" rows="2"
+              <textarea v-model="config.training_config.negative_prompts" 
+                :placeholder="getPlaceholder('training', 'negative_prompts')" rows="2"
                 class="mac-textarea" :disabled="!canEdit"></textarea>
             </div>
             <div class="form-group">
               <label>
-                <span class="label-text">采样器</span>
+                <span class="label-text" :class="{'has-value': hasValue(config.training_config.sample_sampler)}">采样器</span>
                 <span class="label-en">sample_sampler</span>
               </label>
               <select v-model="config.training_config.sample_sampler" class="mac-input" :disabled="!canEdit">
@@ -376,42 +461,41 @@
             <div class="form-row">
               <div class="form-group">
                 <label>
-                  <span class="label-text">预览图宽度</span>
-                  <span class="label-en">preview_width</span>
+                  <span class="label-text" :class="{'has-value': hasValue(config.training_config.sample_width)}">采样图宽度</span>
+                  <span class="label-en">sample_width</span>
                 </label>
-                <input type="number" v-model.number="config.training_config.preview_width" min="64" step="8"
-                  placeholder="512" class="mac-input" :disabled="!canEdit" />
+                <input type="number" v-model.number="config.training_config.sample_width" min="64" step="8"
+                  :placeholder="getPlaceholder('training', 'sample_width')" class="mac-input" :disabled="!canEdit" />
               </div>
               <div class="form-group">
                 <label>
-                  <span class="label-text">预览图高度</span>
-                  <span class="label-en">preview_height</span>
+                  <span class="label-text" :class="{'has-value': hasValue(config.training_config.sample_height)}">预览图高度</span>
+                  <span class="label-en">sample_height</span>
                 </label>
-                <input type="number" v-model.number="config.training_config.preview_height" min="64" step="8"
-                  placeholder="768" class="mac-input" :disabled="!canEdit" />
+                <input type="number" v-model.number="config.training_config.sample_height" min="64" step="8"
+                  :placeholder="getPlaceholder('training', 'sample_height')" class="mac-input" :disabled="!canEdit" />
               </div>
             </div>
 
             <div class="form-row">
               <div class="form-group">
                 <label>
-                  <span class="label-text">CFG强度</span>
-                  <span class="label-en">cfg_scale</span>
+                  <span class="label-text" :class="{'has-value': hasValue(config.training_config.sample_cfg)}">CFG强度</span>
+                  <span class="label-en">sample_cfg</span>
                 </label>
-                <input type="number" v-model.number="config.training_config.cfg_scale" min="1" step="0.5"
-                  placeholder="7" class="mac-input" :disabled="!canEdit" />
+                <input type="number" v-model.number="config.training_config.sample_cfg" min="1" step="0.5"
+                  :placeholder="getPlaceholder('training', 'sample_cfg')" class="mac-input" :disabled="!canEdit" />
               </div>
               <div class="form-group">
                 <label>
-                  <span class="label-text">迭代步数</span>
-                  <span class="label-en">steps</span>
+                  <span class="label-text" :class="{'has-value': hasValue(config.training_config.sample_steps)}">迭代步数</span>
+                  <span class="label-en">sample_steps</span>
                 </label>
-                <input type="number" v-model.number="config.training_config.steps" min="1" placeholder="24"
+                <input type="number" v-model.number="config.training_config.sample_steps" min="1" 
+                  :placeholder="getPlaceholder('training', 'sample_steps')"
                   class="mac-input" :disabled="!canEdit" />
               </div>
             </div>
-
-
           </div>
         </div>
       </div>
@@ -422,9 +506,31 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import { tasksApi } from '@/api/tasks'; // 导入任务API
+import { settingsApi } from '@/api/settings'; // 导入设置API
+
+// 添加判断值是否存在的辅助函数
+const hasValue = (value) => {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  if (typeof value === 'number') return true; // 数字类型（包括0）视为有值
+  if (typeof value === 'boolean') return true; // 布尔值（包括false）视为有值
+  return true;
+};
+
+// 添加处理布尔值的辅助函数
+const getBoolValue = (value) => {
+  return value === true || value === 'true';
+};
 
 // 训练参数默认值
 const defaultTrainingConfig = {
+  model_train_type: 'flux-lora',
+  flux_model_path: '',
+  sd_model_path: '',
+  sdxl_model_path: '',
+  ae: '',
+  clip_l: '',
+  t5xxl: '',
   max_train_epochs: 10,
   train_batch_size: 1,
   network_dim: 64,
@@ -446,13 +552,13 @@ const defaultTrainingConfig = {
   generate_preview: true,
   use_image_tags: false,
   max_image_tags: 5,
-  positive_prompt: '1girl, solo',
-  negative_prompt: 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry',
-  preview_width: 512,
-  preview_height: 768,
-  cfg_scale: 7,
-  steps: 24,
-  sample_sampler: 'euler_a'
+  positive_prompts: '1girl, solo',
+  negative_prompts: 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry',
+  sample_width: 512,
+  sample_height: 768,
+  sample_cfg: 7,
+  sample_steps: 24,
+  sample_sampler: 'euler'
 };
 
 // 打标配置默认值
@@ -505,6 +611,10 @@ const config = ref({
   training_config: { ...defaultTrainingConfig }
 });
 
+// 全局配置
+const globalMarkConfig = ref({ ...defaultMarkConfig });
+const globalTrainingConfig = ref({ ...defaultTrainingConfig });
+
 // 激活的选项卡
 const activeTab = ref('mark');
 
@@ -514,17 +624,52 @@ const fetchConfig = async () => {
 
   try {
     isLoading.value = true;
-    const data = await tasksApi.getTaskConfig(props.taskId);
-    if (data) {
-      config.value = data
+    
+    // 并行请求任务配置和全局配置
+    const [taskConfigData, globalMarkData, globalTrainingData] = await Promise.all([
+      tasksApi.getTaskConfig(props.taskId),
+      settingsApi.getTaskMarkConfig(props.taskId),
+      settingsApi.getTaskTrainingConfig(props.taskId)
+    ]);
+    
+    // 更新任务配置
+    if (taskConfigData) {
+      config.value = taskConfigData;
       // 组件挂载时获取配置后，也向父组件发送配置
-      emit('config-changed', data);
+      emit('config-changed', taskConfigData);
+    }
+    
+    // 更新全局配置
+    if (globalMarkData) {
+      globalMarkConfig.value = { ...globalMarkData };
+    }
+    
+    if (globalTrainingData) {
+      globalTrainingConfig.value = { ...globalTrainingData };
     }
   } catch (error) {
     console.error('获取任务配置失败:', error);
   } finally {
     isLoading.value = false;
   }
+};
+
+// 获取输入框的placeholder值，优先使用全局配置的值
+const getPlaceholder = (configType, fieldName) => {
+  if (configType === 'mark') {
+    return globalMarkConfig.value[fieldName] !== undefined 
+      ? String(globalMarkConfig.value[fieldName]) 
+      : defaultMarkConfig[fieldName] !== undefined 
+        ? String(defaultMarkConfig[fieldName])
+        : '';
+  } else if (configType === 'training') {
+    return globalTrainingConfig.value[fieldName] !== undefined 
+      ? String(globalTrainingConfig.value[fieldName]) 
+      : defaultTrainingConfig[fieldName] !== undefined 
+        ? String(defaultTrainingConfig[fieldName])
+        : '';
+  }
+  return '';
 };
 
 // 保存配置到后端
@@ -548,14 +693,26 @@ const saveConfig = () => {
 
       // 根据全局配置标志决定是否发送详细配置
       if (!config.value.use_global_mark_config) {
-        updateData.mark_config = config.value.mark_config;
-      } else if (config.value.mark_config?.trigger_words !== undefined) {
-        // 特殊处理触发词：即使使用全局配置，也保留触发词设置
+        // 创建一个不包含空字符串值的mark_config对象
+        updateData.mark_config = {};
+        Object.entries(config.value.mark_config).forEach(([key, value]) => {
+          if (value !== '') {
+            updateData.mark_config[key] = value;
+          }
+        });
+      } else if (config.value.mark_config?.trigger_words !== undefined && config.value.mark_config?.trigger_words !== '') {
+        // 特殊处理触发词：即使使用全局配置，也保留触发词设置（如果不为空）
         updateData.mark_config = { trigger_words: config.value.mark_config.trigger_words };
       }
 
       if (!config.value.use_global_training_config) {
-        updateData.training_config = config.value.training_config;
+        // 创建一个不包含空字符串值的training_config对象
+        updateData.training_config = {};
+        Object.entries(config.value.training_config).forEach(([key, value]) => {
+          if (hasValue(value)) {
+            updateData.training_config[key] = value;
+          }
+        });
       }
 
       // 调用更新接口
@@ -598,7 +755,7 @@ onMounted(() => {
 }
 
 .tab-button {
-  padding: 0px 16px 16px 16px;
+  padding: 16px;
   background: none;
   border: none;
   cursor: pointer;
@@ -606,6 +763,9 @@ onMounted(() => {
   color: #6B7280;
   position: relative;
   transition: all 0.2s;
+}
+.mac-card{
+  padding: 0px 20px 20px 20px;
 }
 
 .tab-button.active {
@@ -761,6 +921,17 @@ onMounted(() => {
   color: var(--text-tertiary, #9CA3AF);
 }
 
+.label-text.has-value::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #007AFF;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 .mac-input {
   height: 36px;
   padding: 0 12px;
@@ -894,5 +1065,33 @@ onMounted(() => {
   .form-group {
     width: 100%;
   }
+}
+
+/* 添加模型类型主题样式 */
+.theme-flux {
+  border-color: #0A84FF;
+}
+
+.theme-flux:focus {
+  border-color: #0A84FF;
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.2);
+}
+
+.theme-sd {
+  border-color: #30D158;
+}
+
+.theme-sd:focus {
+  border-color: #30D158;
+  box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.2);
+}
+
+.theme-sdxl {
+  border-color: #FF9F0A;
+}
+
+.theme-sdxl:focus {
+  border-color: #FF9F0A;
+  box-shadow: 0 0 0 2px rgba(255, 159, 10, 0.2);
 }
 </style>

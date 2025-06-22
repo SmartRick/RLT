@@ -14,56 +14,32 @@
               <div class="label-text">{{ param.label }}</div>
               <span class="param-name">{{ param.name }}</span>
             </label>
-            
+
             <!-- 根据不同类型渲染不同输入控件 -->
             <template v-if="param.type === 'text'">
-              <input 
-                :value="modelValue[param.name]" 
-                @input="updateValue(param.name, $event.target.value)"
-                :placeholder="param.placeholder" 
-                class="mac-input" 
-                :disabled="disabled" 
-              />
+              <input :value="modelValue[param.name]" @input="updateValue(param.name, $event.target.value)"
+                :placeholder="param.placeholder" class="mac-input" :class="getThemeClass(param)" :disabled="disabled" />
             </template>
-            
+
             <template v-else-if="param.type === 'number'">
-              <input 
-                :value="modelValue[param.name]" 
-                @input="updateValue(param.name, Number($event.target.value))"
-                type="number" 
-                :placeholder="param.placeholder" 
-                :step="param.step" 
-                class="mac-input"
-                :disabled="disabled" 
-              />
+              <input :value="modelValue[param.name]" @input="updateValue(param.name, Number($event.target.value))"
+                type="number" :placeholder="param.placeholder" :step="param.step" class="mac-input" :class="getThemeClass(param)"
+                :disabled="disabled" />
             </template>
-            
+
             <template v-else-if="param.type === 'select'">
-              <select 
-                :value="modelValue[param.name]"
-                @change="updateValue(param.name, $event.target.value)" 
-                class="mac-input"
-                :disabled="disabled"
-              >
-                <option 
-                  v-for="option in param.options" 
-                  :key="option.value" 
-                  :value="option.value"
-                >
+              <select :value="modelValue[param.name]" @change="updateValue(param.name, $event.target.value)"
+                class="mac-input" :class="getThemeClass(param)" :disabled="disabled">
+                <option v-for="option in getParamOptions(param, modelValue)" :key="option.value" :value="option.value">
                   {{ option.label }}
                 </option>
               </select>
             </template>
-            
+
             <template v-else-if="param.type === 'textarea'">
-              <textarea 
-                :value="modelValue[param.name]" 
-                @input="updateValue(param.name, $event.target.value)"
-                :placeholder="param.placeholder" 
-                class="mac-textarea" 
-                :rows="param.rows || 2"
-                :disabled="disabled"
-              ></textarea>
+              <textarea :value="modelValue[param.name]" @input="updateValue(param.name, $event.target.value)"
+                :placeholder="param.placeholder" class="mac-textarea" :rows="param.rows || 2"
+                :disabled="disabled"></textarea>
             </template>
           </div>
         </template>
@@ -73,64 +49,41 @@
       <template v-for="subsection in getSubsections(section)" :key="subsection.id">
         <div class="settings-subsection">
           <h5 class="subsection-subtitle">{{ subsection.title }}</h5>
-          
+
           <div class="settings-grid">
             <template v-for="param in subsection.params" :key="param.name">
-              <div v-if="shouldShowParam(param, modelValue)" 
-                  :class="['settings-item', param.type === 'textarea' ? 'settings-item-full' : '']">
+              <div v-if="shouldShowParam(param, modelValue)"
+                :class="['settings-item', param.type === 'textarea' ? 'settings-item-full' : '']">
                 <label>
                   <div class="label-text">{{ param.label }}</div>
                   <span class="param-name">{{ param.name }}</span>
                 </label>
-                
+
                 <template v-if="param.type === 'text'">
-                  <input 
-                    :value="modelValue[param.name]" 
-                    @input="updateValue(param.name, $event.target.value)"
-                    :placeholder="param.placeholder" 
-                    class="mac-input" 
-                    :disabled="disabled" 
-                  />
+                  <input :value="modelValue[param.name]" @input="updateValue(param.name, $event.target.value)"
+                    :placeholder="param.placeholder" class="mac-input" :disabled="disabled" />
                 </template>
-                
+
                 <template v-else-if="param.type === 'number'">
-                  <input 
-                    :value="modelValue[param.name]" 
-                    @input="updateValue(param.name, Number($event.target.value))"
-                    type="number" 
-                    :placeholder="param.placeholder" 
-                    :step="param.step" 
-                    class="mac-input"
-                    :disabled="disabled" 
-                  />
+                  <input :value="modelValue[param.name]" @input="updateValue(param.name, Number($event.target.value))"
+                    type="number" :placeholder="param.placeholder" :step="param.step" class="mac-input"
+                    :disabled="disabled" />
                 </template>
-                
+
                 <template v-else-if="param.type === 'select'">
-                  <select 
-                    :value="modelValue[param.name]"
-                    @change="updateValue(param.name, $event.target.value)" 
-                    class="mac-input"
-                    :disabled="disabled"
-                  >
-                    <option 
-                      v-for="option in param.options" 
-                      :key="option.value" 
-                      :value="option.value"
-                    >
+                  <select :value="modelValue[param.name]" @change="updateValue(param.name, $event.target.value)"
+                    class="mac-input" :disabled="disabled">
+                    <option v-for="option in getParamOptions(param, modelValue)" :key="option.value"
+                      :value="option.value">
                       {{ option.label }}
                     </option>
                   </select>
                 </template>
-                
+
                 <template v-else-if="param.type === 'textarea'">
-                  <textarea 
-                    :value="modelValue[param.name]" 
-                    @input="updateValue(param.name, $event.target.value)"
-                    :placeholder="param.placeholder" 
-                    class="mac-textarea" 
-                    :rows="param.rows || 2"
-                    :disabled="disabled"
-                  ></textarea>
+                  <textarea :value="modelValue[param.name]" @input="updateValue(param.name, $event.target.value)"
+                    :placeholder="param.placeholder" class="mac-textarea" :rows="param.rows || 2"
+                    :disabled="disabled"></textarea>
                 </template>
               </div>
             </template>
@@ -142,7 +95,7 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, computed } from 'vue';
+import { defineProps, defineEmits, computed, onMounted } from 'vue';
 import { PARAM_SECTIONS, useLoraParams } from '../../composables/useLoraParams';
 
 const props = defineProps({
@@ -164,12 +117,38 @@ const emit = defineEmits(['update:modelValue']);
 
 const { shouldShowParam } = useLoraParams();
 
+// 在组件挂载时，根据当前model_train_type设置依赖默认值
+onMounted(() => {
+  if (props.modelValue.model_train_type) {
+    // 创建一个新对象，避免直接修改props
+    const updatedModel = { ...props.modelValue };
+
+    // 发出更新事件
+    emit('update:modelValue', updatedModel);
+  }
+});
+
 // 更新值的方法，避免直接修改props
 const updateValue = (key, value) => {
-  emit('update:modelValue', {
+  const updatedModel = {
     ...props.modelValue,
     [key]: value
-  });
+  };
+
+  // 如果更新的是model_train_type，则同时更新依赖的默认值
+  if (key === 'model_train_type') {
+    // 根据不同的训练类型设置对应的网络模块默认值
+    if (value === 'flux-lora' &&
+      !['networks.lora_flux', 'networks.oft_flux', 'lycoris.kohya'].includes(updatedModel.network_module)) {
+      updatedModel.network_module = 'networks.lora_flux';
+    }
+    else if ((value === 'sd-lora' || value === 'sdxl-lora') &&
+      !['networks.lora', 'networks.dylora', 'networks.oft', 'lycoris.kohya'].includes(updatedModel.network_module)) {
+      updatedModel.network_module = 'networks.lora';
+    }
+  }
+
+  emit('update:modelValue', updatedModel);
 };
 
 // 根据showAllParams过滤可见的分节
@@ -179,7 +158,7 @@ const visibleSections = computed(() => {
     if (section.subsection) {
       return false;
     }
-    
+
     // 如果不是高级配置，或者showAllParams为true，则显示
     return section.always || props.showAllParams;
   });
@@ -190,10 +169,32 @@ const getSubsections = (section) => {
   if (!props.showAllParams && section.id !== 'advanced') {
     return [];
   }
-  
-  return PARAM_SECTIONS.filter(subsection => 
+
+  return PARAM_SECTIONS.filter(subsection =>
     subsection.subsection && subsection.parent === section.id
   );
+};
+
+// 获取参数选项的方法
+const getParamOptions = (param, modelValue) => {
+  // 如果参数有标准options属性，直接使用
+  if (param.options) {
+    return param.options;
+  }
+  // 如果参数有options_by_type属性，根据当前model_train_type选择对应的选项列表
+  else if (param.options_by_type && modelValue.model_train_type) {
+    return param.options_by_type[modelValue.model_train_type] || [];
+  }
+
+  return [];
+};
+
+// 根据参数主题获取对应的CSS类
+const getThemeClass = (param) => {
+  if (param.name === 'flux_model_path' || param.theme === 'flux') return 'theme-flux';
+  if (param.name === 'sd_model_path' || param.theme === 'sd') return 'theme-sd';
+  if (param.name === 'sdxl_model_path' || param.theme === 'sdxl') return 'theme-sdxl';
+  return '';
 };
 </script>
 
@@ -319,4 +320,26 @@ label {
     margin-right: 0;
   }
 }
-</style> 
+
+.theme-flux {
+  border-color: #0A84FF;
+}
+.theme-flux:focus {
+  border-color: #0A84FF;
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.2);
+}
+.theme-sd {
+  border-color: #30D158;
+}
+.theme-sd:focus {
+  border-color: #30D158;
+  box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.2);
+}
+.theme-sdxl {
+  border-color: #FF9F0A;
+}
+.theme-sdxl:focus {
+  border-color: #FF9F0A;
+  box-shadow: 0 0 0 2px rgba(255, 159, 10, 0.2);
+}
+</style>
