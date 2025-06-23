@@ -1,4 +1,5 @@
 import { computed, reactive, watch } from 'vue';
+import { shouldShowParam as utilsShowParam } from '../utils/paramUtils';
 
 // 参数定义，可以被多个组件引用
 export const PARAM_SECTIONS = [
@@ -18,7 +19,8 @@ export const PARAM_SECTIONS = [
         ],
         placeholder: 'flux-lora',
         default: 'flux-lora',
-        full: true
+        full: true,
+        tooltip: '选择要训练的扩散模型类型'
       },
       {
         name: 'flux_model_path',
@@ -49,6 +51,16 @@ export const PARAM_SECTIONS = [
         full: true,
         depends: 'model_train_type=sdxl-lora',
         theme: 'sdxl'
+      },
+      {
+        name: 'vae',
+        label: 'vae模型路径',
+        type: 'text',
+        placeholder: './sd-models/vae.safetensors',
+        default: '',
+        full: true,
+        depends: 'model_train_type=sd-lora || model_train_type=sdxl-lora',
+        tooltip: 'VAE模型路径，用于改善生成图像的质量和细节'
       },
       {
         name: 'v2',
@@ -185,7 +197,8 @@ export const PARAM_SECTIONS = [
         type: 'text',
         placeholder: '512,512',
         default: '512,512',
-        half: true
+        half: true,
+        tooltip: '训练图像的分辨率，格式为"宽度,高度"'
       }
     ]
   },
@@ -200,7 +213,8 @@ export const PARAM_SECTIONS = [
         type: 'number',
         placeholder: '10',
         default: 10,
-        half: true
+        half: true,
+        tooltip: '训练过程中的最大迭代轮数'
       },
       {
         name: 'train_batch_size',
@@ -208,7 +222,8 @@ export const PARAM_SECTIONS = [
         type: 'number',
         placeholder: '1',
         default: 1,
-        half: true
+        half: true,
+        tooltip: '每次迭代处理的图片数量，提高此值可加快训练但需要更多GPU内存'
       },
       {
         name: 'repeat_num',
@@ -227,7 +242,8 @@ export const PARAM_SECTIONS = [
           { value: false, label: '禁用' }
         ],
         default: true,
-        half: true
+        half: true,
+        tooltip: '通过牺牲一些计算速度来减少显存占用，对大模型和大批量很有用(flux推荐开启)'
       },
       {
         name: 'gradient_accumulation_steps',
@@ -235,7 +251,8 @@ export const PARAM_SECTIONS = [
         type: 'number',
         placeholder: '1',
         default: 1,
-        half: true
+        half: true,
+        tooltip: '在执行优化器步骤前累积多少批次的梯度，可以模拟更大的批量大小(推荐1或更大)'
       },
       {
         name: 'network_train_unet_only',
@@ -246,7 +263,8 @@ export const PARAM_SECTIONS = [
           { value: true, label: '是' }
         ],
         default: false,
-        half: true
+        half: true,
+        tooltip: '仅训练U-Net部分，忽略文本编码器，可以降低显存占用但可能影响文本理解能力'
       },
       {
         name: 'network_train_text_encoder_only',
@@ -257,7 +275,8 @@ export const PARAM_SECTIONS = [
           { value: true, label: '是' }
         ],
         default: false,
-        half: true
+        half: true,
+        tooltip: '仅训练文本编码器，忽略U-Net，主要用于风格关键词和文本关联的训练'
       },
       {
         name: 'network_module',
@@ -292,7 +311,8 @@ export const PARAM_SECTIONS = [
         type: 'number',
         placeholder: '64',
         default: 64,
-        half: true
+        half: true,
+        tooltip: 'LoRA网络的维度，更高的值可以提高模型表现力，但需要更多显存和训练时间'
       },
       {
         name: 'network_alpha',
@@ -300,7 +320,18 @@ export const PARAM_SECTIONS = [
         type: 'number',
         placeholder: '32',
         default: 32,
-        half: true
+        half: true,
+        tooltip: 'LoRA的缩放因子，通常设置为dim的一半或相等，影响训练稳定性和效果'
+      },
+      {
+        name: 'noise_offset',
+        label: '噪声偏移',
+        type: 'number',
+        step: 0.01,
+        placeholder: '0.0',
+        default: 0.0,
+        half: true,
+        tooltip: '添加到输入噪声的小偏移量，以改善低噪声区域的训练'
       },
       {
         name: 'learning_rate',
@@ -309,7 +340,8 @@ export const PARAM_SECTIONS = [
         step: 0.0001,
         placeholder: '0.0001',
         default: 0.0001,
-        full: true
+        full: true,
+        tooltip: '训练过程中的学习率，调整得当可以提高训练效果和稳定性'
       },
       {
         name: 'unet_lr',
@@ -318,7 +350,8 @@ export const PARAM_SECTIONS = [
         step: 0.0001,
         placeholder: '0.0005',
         default: 0.0005,
-        half: true
+        half: true,
+        tooltip: 'U-Net网络的专用学习率，通常高于文本编码器学习率'
       },
       {
         name: 'text_encoder_lr',
@@ -327,7 +360,8 @@ export const PARAM_SECTIONS = [
         step: 0.00001,
         placeholder: '0.00001',
         default: 0.00001,
-        half: true
+        half: true,
+        tooltip: '文本编码器的专用学习率，通常低于U-Net学习率'
       },
       {
         name: 'lr_scheduler',
@@ -342,7 +376,8 @@ export const PARAM_SECTIONS = [
           { value: 'polynomial', label: '多项式(polynomial)' }
         ],
         default: 'cosine_with_restarts',
-        full: true
+        full: true,
+        tooltip: '控制训练过程中学习率变化的方式，余弦退火通常效果最好'
       }
     ]
   },
@@ -568,7 +603,8 @@ export const PARAM_SECTIONS = [
           { value: false, label: '否' }
         ],
         default: true,
-        half: true
+        half: true,
+        tooltip: '将图像按照长宽比分成不同的桶进行批处理，可以提高训练效率'
       },
       {
         name: 'bucket_no_upscale',
@@ -623,7 +659,8 @@ export const PARAM_SECTIONS = [
           { value: 'fp16', label: 'fp16' }
         ],
         default: 'bf16',
-        half: true
+        half: true,
+        tooltip: '使用混合精度训练可以提高性能和减少显存占用，bf16更稳定但需要30系以上显卡(fp16情况下需要指定fp16的vae，否则会报错)'
       },
       {
         name: 'save_precision',
@@ -677,7 +714,8 @@ export const PARAM_SECTIONS = [
           { value: true, label: '启用' }
         ],
         default: false,
-        half: true
+        half: true,
+        tooltip: '在内存受限的环境下使用，将尽可能多的数据存储在硬盘上而不是内存中'
       },
       {
         name: 'cache_latents',
@@ -688,7 +726,8 @@ export const PARAM_SECTIONS = [
           { value: false, label: '禁用' }
         ],
         default: true,
-        half: true
+        half: true,
+        tooltip: '将VAE编码结果缓存在内存中以避免重复计算，可以提高训练速度'
       },
       {
         name: 'cache_latents_to_disk',
@@ -777,7 +816,8 @@ export const PARAM_SECTIONS = [
         type: 'number',
         placeholder: '2',
         default: 2,
-        half: true
+        half: true,
+        tooltip: '文本编码器跳过的层数，SD1.5模型通常设置为2'
       },
       {
         name: 'max_token_length',
@@ -858,20 +898,11 @@ export function useLoraParams(initialParams = {}) {
   // 获取所有参数的计算属性
   const allParams = computed(() => params);
 
-  // 获取参数是否应该显示的方法
-  const shouldShowParam = (param, allParams) => {
-    if (!param.depends) return true;
-    
-    // 处理依赖条件
-    const [dependName, dependValue] = param.depends.split('=');
-    return String(allParams[dependName]) === dependValue;
-  };
 
   return {
     params,
     updateParam,
     allParams,
-    shouldShowParam,
     PARAM_SECTIONS
   };
 } 

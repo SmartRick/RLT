@@ -11,7 +11,10 @@
           <!-- 所有参数在设置页面都是统一布局 -->
           <div v-if="shouldShowParam(param, modelValue)" class="settings-item">
             <label>
-              <div class="label-text">{{ param.label }}</div>
+              <div class="label-text">
+                {{ param.label }}
+                <TooltipText v-if="param.tooltip" width="320px">{{ param.tooltip }}</TooltipText>
+              </div>
               <span class="param-name">{{ param.name }}</span>
             </label>
 
@@ -28,9 +31,9 @@
             </template>
 
             <template v-else-if="param.type === 'select'">
-              <select :value="modelValue[param.name]" @change="updateValue(param.name, $event.target.value)"
+              <select :value="String(modelValue[param.name])" @change="updateValue(param.name, $event.target.value)"
                 class="mac-input" :class="getThemeClass(param)" :disabled="disabled">
-                <option v-for="option in getParamOptions(param, modelValue)" :key="option.value" :value="option.value">
+                <option v-for="option in getParamOptions(param, modelValue)" :key="option.value" :value="String(option.value)">
                   {{ option.label }}
                 </option>
               </select>
@@ -55,7 +58,10 @@
               <div v-if="shouldShowParam(param, modelValue)"
                 :class="['settings-item', param.type === 'textarea' ? 'settings-item-full' : '']">
                 <label>
-                  <div class="label-text">{{ param.label }}</div>
+                  <div class="label-text">
+                    {{ param.label }}
+                    <TooltipText v-if="param.tooltip" width="320px">{{ param.tooltip }}</TooltipText>
+                  </div>
                   <span class="param-name">{{ param.name }}</span>
                 </label>
 
@@ -71,10 +77,10 @@
                 </template>
 
                 <template v-else-if="param.type === 'select'">
-                  <select :value="modelValue[param.name]" @change="updateValue(param.name, $event.target.value)"
+                  <select :value="String(modelValue[param.name])" @change="updateValue(param.name, $event.target.value)"
                     class="mac-input" :disabled="disabled">
                     <option v-for="option in getParamOptions(param, modelValue)" :key="option.value"
-                      :value="option.value">
+                      :value="String(option.value)">
                       {{ option.label }}
                     </option>
                   </select>
@@ -97,6 +103,8 @@
 <script setup>
 import { defineProps, defineEmits, computed, onMounted } from 'vue';
 import { PARAM_SECTIONS, useLoraParams } from '../../composables/useLoraParams';
+import TooltipText from './TooltipText.vue';
+import { getParamOptions, getParamThemeClass, updateModelValue, shouldShowParam } from '../../utils/paramUtils';
 
 const props = defineProps({
   modelValue: {
@@ -115,8 +123,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-const { shouldShowParam } = useLoraParams();
-
 // 在组件挂载时，根据当前model_train_type设置依赖默认值
 onMounted(() => {
   if (props.modelValue.model_train_type) {
@@ -128,26 +134,9 @@ onMounted(() => {
   }
 });
 
-// 更新值的方法，避免直接修改props
+// 更新值的方法，使用公共工具函数
 const updateValue = (key, value) => {
-  const updatedModel = {
-    ...props.modelValue,
-    [key]: value
-  };
-
-  // 如果更新的是model_train_type，则同时更新依赖的默认值
-  if (key === 'model_train_type') {
-    // 根据不同的训练类型设置对应的网络模块默认值
-    if (value === 'flux-lora' &&
-      !['networks.lora_flux', 'networks.oft_flux', 'lycoris.kohya'].includes(updatedModel.network_module)) {
-      updatedModel.network_module = 'networks.lora_flux';
-    }
-    else if ((value === 'sd-lora' || value === 'sdxl-lora') &&
-      !['networks.lora', 'networks.dylora', 'networks.oft', 'lycoris.kohya'].includes(updatedModel.network_module)) {
-      updatedModel.network_module = 'networks.lora';
-    }
-  }
-
+  const updatedModel = updateModelValue(key, value, props.modelValue, PARAM_SECTIONS);
   emit('update:modelValue', updatedModel);
 };
 
@@ -175,27 +164,8 @@ const getSubsections = (section) => {
   );
 };
 
-// 获取参数选项的方法
-const getParamOptions = (param, modelValue) => {
-  // 如果参数有标准options属性，直接使用
-  if (param.options) {
-    return param.options;
-  }
-  // 如果参数有options_by_type属性，根据当前model_train_type选择对应的选项列表
-  else if (param.options_by_type && modelValue.model_train_type) {
-    return param.options_by_type[modelValue.model_train_type] || [];
-  }
-
-  return [];
-};
-
 // 根据参数主题获取对应的CSS类
-const getThemeClass = (param) => {
-  if (param.name === 'flux_model_path' || param.theme === 'flux') return 'theme-flux';
-  if (param.name === 'sd_model_path' || param.theme === 'sd') return 'theme-sd';
-  if (param.name === 'sdxl_model_path' || param.theme === 'sdxl') return 'theme-sdxl';
-  return '';
-};
+const getThemeClass = getParamThemeClass;
 </script>
 
 <style scoped>

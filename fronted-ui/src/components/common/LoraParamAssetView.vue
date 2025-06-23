@@ -19,7 +19,10 @@
                     param.name === 't5xxl')"
                class="param-item param-item-full">
             <label>
-              <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
+              <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">
+                {{ param.label }}
+                <TooltipText v-if="param.tooltip" width="400px">{{ param.tooltip }}</TooltipText>
+              </div>
               <span class="param-name">{{ param.name }}</span>
             </label>
             
@@ -50,7 +53,7 @@
             
             <template v-else-if="param.type === 'select'">
               <select 
-                :value="modelValue[param.name]"
+                :value="String(modelValue[param.name])"
                 @change="updateValue(param.name, $event.target.value)" 
                 class="mac-input"
                 :class="getThemeClass(param)"
@@ -59,7 +62,7 @@
                 <option 
                   v-for="option in getParamOptions(param, modelValue)" 
                   :key="option.value" 
-                  :value="option.value"
+                  :value="String(option.value)"
                 >
                   {{ option.label }}
                 </option>
@@ -71,7 +74,10 @@
           <div v-else-if="shouldShowParam(param, modelValue) && param.type === 'textarea'"
                class="param-item param-item-full">
             <label>
-              <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
+              <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">
+                {{ param.label }}
+                <TooltipText v-if="param.tooltip" width="400px">{{ param.tooltip }}</TooltipText>
+              </div>
               <span class="param-name">{{ param.name }}</span>
             </label>
             
@@ -89,7 +95,10 @@
           <!-- 默认情况：一行两个配置 -->
           <div v-else-if="shouldShowParam(param, modelValue)" class="param-item-half">
             <label>
-              <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
+              <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">
+                {{ param.label }}
+                <TooltipText v-if="param.tooltip" width="400px">{{ param.tooltip }}</TooltipText>
+              </div>
               <span class="param-name">{{ param.name }}</span>
             </label>
             
@@ -120,7 +129,7 @@
             
             <template v-else-if="param.type === 'select'">
               <select 
-                :value="modelValue[param.name]"
+                :value="String(modelValue[param.name])"
                 @change="updateValue(param.name, $event.target.value)" 
                 class="mac-input"
                 :class="getThemeClass(param)"
@@ -129,7 +138,7 @@
                 <option 
                   v-for="option in getParamOptions(param, modelValue)" 
                   :key="option.value" 
-                  :value="option.value"
+                  :value="String(option.value)"
                 >
                   {{ option.label }}
                 </option>
@@ -150,7 +159,10 @@
             <template v-for="param in subsection.params" :key="param.name">
               <div v-if="shouldShowParam(param, modelValue)" class="param-item-half">
                 <label>
-                  <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
+                  <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">
+                    {{ param.label }}
+                    <TooltipText v-if="param.tooltip" width="400px">{{ param.tooltip }}</TooltipText>
+                  </div>
                   <span class="param-name">{{ param.name }}</span>
                 </label>
                 
@@ -180,7 +192,7 @@
                 
                 <template v-else-if="param.type === 'select'">
                   <select 
-                    :value="modelValue[param.name]"
+                    :value="String(modelValue[param.name])"
                     @change="updateValue(param.name, $event.target.value)" 
                     class="mac-input"
                     :class="getThemeClass(param)"
@@ -189,7 +201,7 @@
                     <option 
                       v-for="option in getParamOptions(param, modelValue)" 
                       :key="option.value" 
-                      :value="option.value"
+                      :value="String(option.value)"
                     >
                       {{ option.label }}
                     </option>
@@ -208,7 +220,10 @@
                          param.name === 'negative_prompt')"
                    class="param-item param-item-full">
                 <label>
-                  <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
+                  <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">
+                    {{ param.label }}
+                    <TooltipText v-if="param.tooltip" width="400px">{{ param.tooltip }}</TooltipText>
+                  </div>
                   <span class="param-name">{{ param.name }}</span>
                 </label>
                 
@@ -226,7 +241,10 @@
               <!-- 默认情况：一行两个配置 -->
               <div v-else-if="shouldShowParam(param, modelValue)" class="param-item-half">
                 <label>
-                  <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">{{ param.label }}</div>
+                  <div class="label-text" :class="{'has-value': hasValue(modelValue[param.name])}">
+                    {{ param.label }}
+                    <TooltipText v-if="param.tooltip" width="400px">{{ param.tooltip }}</TooltipText>
+                  </div>
                   <span class="param-name">{{ param.name }}</span>
                 </label>
                 
@@ -256,7 +274,7 @@
                 
                 <template v-else-if="param.type === 'select'">
                   <select 
-                    :value="modelValue[param.name]"
+                    :value="String(modelValue[param.name])"
                     @change="updateValue(param.name, $event.target.value)" 
                     class="mac-input"
                     :class="getThemeClass(param)"
@@ -265,7 +283,7 @@
                     <option 
                       v-for="option in getParamOptions(param, modelValue)" 
                       :key="option.value" 
-                      :value="option.value"
+                      :value="String(option.value)"
                     >
                       {{ option.label }}
                     </option>
@@ -283,6 +301,8 @@
 <script setup>
 import { defineProps, defineEmits, computed, onMounted } from 'vue';
 import { PARAM_SECTIONS, useLoraParams } from '../../composables/useLoraParams';
+import TooltipText from './TooltipText.vue';
+import { getParamOptions, getParamThemeClass, updateModelValue, shouldShowParam } from '../../utils/paramUtils';
 
 const props = defineProps({
   modelValue: {
@@ -301,8 +321,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-const { shouldShowParam } = useLoraParams();
-
 // 添加判断值是否存在的辅助函数
 const hasValue = (value) => {
   if (value === undefined || value === null) return false;
@@ -313,47 +331,11 @@ const hasValue = (value) => {
 };
 
 // 根据参数主题获取对应的CSS类
-const getThemeClass = (param) => {
-  if (param.theme === 'flux') return 'theme-flux';
-  if (param.theme === 'sd') return 'theme-sd';
-  if (param.theme === 'sdxl') return 'theme-sdxl';
-  return '';
-};
+const getThemeClass = getParamThemeClass;
 
-// 获取参数选项的方法
-const getParamOptions = (param, modelValue) => {
-  // 如果参数有标准options属性，直接使用
-  if (param.options) {
-    return param.options;
-  } 
-  // 如果参数有options_by_type属性，根据当前model_train_type选择对应的选项列表
-  else if (param.options_by_type && modelValue.model_train_type) {
-    return param.options_by_type[modelValue.model_train_type] || [];
-  }
-  
-  return [];
-};
-
-// 更新值的方法，避免直接修改props
+// 更新值的方法，使用公共工具函数
 const updateValue = (key, value) => {
-  const updatedModel = {
-    ...props.modelValue,
-    [key]: value
-  };
-  
-  // 如果更新的是model_train_type，则同时更新依赖的默认值
-  if (key === 'model_train_type') {
-    // 根据不同的训练类型设置对应的网络模块默认值
-    if (value === 'flux-lora' && 
-        !['networks.lora_flux', 'networks.oft_flux', 'lycoris.kohya'].includes(updatedModel.network_module)) {
-      updatedModel.network_module = 'networks.lora_flux';
-    } 
-    else if ((value === 'sd-lora' || value === 'sdxl-lora') && 
-             !['networks.lora', 'networks.dylora', 'networks.oft', 'lycoris.kohya'].includes(updatedModel.network_module)) {
-      updatedModel.network_module = 'networks.lora';
-    }
-  }
-  
+  const updatedModel = updateModelValue(key, value, props.modelValue, PARAM_SECTIONS);
   emit('update:modelValue', updatedModel);
 };
 

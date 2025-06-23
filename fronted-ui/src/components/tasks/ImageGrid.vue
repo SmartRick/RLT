@@ -245,12 +245,11 @@
 <script setup>
 /* eslint-disable */
 import { computed, ref, watch, onUnmounted } from 'vue'
-import { Teleport, Transition } from 'vue'
-import { PhotoIcon, TrashIcon, PencilIcon, XMarkIcon, CloudArrowUpIcon as UploadIcon } from '@heroicons/vue/24/outline'
+import { PhotoIcon, TrashIcon, XMarkIcon, CloudArrowUpIcon as UploadIcon } from '@heroicons/vue/24/outline'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import BaseModal from '@/components/common/Modal.vue'
 import HighlightEditableDiv from '@/components/common/HighlightEditableDiv.vue'
-import TextTooltip from '@/components/common/TextTooltip.vue'
+import TextTooltip from '@/components/common/PromptTooltip.vue'
 import message from '@/utils/message'
 import { highlightMarkedText } from '@/utils/textFormatters'
 import { getTranslation, translationConfig } from '@/utils/translationCache'

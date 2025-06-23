@@ -70,7 +70,7 @@
     },
     "155": {
         "inputs": {
-            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1_5_mark"
+            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1_11_mark"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -194,7 +194,7 @@
     },
     "210": {
         "inputs": {
-            "string": "Moonlight and Prosperity"
+            "string": "Moonlight girl"
         },
         "class_type": "Simple String",
         "_meta": {
