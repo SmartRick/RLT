@@ -390,11 +390,13 @@ class TrainingService:
             config['pretrained_model_name_or_path'] = config.get('flux_model_path')
         elif model_train_type == 'sd-lora':
             config['pretrained_model_name_or_path'] = config.get('sd_model_path')
+            config['vae'] = config.get('sd_vae')
         elif model_train_type == 'sdxl-lora':
             config['pretrained_model_name_or_path'] = config.get('sdxl_model_path')
+            config['vae'] = config.get('sdxl_vae')
         
         # 2. 移除业务参数
-        business_params = ['use_image_tags', 'max_image_tags', 'generate_preview','flux_model_path','sd_model_path','sdxl_model_path','remote_output_dir','repeat_num']
+        business_params = ['use_image_tags', 'max_image_tags', 'generate_preview','flux_model_path','sd_model_path','sdxl_model_path','sd_vae','sdxl_vae','remote_output_dir','repeat_num']
         
         # 如果不生成预览图，移除相关参数
         if not config.get('generate_preview'):

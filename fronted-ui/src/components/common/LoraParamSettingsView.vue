@@ -21,19 +21,21 @@
             <!-- 根据不同类型渲染不同输入控件 -->
             <template v-if="param.type === 'text'">
               <input :value="modelValue[param.name]" @input="updateValue(param.name, $event.target.value)"
-                :placeholder="param.placeholder" class="mac-input" :class="getThemeClass(param)" :disabled="disabled" />
+                :placeholder="param.placeholder" class="mac-input" :class="getThemeClass(param)" :disabled="disabled"
+                :title="modelValue[param.name]" />
             </template>
 
             <template v-else-if="param.type === 'number'">
               <input :value="modelValue[param.name]" @input="updateValue(param.name, Number($event.target.value))"
                 type="number" :placeholder="param.placeholder" :step="param.step" class="mac-input" :class="getThemeClass(param)"
-                :disabled="disabled" />
+                :disabled="disabled" :title="modelValue[param.name]" />
             </template>
 
             <template v-else-if="param.type === 'select'">
               <select :value="String(modelValue[param.name])" @change="updateValue(param.name, $event.target.value)"
                 class="mac-input" :class="getThemeClass(param)" :disabled="disabled">
-                <option v-for="option in getParamOptions(param, modelValue)" :key="option.value" :value="String(option.value)">
+                <option v-for="option in getParamOptions(param, modelValue)" :key="option.value"
+                  :value="String(option.value)">
                   {{ option.label }}
                 </option>
               </select>
@@ -42,7 +44,7 @@
             <template v-else-if="param.type === 'textarea'">
               <textarea :value="modelValue[param.name]" @input="updateValue(param.name, $event.target.value)"
                 :placeholder="param.placeholder" class="mac-textarea" :rows="param.rows || 2"
-                :disabled="disabled"></textarea>
+                :disabled="disabled" :title="modelValue[param.name]"></textarea>
             </template>
           </div>
         </template>
@@ -67,18 +69,19 @@
 
                 <template v-if="param.type === 'text'">
                   <input :value="modelValue[param.name]" @input="updateValue(param.name, $event.target.value)"
-                    :placeholder="param.placeholder" class="mac-input" :disabled="disabled" />
+                    :placeholder="param.placeholder" class="mac-input" :disabled="disabled" 
+                    :title="modelValue[param.name]" />
                 </template>
 
                 <template v-else-if="param.type === 'number'">
                   <input :value="modelValue[param.name]" @input="updateValue(param.name, Number($event.target.value))"
                     type="number" :placeholder="param.placeholder" :step="param.step" class="mac-input"
-                    :disabled="disabled" />
+                    :disabled="disabled" :title="modelValue[param.name]" />
                 </template>
 
                 <template v-else-if="param.type === 'select'">
                   <select :value="String(modelValue[param.name])" @change="updateValue(param.name, $event.target.value)"
-                    class="mac-input" :disabled="disabled">
+                    class="mac-input" :class="getThemeClass(param)" :disabled="disabled">
                     <option v-for="option in getParamOptions(param, modelValue)" :key="option.value"
                       :value="String(option.value)">
                       {{ option.label }}
@@ -89,7 +92,7 @@
                 <template v-else-if="param.type === 'textarea'">
                   <textarea :value="modelValue[param.name]" @input="updateValue(param.name, $event.target.value)"
                     :placeholder="param.placeholder" class="mac-textarea" :rows="param.rows || 2"
-                    :disabled="disabled"></textarea>
+                    :disabled="disabled" :title="modelValue[param.name]"></textarea>
                 </template>
               </div>
             </template>
@@ -102,7 +105,7 @@
 
 <script setup>
 import { defineProps, defineEmits, computed, onMounted } from 'vue';
-import { PARAM_SECTIONS, useLoraParams } from '../../composables/useLoraParams';
+import { PARAM_SECTIONS } from '../../composables/useLoraParams';
 import TooltipText from './TooltipText.vue';
 import { getParamOptions, getParamThemeClass, updateModelValue, shouldShowParam } from '../../utils/paramUtils';
 
@@ -212,16 +215,23 @@ const getThemeClass = getParamThemeClass;
 }
 
 /* 通用样式 */
-.mac-input {
+.mac-input, .mac-textarea {
   width: 100%;
-  height: 36px;
-  padding: 0 12px;
   border-radius: 6px;
   border: 1px solid #E5E7EB;
   background: #FFFFFF;
   color: #1C1C1E;
   font-size: 14px;
   transition: all 0.2s ease;
+  /* 添加悬停提示样式 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mac-input {
+  height: 36px;
+  padding: 0 12px;
 }
 
 .mac-input:focus {
@@ -233,6 +243,12 @@ const getThemeClass = getParamThemeClass;
 .mac-input:disabled {
   background: #F3F4F6;
   cursor: not-allowed;
+}
+
+.mac-input:hover, .mac-textarea:hover {
+  background-color: #F9FAFB;
+  z-index: 5;
+  position: relative;
 }
 
 .param-name {
@@ -259,17 +275,11 @@ label {
 }
 
 .mac-textarea {
-  width: 100%;
   min-height: 80px;
   padding: 12px;
-  border-radius: 6px;
-  border: 1px solid #E5E7EB;
-  background: #FFFFFF;
-  color: #1C1C1E;
-  font-size: 14px;
   line-height: 1.5;
   resize: vertical;
-  transition: all 0.2s ease;
+  white-space: normal; /* 文本域需要正常换行 */
 }
 
 .mac-textarea:focus {

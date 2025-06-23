@@ -30,7 +30,7 @@
           <span class="label-en">trigger_words</span>
         </label>
         <textarea v-model="config.mark_config.trigger_words" :placeholder="getPlaceholder('mark', 'trigger_words')" rows="3" class="mac-textarea"
-          :disabled="!canEdit"></textarea>
+          :disabled="!canEdit" :title="config.mark_config.trigger_words"></textarea>
       </div>
 
       <div v-if="config.use_global_mark_config" class="global-config-message">
@@ -80,7 +80,7 @@
               <span class="label-en">max_tags</span>
             </label>
             <input type="number" v-model.number="config.mark_config.max_tags" min="1" max="100" class="mac-input"
-              :placeholder="getPlaceholder('mark', 'max_tags')" :disabled="!canEdit" />
+              :placeholder="getPlaceholder('mark', 'max_tags')" :disabled="!canEdit" :title="config.mark_config.max_tags" />
           </div>
 
           <div class="form-group">
@@ -135,7 +135,7 @@
               <span class="label-en">flux_model_path</span>
             </label>
             <input v-model="config.training_config.flux_model_path" :placeholder="getPlaceholder('training', 'flux_model_path')" class="mac-input theme-flux"
-              :disabled="!canEdit" />
+              :disabled="!canEdit" :title="config.training_config.flux_model_path" />
           </div>
           
           <div class="form-group" v-if="config.training_config.model_train_type === 'sd-lora'">
@@ -144,7 +144,7 @@
               <span class="label-en">sd_model_path</span>
             </label>
             <input v-model="config.training_config.sd_model_path" :placeholder="getPlaceholder('training', 'sd_model_path')" class="mac-input theme-sd"
-              :disabled="!canEdit" />
+              :disabled="!canEdit" :title="config.training_config.sd_model_path" />
           </div>
           
           <div class="form-group" v-if="config.training_config.model_train_type === 'sdxl-lora'">
@@ -153,7 +153,7 @@
               <span class="label-en">sdxl_model_path</span>
             </label>
             <input v-model="config.training_config.sdxl_model_path" :placeholder="getPlaceholder('training', 'sdxl_model_path')" class="mac-input theme-sdxl"
-              :disabled="!canEdit" />
+              :disabled="!canEdit" :title="config.training_config.sdxl_model_path" />
           </div>
           
           <!-- Flux特有的模型路径输入框 -->
@@ -165,7 +165,7 @@
                   <span class="label-en">ae</span>
                 </label>
                 <input v-model="config.training_config.ae" :placeholder="getPlaceholder('training', 'ae')" class="mac-input theme-flux"
-                  :disabled="!canEdit" />
+                  :disabled="!canEdit" :title="config.training_config.ae" />
               </div>
               <div class="form-group">
                 <label>
@@ -173,7 +173,7 @@
                   <span class="label-en">clip_l</span>
                 </label>
                 <input v-model="config.training_config.clip_l" :placeholder="getPlaceholder('training', 'clip_l')" class="mac-input theme-flux"
-                  :disabled="!canEdit" />
+                  :disabled="!canEdit" :title="config.training_config.clip_l" />
               </div>
             </div>
             <div class="form-group">
@@ -182,7 +182,7 @@
                 <span class="label-en">t5xxl</span>
               </label>
               <input v-model="config.training_config.t5xxl" :placeholder="getPlaceholder('training', 't5xxl')" class="mac-input theme-flux"
-                :disabled="!canEdit" />
+                :disabled="!canEdit" :title="config.training_config.t5xxl" />
             </div>
           </div>
           
@@ -216,7 +216,7 @@
               </label>
               <input type="number" v-model.number="config.training_config.train_batch_size" min="1" 
                 :placeholder="getPlaceholder('training', 'train_batch_size')"
-                class="mac-input" :disabled="!canEdit" />
+                class="mac-input" :disabled="!canEdit" :title="config.training_config.train_batch_size" />
             </div>
             <div class="form-group">
               <label>
@@ -224,7 +224,7 @@
                 <span class="label-en">resolution</span>
               </label>
               <input v-model="config.training_config.resolution" :placeholder="getPlaceholder('training', 'resolution')" class="mac-input"
-                :disabled="!canEdit" />
+                :disabled="!canEdit" :title="config.training_config.resolution" />
             </div>
           </div>
 
@@ -236,7 +236,7 @@
               </label>
               <input type="number" v-model.number="config.training_config.network_dim" min="1" 
                 :placeholder="getPlaceholder('training', 'network_dim')"
-                class="mac-input" :disabled="!canEdit" />
+                class="mac-input" :disabled="!canEdit" :title="config.training_config.network_dim" />
             </div>
             <div class="form-group">
               <label>
@@ -245,7 +245,7 @@
               </label>
               <input type="number" v-model.number="config.training_config.network_alpha" min="1" 
                 :placeholder="getPlaceholder('training', 'network_alpha')"
-                class="mac-input" :disabled="!canEdit" />
+                class="mac-input" :disabled="!canEdit" :title="config.training_config.network_alpha" />
             </div>
           </div>
 
@@ -256,7 +256,8 @@
                 <span class="label-en">learning_rate</span>
               </label>
               <input type="number" v-model.number="config.training_config.learning_rate" step="0.0001" min="0"
-                :placeholder="getPlaceholder('training', 'learning_rate')" class="mac-input" :disabled="!canEdit" />
+                :placeholder="getPlaceholder('training', 'learning_rate')" class="mac-input" :disabled="!canEdit" 
+                :title="config.training_config.learning_rate" />
             </div>
           </div>
           <div class="form-row">
@@ -266,7 +267,8 @@
                 <span class="label-en">unet_lr</span>
               </label>
               <input type="number" v-model.number="config.training_config.unet_lr" step="0.0001" min="0"
-                :placeholder="getPlaceholder('training', 'unet_lr')" class="mac-input" :disabled="!canEdit" />
+                :placeholder="getPlaceholder('training', 'unet_lr')" class="mac-input" :disabled="!canEdit" 
+                :title="config.training_config.unet_lr" />
             </div>
             <div class="form-group">
               <label>
@@ -274,7 +276,8 @@
                 <span class="label-en">text_encoder_lr</span>
               </label>
               <input type="number" v-model.number="config.training_config.text_encoder_lr" step="0.00001" min="0"
-                :placeholder="getPlaceholder('training', 'text_encoder_lr')" class="mac-input" :disabled="!canEdit" />
+                :placeholder="getPlaceholder('training', 'text_encoder_lr')" class="mac-input" :disabled="!canEdit" 
+                :title="config.training_config.text_encoder_lr" />
             </div>
           </div>
 
@@ -314,7 +317,7 @@
               </label>
               <input type="number" v-model.number="config.training_config.lr_warmup_steps" min="0" 
                 :placeholder="getPlaceholder('training', 'lr_warmup_steps')"
-                class="mac-input" :disabled="!canEdit" />
+                class="mac-input" :disabled="!canEdit" :title="config.training_config.lr_warmup_steps" />
             </div>
             <div class="form-group">
               <label>
@@ -322,7 +325,8 @@
                 <span class="label-en">lr_scheduler_num_cycles</span>
               </label>
               <input type="number" v-model.number="config.training_config.lr_scheduler_num_cycles" min="1"
-                :placeholder="getPlaceholder('training', 'lr_scheduler_num_cycles')" class="mac-input" :disabled="!canEdit" />
+                :placeholder="getPlaceholder('training', 'lr_scheduler_num_cycles')" class="mac-input" :disabled="!canEdit" 
+                :title="config.training_config.lr_scheduler_num_cycles" />
             </div>
           </div>
 
@@ -334,7 +338,7 @@
               </label>
               <input type="number" v-model.number="config.training_config.save_every_n_epochs" min="1" 
                 :placeholder="getPlaceholder('training', 'save_every_n_epochs')"
-                class="mac-input" :disabled="!canEdit" />
+                class="mac-input" :disabled="!canEdit" :title="config.training_config.save_every_n_epochs" />
             </div>
             <div class="form-group">
               <label>
@@ -343,7 +347,7 @@
               </label>
               <input type="number" v-model.number="config.training_config.sample_every_n_epochs" min="1" 
                 :placeholder="getPlaceholder('training', 'sample_every_n_epochs')"
-                class="mac-input" :disabled="!canEdit" />
+                class="mac-input" :disabled="!canEdit" :title="config.training_config.sample_every_n_epochs" />
             </div>
           </div>
 
@@ -355,7 +359,7 @@
               </label>
               <input type="number" v-model.number="config.training_config.clip_skip" min="1" max="12" 
                 :placeholder="getPlaceholder('training', 'clip_skip')"
-                class="mac-input" :disabled="!canEdit" />
+                class="mac-input" :disabled="!canEdit" :title="config.training_config.clip_skip" />
             </div>
             <div class="form-group">
               <label>
@@ -364,7 +368,7 @@
               </label>
               <input type="number" v-model.number="config.training_config.seed" 
                 :placeholder="getPlaceholder('training', 'seed')" class="mac-input"
-                :disabled="!canEdit" />
+                :disabled="!canEdit" :title="config.training_config.seed" />
             </div>
           </div>
 
@@ -421,7 +425,7 @@
                 </label>
                 <input type="number" v-model.number="config.training_config.max_image_tags" min="0" 
                   :placeholder="getPlaceholder('training', 'max_image_tags')"
-                  class="mac-input" :disabled="!canEdit" />
+                  class="mac-input" :disabled="!canEdit" :title="config.training_config.max_image_tags" />
               </div>
             </div>
 
@@ -432,7 +436,7 @@
               </label>
               <textarea v-model="config.training_config.positive_prompts" 
                 :placeholder="getPlaceholder('training', 'positive_prompts')" rows="2"
-                class="mac-textarea" :disabled="!canEdit"></textarea>
+                class="mac-textarea" :disabled="!canEdit" :title="config.training_config.positive_prompts"></textarea>
             </div>
 
             <div class="form-group full-width">
@@ -442,7 +446,7 @@
               </label>
               <textarea v-model="config.training_config.negative_prompts" 
                 :placeholder="getPlaceholder('training', 'negative_prompts')" rows="2"
-                class="mac-textarea" :disabled="!canEdit"></textarea>
+                class="mac-textarea" :disabled="!canEdit" :title="config.training_config.negative_prompts"></textarea>
             </div>
             <div class="form-group">
               <label>
@@ -465,7 +469,8 @@
                   <span class="label-en">sample_width</span>
                 </label>
                 <input type="number" v-model.number="config.training_config.sample_width" min="64" step="8"
-                  :placeholder="getPlaceholder('training', 'sample_width')" class="mac-input" :disabled="!canEdit" />
+                  :placeholder="getPlaceholder('training', 'sample_width')" class="mac-input" :disabled="!canEdit" 
+                  :title="config.training_config.sample_width" />
               </div>
               <div class="form-group">
                 <label>
@@ -473,7 +478,8 @@
                   <span class="label-en">sample_height</span>
                 </label>
                 <input type="number" v-model.number="config.training_config.sample_height" min="64" step="8"
-                  :placeholder="getPlaceholder('training', 'sample_height')" class="mac-input" :disabled="!canEdit" />
+                  :placeholder="getPlaceholder('training', 'sample_height')" class="mac-input" :disabled="!canEdit" 
+                  :title="config.training_config.sample_height" />
               </div>
             </div>
 
@@ -484,7 +490,8 @@
                   <span class="label-en">sample_cfg</span>
                 </label>
                 <input type="number" v-model.number="config.training_config.sample_cfg" min="1" step="0.5"
-                  :placeholder="getPlaceholder('training', 'sample_cfg')" class="mac-input" :disabled="!canEdit" />
+                  :placeholder="getPlaceholder('training', 'sample_cfg')" class="mac-input" :disabled="!canEdit" 
+                  :title="config.training_config.sample_cfg" />
               </div>
               <div class="form-group">
                 <label>
@@ -493,7 +500,7 @@
                 </label>
                 <input type="number" v-model.number="config.training_config.sample_steps" min="1" 
                   :placeholder="getPlaceholder('training', 'sample_steps')"
-                  class="mac-input" :disabled="!canEdit" />
+                  class="mac-input" :disabled="!canEdit" :title="config.training_config.sample_steps" />
               </div>
             </div>
           </div>
@@ -966,6 +973,9 @@ onMounted(() => {
   line-height: 1.5;
   resize: vertical;
   transition: all 0.2s ease;
+  white-space: normal;
+  overflow: auto;
+  text-overflow: clip;
 }
 
 .mac-textarea:focus {
@@ -1093,5 +1103,20 @@ onMounted(() => {
 .theme-sdxl:focus {
   border-color: #FF9F0A;
   box-shadow: 0 0 0 2px rgba(255, 159, 10, 0.2);
+}
+
+/* 添加CSS样式 */
+.mac-input, .mac-textarea {
+  /* 现有样式... */
+  /* 添加溢出处理样式 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mac-input:hover, .mac-textarea:hover {
+  background-color: #F9FAFB;
+  z-index: 5;
+  position: relative;
 }
 </style>

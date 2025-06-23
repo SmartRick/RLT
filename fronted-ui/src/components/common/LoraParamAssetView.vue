@@ -35,6 +35,7 @@
                 class="mac-input" 
                 :class="getThemeClass(param)"
                 :disabled="disabled" 
+                :title="modelValue[param.name]"
               />
             </template>
             
@@ -48,6 +49,7 @@
                 class="mac-input"
                 :class="getThemeClass(param)"
                 :disabled="disabled" 
+                :title="modelValue[param.name]"
               />
             </template>
             
@@ -89,6 +91,7 @@
               :class="getThemeClass(param)"
               :rows="param.rows || 2"
               :disabled="disabled"
+              :title="modelValue[param.name]"
             ></textarea>
           </div>
 
@@ -111,6 +114,7 @@
                 class="mac-input" 
                 :class="getThemeClass(param)"
                 :disabled="disabled" 
+                :title="modelValue[param.name]"
               />
             </template>
             
@@ -124,6 +128,7 @@
                 class="mac-input"
                 :class="getThemeClass(param)"
                 :disabled="disabled" 
+                :title="modelValue[param.name]"
               />
             </template>
             
@@ -174,6 +179,7 @@
                     class="mac-input" 
                     :class="getThemeClass(param)"
                     :disabled="disabled" 
+                    :title="modelValue[param.name]"
                   />
                 </template>
                 
@@ -187,6 +193,7 @@
                     class="mac-input"
                     :class="getThemeClass(param)"
                     :disabled="disabled" 
+                    :title="modelValue[param.name]"
                   />
                 </template>
                 
@@ -235,6 +242,7 @@
                   :class="getThemeClass(param)"
                   :rows="param.rows || 2"
                   :disabled="disabled"
+                  :title="modelValue[param.name]"
                 ></textarea>
               </div>
 
@@ -256,6 +264,7 @@
                     class="mac-input" 
                     :class="getThemeClass(param)"
                     :disabled="disabled" 
+                    :title="modelValue[param.name]"
                   />
                 </template>
                 
@@ -269,6 +278,7 @@
                     class="mac-input"
                     :class="getThemeClass(param)"
                     :disabled="disabled" 
+                    :title="modelValue[param.name]"
                   />
                 </template>
                 
@@ -300,7 +310,7 @@
 
 <script setup>
 import { defineProps, defineEmits, computed, onMounted } from 'vue';
-import { PARAM_SECTIONS, useLoraParams } from '../../composables/useLoraParams';
+import { PARAM_SECTIONS } from '../../composables/useLoraParams';
 import TooltipText from './TooltipText.vue';
 import { getParamOptions, getParamThemeClass, updateModelValue, shouldShowParam } from '../../utils/paramUtils';
 
@@ -440,16 +450,23 @@ onMounted(() => {
 }
 
 /* 通用样式 */
-.mac-input {
+.mac-input, .mac-textarea {
   width: 100%;
-  height: 36px;
-  padding: 0 12px;
   border-radius: 6px;
   border: 1px solid #E5E7EB;
   background: #FFFFFF;
   color: #1C1C1E;
   font-size: 14px;
   transition: all 0.2s ease;
+  /* 添加悬停提示样式 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mac-input {
+  height: 36px;
+  padding: 0 12px;
 }
 
 .mac-input:focus {
@@ -461,6 +478,12 @@ onMounted(() => {
 .mac-input:disabled {
   background: #F3F4F6;
   cursor: not-allowed;
+}
+
+.mac-input:hover, .mac-textarea:hover {
+  background-color: #F9FAFB;
+  z-index: 5;
+  position: relative;
 }
 
 /* 不同模型类型的主题样式 */
@@ -539,17 +562,11 @@ label {
 }
 
 .mac-textarea {
-  width: 100%;
   min-height: 80px;
   padding: 12px;
-  border-radius: 6px;
-  border: 1px solid #E5E7EB;
-  background: #FFFFFF;
-  color: #1C1C1E;
-  font-size: 14px;
   line-height: 1.5;
   resize: vertical;
-  transition: all 0.2s ease;
+  white-space: normal; /* 文本域需要正常换行 */
 }
 
 .mac-textarea:focus {

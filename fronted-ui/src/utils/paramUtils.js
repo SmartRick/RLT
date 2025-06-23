@@ -164,4 +164,17 @@ export const shouldShowParam = (param, allParams) => {
 const checkSingleCondition = (condition, allParams) => {
   const [dependName, dependValue] = condition.split('=');
   return String(allParams[dependName]) === dependValue;
+};
+
+/**
+ * 获取选择框选中值对应的标签文本
+ * @param {Object} param - 参数定义
+ * @param {any} value - 当前选中值
+ * @param {Object} modelValue - 当前模型值
+ * @returns {string} - 对应的标签文本
+ */
+export const getSelectedLabel = (param, value, modelValue) => {
+  const options = getParamOptions(param, modelValue);
+  const option = options.find(opt => String(opt.value) === String(value));
+  return option ? option.label : String(value);
 }; 

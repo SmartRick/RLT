@@ -43,6 +43,17 @@ export const PARAM_SECTIONS = [
         theme: 'sd'
       },
       {
+        name: 'sd_vae',
+        label: 'SD VAE模型路径',
+        type: 'text',
+        placeholder: './sd-models/vae.safetensors',
+        default: '',
+        full: true,
+        depends: 'model_train_type=sd-lora',
+        theme: 'sd',
+        tooltip: 'SD模型的VAE路径，用于改善生成图像的质量和细节'
+      },
+      {
         name: 'sdxl_model_path',
         label: 'SDXL模型路径',
         type: 'text',
@@ -53,14 +64,15 @@ export const PARAM_SECTIONS = [
         theme: 'sdxl'
       },
       {
-        name: 'vae',
-        label: 'vae模型路径',
+        name: 'sdxl_vae',
+        label: 'SDXL VAE模型路径',
         type: 'text',
-        placeholder: './sd-models/vae.safetensors',
+        placeholder: './sd-models/sdxl_vae.safetensors',
         default: '',
         full: true,
-        depends: 'model_train_type=sd-lora || model_train_type=sdxl-lora',
-        tooltip: 'VAE模型路径，用于改善生成图像的质量和细节'
+        depends: 'model_train_type=sdxl-lora',
+        theme: 'sdxl',
+        tooltip: 'SDXL模型的VAE路径，用于改善生成图像的质量和细节'
       },
       {
         name: 'v2',
@@ -660,7 +672,7 @@ export const PARAM_SECTIONS = [
         ],
         default: 'bf16',
         half: true,
-        tooltip: '使用混合精度训练可以提高性能和减少显存占用，bf16更稳定但需要30系以上显卡(fp16情况下需要指定fp16的vae，否则会报错)'
+        tooltip: '使用混合精度训练可以提高性能和减少显存占用，bf16更稳定但需要30系以上显卡(选择fp16时需指定对应的fp16格式VAE)'
       },
       {
         name: 'save_precision',
