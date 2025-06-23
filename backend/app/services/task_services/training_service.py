@@ -415,6 +415,11 @@ class TrainingService:
             sd_params = ['v2']
             business_params.extend(sd_params)
         
+        #如果梯度检查点关闭，移除相关参数
+        if not config.get('gradient_checkpointing'):
+            gradient_params = ['gradient_checkpointing','gradient_accumulation_steps']
+            business_params.extend(gradient_params)
+        
         # 移除所有业务参数
         for param in business_params:
             if param in config:
