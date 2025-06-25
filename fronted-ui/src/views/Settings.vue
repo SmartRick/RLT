@@ -1,344 +1,345 @@
 <template>
-  <div class="settings-container">
-    <div class="settings-header">
-      <h2 class="settings-title">系统设置</h2>
-      <div class="settings-actions">
-        <button 
-          type="button" 
-          class="mac-btn primary"
-          :disabled="isSubmitting"
-          @click="handleSubmit"
-        >
-          {{ isSubmitting ? '保存中...' : '保存设置' }}
-        </button>
-      </div>
-    </div>
-
-    <div class="settings-tabs">
-      <button 
-        v-for="tab in tabs" 
-        :key="tab.key"
-        class="tab-button" 
-        :class="{ active: activeTab === tab.key }"
-        @click="router.push(`/settings/${tab.key}`)"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
-        
-    <!-- 系统配置 -->
-    <div v-if="activeTab === 'system'" class="mac-card settings-card">
-      <h3 class="section-title">系统配置</h3>
-      
-      <div class="form-row">
-        <div class="form-group">
-          <label>
-            <div class="label-text">标记轮询间隔(分钟)</div>
-          </label>
-          <input 
-            v-model.number="form.mark_poll_interval"
-            type="number"
-            class="mac-input"
-            min="1"
-            max="60"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label>
-            <div class="label-text">调度间隔(分钟)</div>
-          </label>
-          <input 
-            v-model.number="form.scheduling_minute"
-            type="number"
-            class="mac-input"
-            min="1"
-            max="60"
-          >
-        </div>
-      </div>
-      
-      <div class="form-group">
-        <label>
-          <div class="label-text">标记文件目录</div>
-        </label>
-        <input 
-          v-model="form.mark_pan_dir"
-          class="mac-input"
-          placeholder="请输入标记文件目录路径"
-        >
-      </div>
-      
-      <div class="form-group">
-        <label>
-          <div class="label-text">Lora上传目录</div>
-        </label>
-        <input 
-          v-model="form.lora_pan_upload_dir"
-          class="mac-input"
-          placeholder="请输入Lora上传目录路径"
-        >
-      </div>
-      
-      <div class="form-group">
-        <label>
-          <div class="label-text">标记工作流文件</div>
-        </label>
-        <div class="workflow-file-container">
-          <div v-if="form.mark_workflow_api" class="workflow-file-info">
-            <div class="workflow-file-path">{{ form.mark_workflow_api }}</div>
-            <div class="workflow-file-actions">
-              <button 
-                v-if="uploadedWorkflowFile"
-                type="button" 
-                class="workflow-action-btn"
-                @click="downloadWorkflowFile"
-                title="下载文件"
-              >
-                <ArrowDownTrayIcon class="action-icon" />
-              </button>
-              <button 
-                type="button" 
-                class="workflow-action-btn delete"
-                @click="clearWorkflowFile"
-                title="移除文件"
-              >
-                <XMarkIcon class="action-icon" />
-              </button>
-            </div>
-          </div>
-          <FileUploader
-            v-else
-            ref="workflowUploaderRef"
-            accept=".json"
-            :auto-upload="true"
-            description="标记工作流配置文件"
-            @upload-success="handleWorkflowUploadSuccess"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- 标记配置 -->
-    <div v-if="activeTab === 'mark'" class="mac-card settings-card">
-      <h3 class="section-title">标记配置</h3>
-      
-      <div class="form-row">
-        <div class="form-group toggle-group">
-          <div class="toggle-label">自动裁剪</div>
-          <SwitchButton v-model="form.mark_config.auto_crop" />
-        </div>
-      </div>
-      
-      <div class="form-row">
-        <div class="form-group">
-          <label>
-            <div class="label-text">最小置信度</div>
-          </label>
-          <input 
-            v-model.number="form.mark_config.min_confidence"
-            type="number"
-            class="mac-input"
-            min="0"
-            max="1"
-            step="0.1"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label>
-            <div class="label-text">最大标签数</div>
-          </label>
-          <input 
-            v-model.number="form.mark_config.max_tags"
-            type="number"
-            class="mac-input"
-            min="1"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label>
-            <div class="label-text">默认裁剪比例</div>
-          </label>
-          <select v-model="form.mark_config.crop_ratio" class="mac-input">
-            <option v-for="ratio in form.mark_config.available_crop_ratios" :key="ratio" :value="ratio">
-              {{ ratio }}
-            </option>
-          </select>
-        </div>
-      </div>
-      
-      <div class="form-group">
-        <label>
-          <div class="label-text">打标算法</div>
-        </label>
-        <select v-model="form.mark_config.mark_algorithm" class="mac-input">
-          <option v-for="algorithm in form.mark_config.available_algorithms" :key="algorithm" :value="algorithm">
-            {{ algorithm }}
-          </option>
-        </select>
-      </div>
-    </div>
-
-    <!-- AI引擎配置 -->
-    <div v-if="activeTab === 'ai'" class="mac-card settings-card">
-      <h3 class="section-title">AI引擎配置</h3>
-      
-      <div class="form-row">
-        <div class="form-group">
-          <label>
-            <div class="label-text">超时时间(秒)</div>
-          </label>
-          <input 
-            v-model.number="form.ai_engine_config.timeout"
-            type="number"
-            class="mac-input"
-            min="1"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label>
-            <div class="label-text">最大重试次数</div>
-          </label>
-          <input 
-            v-model.number="form.ai_engine_config.max_retries"
-            type="number"
-            class="mac-input"
-            min="0"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label>
-            <div class="label-text">重试间隔(秒)</div>
-          </label>
-          <input 
-            v-model.number="form.ai_engine_config.retry_interval"
-            type="number"
-            class="mac-input"
-            min="1"
-          >
-        </div>
-      </div>
-      
-      <h4 class="subsection-title">请求头配置</h4>
-      <KeyValueConfig
-        v-model="form.ai_engine_headers"
-        keyPlaceholder="Header名称"
-        valuePlaceholder="Header值"
-        addButtonText="添加"
-      />
-    </div>
-
-    <!-- 百度翻译配置 -->
-    <div v-if="activeTab === 'translate'" class="mac-card settings-card">
-      <h3 class="section-title">翻译配置</h3>
-      
-      <div class="form-row">
-        <div class="form-group toggle-group">
-          <div class="toggle-label">启用翻译功能</div>
-          <SwitchButton v-model="form.baidu_translate_config.enabled" />
-        </div>
-      </div>
-      
-      <div class="form-row">
-        <div class="form-group">
-          <label>
-            <div class="label-text">百度翻译APP ID</div>
-          </label>
-          <input 
-            v-model="form.baidu_translate_config.app_id"
-            type="text"
-            class="mac-input"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label>
-            <div class="label-text">百度翻译密钥</div>
-          </label>
-          <input 
-            v-model="form.baidu_translate_config.secret_key"
-            type="text"
-            class="mac-input"
-          >
-        </div>
-      </div>
-      
-      <div class="form-row">
-        <div class="form-group">
-          <label>
-            <div class="label-text">默认源语言</div>
-          </label>
-          <select v-model="form.baidu_translate_config.default_from" class="mac-input">
-            <option v-for="option in languageOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </div>
-        
-        <div class="form-group">
-          <label>
-            <div class="label-text">默认目标语言</div>
-          </label>
-          <select v-model="form.baidu_translate_config.default_to" class="mac-input">
-            <option v-for="option in languageOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </div>
-      </div>
-      
-      <!-- 翻译测试 -->
-      <h4 class="subsection-title">翻译测试</h4>
-      <div class="translate-test-container">
-        <div class="translate-input-area">
-          <textarea 
-            v-model="testTranslateText" 
-            class="mac-textarea" 
-            placeholder="请输入要翻译的文本"
-            rows="4"
-          ></textarea>
-        </div>
-        
-        <div class="translate-actions">
+  <div class="page-container">
+    <!-- 固定顶部 -->
+    <div class="page-header">
+      <div class="header-row">
+        <h2 class="page-title">系统设置</h2>
+        <div class="settings-actions">
           <button 
             type="button" 
-            class="mac-btn" 
-            @click="testTranslate"
-            :disabled="isTranslating || !testTranslateText"
+            class="mac-btn primary"
+            :disabled="isSubmitting"
+            @click="handleSubmit"
           >
-            {{ isTranslating ? '翻译中...' : '测试翻译' }}
+            {{ isSubmitting ? '保存中...' : '保存设置' }}
           </button>
         </div>
+      </div>
+      
+      <PageTabs
+        v-model:activeTab="activeTab"
+        :tabs="tabs"
+        tabStyle="default"
+      />
+    </div>
         
-        <div class="translate-result-area" v-if="testTranslateResult">
-          <div class="translate-result-title">翻译结果：</div>
-          <div class="translate-result-content">{{ testTranslateResult }}</div>
+    <!-- 可滚动内容区域 -->
+    <div class="page-content">
+      <!-- 系统配置 -->
+      <div v-if="activeTab === 'system'" class="mac-card settings-card">
+        <h3 class="section-title">系统配置</h3>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>
+              <div class="label-text">标记轮询间隔(分钟)</div>
+            </label>
+            <input 
+              v-model.number="form.mark_poll_interval"
+              type="number"
+              class="mac-input"
+              min="1"
+              max="60"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <div class="label-text">调度间隔(分钟)</div>
+            </label>
+            <input 
+              v-model.number="form.scheduling_minute"
+              type="number"
+              class="mac-input"
+              min="1"
+              max="60"
+            >
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <div class="label-text">标记文件目录</div>
+          </label>
+          <input 
+            v-model="form.mark_pan_dir"
+            class="mac-input"
+            placeholder="请输入标记文件目录路径"
+          >
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <div class="label-text">Lora上传目录</div>
+          </label>
+          <input 
+            v-model="form.lora_pan_upload_dir"
+            class="mac-input"
+            placeholder="请输入Lora上传目录路径"
+          >
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <div class="label-text">标记工作流文件</div>
+          </label>
+          <div class="workflow-file-container">
+            <div v-if="form.mark_workflow_api" class="workflow-file-info">
+              <div class="workflow-file-path">{{ form.mark_workflow_api }}</div>
+              <div class="workflow-file-actions">
+                <button 
+                  v-if="uploadedWorkflowFile"
+                  type="button" 
+                  class="workflow-action-btn"
+                  @click="downloadWorkflowFile"
+                  title="下载文件"
+                >
+                  <ArrowDownTrayIcon class="action-icon" />
+                </button>
+                <button 
+                  type="button" 
+                  class="workflow-action-btn delete"
+                  @click="clearWorkflowFile"
+                  title="移除文件"
+                >
+                  <XMarkIcon class="action-icon" />
+                </button>
+              </div>
+            </div>
+            <FileUploader
+              v-else
+              ref="workflowUploaderRef"
+              accept=".json"
+              :auto-upload="true"
+              description="标记工作流配置文件"
+              @upload-success="handleWorkflowUploadSuccess"
+            />
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Lora训练配置 -->
-    <div v-if="activeTab === 'lora'" class="mac-card settings-card">
-      <h3 class="section-title">Lora训练配置</h3>
-      
-      <LoraTrainingParams
-        v-model="form.lora_training_config"
-        :disabled="false"
-        layout="settings"
-        :showAllParams="true"
-      />
-      
-      <h4 class="subsection-title">请求头配置</h4>
-      <KeyValueConfig
-        v-model="form.lora_training_headers"
-        keyPlaceholder="Header名称"
-        valuePlaceholder="Header值"
-        addButtonText="添加"
-      />
+      <!-- 标记配置 -->
+      <div v-if="activeTab === 'mark'" class="mac-card settings-card">
+        <h3 class="section-title">标记配置</h3>
+        
+        <div class="form-row">
+          <div class="form-group toggle-group">
+            <div class="toggle-label">自动裁剪</div>
+            <SwitchButton v-model="form.mark_config.auto_crop" />
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>
+              <div class="label-text">最小置信度</div>
+            </label>
+            <input 
+              v-model.number="form.mark_config.min_confidence"
+              type="number"
+              class="mac-input"
+              min="0"
+              max="1"
+              step="0.1"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <div class="label-text">最大标签数</div>
+            </label>
+            <input 
+              v-model.number="form.mark_config.max_tags"
+              type="number"
+              class="mac-input"
+              min="1"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <div class="label-text">默认裁剪比例</div>
+            </label>
+            <select v-model="form.mark_config.crop_ratio" class="mac-input">
+              <option v-for="ratio in form.mark_config.available_crop_ratios" :key="ratio" :value="ratio">
+                {{ ratio }}
+              </option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <div class="label-text">打标算法</div>
+          </label>
+          <select v-model="form.mark_config.mark_algorithm" class="mac-input">
+            <option v-for="algorithm in form.mark_config.available_algorithms" :key="algorithm" :value="algorithm">
+              {{ algorithm }}
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <!-- AI引擎配置 -->
+      <div v-if="activeTab === 'ai'" class="mac-card settings-card">
+        <h3 class="section-title">AI引擎配置</h3>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>
+              <div class="label-text">超时时间(秒)</div>
+            </label>
+            <input 
+              v-model.number="form.ai_engine_config.timeout"
+              type="number"
+              class="mac-input"
+              min="1"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <div class="label-text">最大重试次数</div>
+            </label>
+            <input 
+              v-model.number="form.ai_engine_config.max_retries"
+              type="number"
+              class="mac-input"
+              min="0"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <div class="label-text">重试间隔(秒)</div>
+            </label>
+            <input 
+              v-model.number="form.ai_engine_config.retry_interval"
+              type="number"
+              class="mac-input"
+              min="1"
+            >
+          </div>
+        </div>
+        
+        <h4 class="subsection-title">请求头配置</h4>
+        <KeyValueConfig
+          v-model="form.ai_engine_headers"
+          keyPlaceholder="Header名称"
+          valuePlaceholder="Header值"
+          addButtonText="添加"
+        />
+      </div>
+
+      <!-- 百度翻译配置 -->
+      <div v-if="activeTab === 'translate'" class="mac-card settings-card">
+        <h3 class="section-title">翻译配置</h3>
+        
+        <div class="form-row">
+          <div class="form-group toggle-group">
+            <div class="toggle-label">启用翻译功能</div>
+            <SwitchButton v-model="form.baidu_translate_config.enabled" />
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>
+              <div class="label-text">百度翻译APP ID</div>
+            </label>
+            <input 
+              v-model="form.baidu_translate_config.app_id"
+              type="text"
+              class="mac-input"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <div class="label-text">百度翻译密钥</div>
+            </label>
+            <input 
+              v-model="form.baidu_translate_config.secret_key"
+              type="text"
+              class="mac-input"
+            >
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>
+              <div class="label-text">默认源语言</div>
+            </label>
+            <select v-model="form.baidu_translate_config.default_from" class="mac-input">
+              <option v-for="option in languageOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <div class="label-text">默认目标语言</div>
+            </label>
+            <select v-model="form.baidu_translate_config.default_to" class="mac-input">
+              <option v-for="option in languageOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+        
+        <!-- 翻译测试 -->
+        <h4 class="subsection-title">翻译测试</h4>
+        <div class="translate-test-container">
+          <div class="translate-input-area">
+            <textarea 
+              v-model="testTranslateText" 
+              class="mac-textarea" 
+              placeholder="请输入要翻译的文本"
+              rows="4"
+            ></textarea>
+          </div>
+          
+          <div class="translate-actions">
+            <button 
+              type="button" 
+              class="mac-btn" 
+              @click="testTranslate"
+              :disabled="isTranslating || !testTranslateText"
+            >
+              {{ isTranslating ? '翻译中...' : '测试翻译' }}
+            </button>
+          </div>
+          
+          <div class="translate-result-area" v-if="testTranslateResult">
+            <div class="translate-result-title">翻译结果：</div>
+            <div class="translate-result-content">{{ testTranslateResult }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lora训练配置 -->
+      <div v-if="activeTab === 'lora'" class="mac-card settings-card">
+        <h3 class="section-title">Lora训练配置</h3>
+        
+        <LoraTrainingParams
+          v-model="form.lora_training_config"
+          :disabled="false"
+          layout="settings"
+          :showAllParams="true"
+          ref="loraTrainingParamsRef"
+        />
+        
+        <h4 class="subsection-title">请求头配置</h4>
+        <KeyValueConfig
+          v-model="form.lora_training_headers"
+          keyPlaceholder="Header名称"
+          valuePlaceholder="Header值"
+          addButtonText="添加"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -357,6 +358,7 @@ import FileUploader from '@/components/common/FileUploader.vue'
 import KeyValueConfig from '@/components/common/KeyValueConfig.vue'
 import LoraTrainingParams from '@/components/common/LoraTrainingParams.vue'
 import SwitchButton from '@/components/common/SwitchButton.vue'
+import PageTabs from '@/components/common/PageTabs.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { translationConfig, updateTranslationConfig } from '@/utils/translationCache'
 
@@ -406,7 +408,7 @@ const setTabFromRoute = () => {
 watch(activeTab, (newTab) => {
   // 只有在设置页面时才更新路由
   if (route.path.startsWith('/settings') && route.params.tab !== newTab) {
-    router.push(`/settings/${newTab}`)
+    router.push(`/settings/${newTab}`);
   }
 })
 
@@ -566,6 +568,9 @@ const languageOptions = [
   { value: 'pl', label: '波兰语' }
 ]
 
+// 添加对LoraTrainingParams组件的引用
+const loraTrainingParamsRef = ref(null);
+
 // 获取设置
 const fetchSettings = async () => {
   try {
@@ -616,6 +621,11 @@ const handleSubmit = async () => {
       default_from: form.value.baidu_translate_config.default_from,
       default_to: form.value.baidu_translate_config.default_to
     })
+    
+    // 重置Lora训练参数的修改状态
+    if (loraTrainingParamsRef.value) {
+      loraTrainingParamsRef.value.resetChangedState();
+    }
     
     message.success('设置已保存')
   } catch (error) {
@@ -689,50 +699,45 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.settings-container {
-  padding: 24px;
+.page-container {
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  overflow: auto;
+  width: 100%;
 }
 
-.settings-header {
+.page-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--background-primary, #ffffff);
+  padding: 20px 20px 0;
+  border-bottom: 1px solid var(--border-color, #E5E7EB);
+}
+
+.header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
-.settings-title {
-  font-size: 20px;
+.page-title {
+  font-size: 28px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
 
-.settings-tabs {
+.settings-actions {
   display: flex;
-  gap: 4px;
-  margin-bottom: 20px;
-  background: var(--background-tertiary);
-  padding: 4px;
-  border-radius: 8px;
+  gap: 8px;
 }
 
-.tab-button {
-  padding: 8px 16px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.tab-button.active {
-  background: var(--background-secondary);
-  color: var(--text-primary);
-  font-weight: 500;
+.page-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
 }
 
 .settings-card {
@@ -951,5 +956,19 @@ onMounted(() => {
 .translate-result-content {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .page-container {
+    padding: 0;
+  }
+  
+  .page-header {
+    padding: 16px 16px 0;
+  }
+  
+  .page-content {
+    padding: 16px;
+  }
 }
 </style> 

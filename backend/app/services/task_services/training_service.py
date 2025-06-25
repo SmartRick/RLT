@@ -384,19 +384,21 @@ class TrainingService:
         # 创建配置的副本，避免修改原始配置
         config = training_config.copy()
         
+        business_params = ['use_image_tags', 'max_image_tags', 'generate_preview','flux_model_path','sd_model_path','sdxl_model_path','sd_vae','sdxl_vae','remote_output_dir','repeat_num']
         # 1. 根据模型训练类型设置预训练模型路径
         model_train_type = config.get('model_train_type')
         if model_train_type == 'flux-lora':
             config['pretrained_model_name_or_path'] = config.get('flux_model_path')
+            business_params.extend(['vae','v2','xformers'])
         elif model_train_type == 'sd-lora':
             config['pretrained_model_name_or_path'] = config.get('sd_model_path')
             config['vae'] = config.get('sd_vae')
         elif model_train_type == 'sdxl-lora':
             config['pretrained_model_name_or_path'] = config.get('sdxl_model_path')
             config['vae'] = config.get('sdxl_vae')
+            business_params.extend(['v2'])
         
         # 2. 移除业务参数
-        business_params = ['use_image_tags', 'max_image_tags', 'generate_preview','flux_model_path','sd_model_path','sdxl_model_path','sd_vae','sdxl_vae','remote_output_dir','repeat_num']
         
         # 如果不生成预览图，移除相关参数
         if not config.get('generate_preview'):
@@ -415,10 +417,15 @@ class TrainingService:
             sd_params = ['v2']
             business_params.extend(sd_params)
         
+        
         #如果梯度检查点关闭，移除相关参数
         if not config.get('gradient_checkpointing'):
             gradient_params = ['gradient_checkpointing','gradient_accumulation_steps']
             business_params.extend(gradient_params)
+
+        #如果噪声偏移为0则删除该配置
+        if config.get('noise_offset')==0:
+            business_params.extend(['noise_offset'])
         
         # 移除所有业务参数
         for param in business_params:

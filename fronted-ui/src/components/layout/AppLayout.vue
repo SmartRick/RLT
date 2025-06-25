@@ -44,7 +44,8 @@ import { routes } from '@/router'
 import {
   ServerIcon,
   Cog6ToothIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  BookOpenIcon
 } from '@heroicons/vue/24/outline'
 
 const route = useRoute()
@@ -55,7 +56,8 @@ const route = useRoute()
 const iconMap = {
   Assets: ServerIcon,
   Tasks: ChartBarIcon,
-  Settings: Cog6ToothIcon
+  Settings: Cog6ToothIcon,
+  Guide: BookOpenIcon
 }
 
 /**

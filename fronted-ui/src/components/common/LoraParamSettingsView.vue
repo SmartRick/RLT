@@ -11,9 +11,31 @@
           <!-- 所有参数在设置页面都是统一布局 -->
           <div v-if="shouldShowParam(param, modelValue)" class="settings-item">
             <label>
-              <div class="label-text">
-                {{ param.label }}
-                <TooltipText v-if="param.tooltip" width="320px">{{ param.tooltip }}</TooltipText>
+              <div class="label-text" :class="{'has-changed': hasChanged(param.name)}">
+                <!-- 模型训练类型参数的特殊处理 -->
+                <template v-if="param.name === 'model_train_type'">
+                  <div class="label-content">
+                    <span>{{ param.label }}</span>
+                    <span v-if="hasChanged(param.name)" class="change-indicator"></span>
+                  </div>
+                  <TooltipText v-if="param.tooltip" width="320px">{{ param.tooltip }}</TooltipText>
+                  
+                  <!-- 为模型训练类型参数添加参数推荐开关 -->
+                  <div class="param-recommendation-toggle">
+                    <span class="toggle-label">参数推荐</span>
+                    <TooltipText width="320px">启用后，切换模型类型时会自动应用推荐的最佳参数配置</TooltipText>
+                    <SwitchButton v-model="enableParamRecommendation" />
+                  </div>
+                </template>
+                
+                <!-- 其他参数的处理 -->
+                <template v-else>
+                  <div class="label-content">
+                    <span>{{ param.label }}</span>
+                    <span v-if="hasChanged(param.name)" class="change-indicator"></span>
+                  </div>
+                  <TooltipText v-if="param.tooltip" width="320px">{{ param.tooltip }}</TooltipText>
+                </template>
               </div>
               <span class="param-name">{{ param.name }}</span>
             </label>
@@ -60,8 +82,11 @@
               <div v-if="shouldShowParam(param, modelValue)"
                 :class="['settings-item', param.type === 'textarea' ? 'settings-item-full' : '']">
                 <label>
-                  <div class="label-text">
-                    {{ param.label }}
+                  <div class="label-text" :class="{'has-changed': hasChanged(param.name)}">
+                    <div class="label-content">
+                      <span>{{ param.label }}</span>
+                      <span v-if="hasChanged(param.name)" class="change-indicator"></span>
+                    </div>
                     <TooltipText v-if="param.tooltip" width="320px">{{ param.tooltip }}</TooltipText>
                   </div>
                   <span class="param-name">{{ param.name }}</span>
@@ -104,10 +129,23 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, computed, onMounted } from 'vue';
-import { PARAM_SECTIONS } from '../../composables/useLoraParams';
+import { defineProps, defineEmits, computed, onMounted, ref, watch } from 'vue';
+import { PARAM_SECTIONS, RECOMMENDED_PARAMS } from '../../composables/useLoraParams';
 import TooltipText from './TooltipText.vue';
-import { getParamOptions, getParamThemeClass, updateModelValue, shouldShowParam } from '../../utils/paramUtils';
+import { getParamOptions, getParamThemeClass, updateModelValue, shouldShowParam, findParamDefinition } from '../../utils/paramUtils';
+import objectUtils from '../../utils/object';
+import SwitchButton from './SwitchButton.vue';
+
+// 从localStorage读取参数推荐状态，默认为true
+const getStoredRecommendationState = () => {
+  try {
+    const stored = localStorage.getItem('enableParamRecommendation');
+    // 如果存储的值是字符串 'false'，则返回false，否则返回true
+    return stored !== null ? stored !== 'false' : true;
+  } catch (e) {
+    return true;
+  }
+};
 
 const props = defineProps({
   modelValue: {
@@ -126,22 +164,124 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-// 在组件挂载时，根据当前model_train_type设置依赖默认值
-onMounted(() => {
-  if (props.modelValue.model_train_type) {
-    // 创建一个新对象，避免直接修改props
-    const updatedModel = { ...props.modelValue };
+// 存储初始值，用于比较是否有修改
+const initialValues = ref({});
+// 存储已修改的字段
+const changedFields = ref(new Set());
+// 是否启用参数推荐，从localStorage读取初始值
+const enableParamRecommendation = ref(getStoredRecommendationState());
 
-    // 发出更新事件
-    emit('update:modelValue', updatedModel);
+// 在组件挂载时，保存初始值
+onMounted(() => {
+  if (props.modelValue) {
+    initialValues.value = { ...props.modelValue };
   }
 });
 
-// 更新值的方法，使用公共工具函数
-const updateValue = (key, value) => {
-  const updatedModel = updateModelValue(key, value, props.modelValue, PARAM_SECTIONS);
+// 监听modelValue变化，当外部重置值时（例如保存后），更新初始值并清除修改状态
+watch(() => props.modelValue, (newVal) => {
+  // 只有当isSubmitting为true时才重置状态，这里我们通过检查changedFields是否为空来判断
+  // 如果changedFields不为空，说明是内部更新，不需要重置状态
+  if (changedFields.value.size === 0) {
+    initialValues.value = { ...newVal };
+  }
+}, { deep: true });
+
+// 监听模型训练类型变化，应用推荐参数
+watch(() => props.modelValue.model_train_type, (newModelType) => {
+  if (enableParamRecommendation.value && newModelType) {
+    applyRecommendedParams(newModelType);
+  }
+});
+
+// 监听参数推荐开关状态变化，保存到localStorage
+watch(enableParamRecommendation, (newValue) => {
+  localStorage.setItem('enableParamRecommendation', String(newValue));
+  
+  if (newValue && props.modelValue.model_train_type) {
+    // 如果开启了参数推荐，立即应用当前模型类型的推荐参数
+    applyRecommendedParams(props.modelValue.model_train_type);
+  }
+});
+
+// 应用推荐参数
+const applyRecommendedParams = (modelType) => {
+  const recommendedParams = RECOMMENDED_PARAMS[modelType];
+  if (!recommendedParams) return;
+  
+  // 创建更新后的模型对象
+  const updatedModel = { ...props.modelValue };
+  
+  // 应用推荐参数
+  Object.entries(recommendedParams).forEach(([key, value]) => {
+    updatedModel[key] = value;
+    
+    // 标记为已修改
+    if (!objectUtils.deepEqual(initialValues.value[key], value)) {
+      changedFields.value.add(key);
+    }
+  });
+  
+  // 发出更新事件
   emit('update:modelValue', updatedModel);
 };
+
+// 检查参数是否被修改
+const hasChanged = (paramName) => {
+  return changedFields.value.has(paramName);
+};
+
+// 更新值的方法，使用公共工具函数，并记录修改状态
+const updateValue = (key, value) => {
+  const updatedModel = updateModelValue(key, value, props.modelValue, PARAM_SECTIONS);
+  
+  // 处理特殊类型比较
+  let initialValue = initialValues.value[key];
+  let currentValue = value;
+  
+  // 处理布尔值和字符串的比较
+  if (typeof initialValue === 'boolean' || initialValue === 'true' || initialValue === 'false') {
+    // 将字符串转换为布尔值进行比较
+    const boolInitial = initialValue === true || initialValue === 'true' ? true : false;
+    const boolCurrent = currentValue === true || currentValue === 'true' ? true : false;
+    
+    if (boolInitial === boolCurrent) {
+      changedFields.value.delete(key);
+    } else {
+      changedFields.value.add(key);
+    }
+  } 
+  // 处理数字和字符串的比较
+  else if (typeof initialValue === 'number' || !isNaN(Number(initialValue))) {
+    const numInitial = typeof initialValue === 'number' ? initialValue : Number(initialValue);
+    const numCurrent = typeof currentValue === 'number' ? currentValue : Number(currentValue);
+    
+    if (numInitial === numCurrent) {
+      changedFields.value.delete(key);
+    } else {
+      changedFields.value.add(key);
+    }
+  }
+  // 其他类型使用deepEqual比较
+  else if (!objectUtils.deepEqual(initialValue, currentValue)) {
+    changedFields.value.add(key);
+  } else {
+    changedFields.value.delete(key);
+  }
+  
+  emit('update:modelValue', updatedModel);
+};
+
+// 重置修改状态，通常在保存后调用
+const resetChangedState = () => {
+  initialValues.value = { ...props.modelValue };
+  changedFields.value.clear();
+};
+
+// 暴露方法给父组件
+defineExpose({
+  resetChangedState
+});
 
 // 根据showAllParams过滤可见的分节
 const visibleSections = computed(() => {
@@ -272,6 +412,39 @@ label {
   font-size: 12px;
   color: #6B7280;
   font-weight: normal;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* 标签内容容器 */
+.label-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 修改状态标记样式 */
+.change-indicator {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #007AFF;
+}
+
+/* 参数推荐开关样式 */
+.param-recommendation-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.toggle-label {
+  font-size: 12px;
+  color: #6B7280;
 }
 
 .mac-textarea {

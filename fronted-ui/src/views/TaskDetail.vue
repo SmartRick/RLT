@@ -274,7 +274,7 @@ const estimatedTrainingSteps = computed(() => {
   const imageCount = task.value.images.length;
 
   // 如果没有配置，返回计算中
-  if (!task.value?.settings?.training_config && !localConfig.value?.training_config) {
+  if (!trainingConfigData.value && !localConfig.value?.training_config) {
     return '计算中...';
   }
 
@@ -293,7 +293,8 @@ const estimatedTrainingSteps = computed(() => {
 // 获取训练配置参数的通用函数
 const getTrainingConfigParam = (paramName, defaultValue) => {
   const useGlobalConfig = localConfig.value?.use_global_training_config === true;
-  const settingConfig = task.value?.settings?.training_config;
+  // 使用全局训练配置变量代替task.value.settings.training_config
+  const settingConfig = trainingConfigData.value;
   const trainingConfig = useGlobalConfig ?
     settingConfig :
     localConfig.value?.training_config || settingConfig;
@@ -331,6 +332,9 @@ const historyDropdownPosition = ref({
 const canViewTrainingHistory = computed(() => {
   return taskId.value && task.value;
 });
+
+// 添加全局训练配置变量
+const trainingConfigData = ref(null);
 
 // 获取任务详情
 const fetchTask = async () => {
@@ -935,12 +939,8 @@ const fetchTrainingSettings = async () => {
   try {
     const trainingConfig = await settingsApi.getTaskTrainingConfig(taskId.value);
     if (trainingConfig) {
-      // 确保task.value有效
-      if (!task.value) task.value = {};
-      // 确保有settings对象
-      if (!task.value.settings) task.value.settings = {};
-      // 保存训练配置
-      task.value.settings.training_config = trainingConfig;
+      // 直接保存到全局变量
+      trainingConfigData.value = trainingConfig;
     }
   } catch (error) {
     console.error('获取训练设置失败:', error);

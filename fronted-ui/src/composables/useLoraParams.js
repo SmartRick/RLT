@@ -1,6 +1,42 @@
 import { computed, reactive, watch } from 'vue';
 import { shouldShowParam as utilsShowParam } from '../utils/paramUtils';
 
+// 添加不同模型类型的推荐参数配置
+export const RECOMMENDED_PARAMS = {
+  'flux-lora': {
+    cache_text_encoder_outputs: true,
+    cache_text_encoder_outputs_to_disk: true,
+    network_module: 'networks.lora_flux',
+    resolution:'768,768',
+    max_bucket_reso:2048,
+    network_train_unet_only:true,
+    fp8_base: true,
+    sdpa: true
+  },
+  'sd-lora': {
+    cache_text_encoder_outputs: false,
+    cache_text_encoder_outputs_to_disk: false,
+    network_module: 'networks.lora',
+    resolution:'512,512',
+    max_bucket_reso:1024,
+    network_train_unet_only:false,
+    fp8_base: false,
+    sdpa: false,
+    xformers:true,
+  },
+  'sdxl-lora': {
+    cache_text_encoder_outputs: false,
+    cache_text_encoder_outputs_to_disk: false,
+    network_module: 'networks.lora',
+    resolution:'512,512',
+    max_bucket_reso:1024,
+    network_train_unet_only:false,
+    fp8_base: false,
+    sdpa: false,
+    xformers:true,
+  }
+};
+
 // 参数定义，可以被多个组件引用
 export const PARAM_SECTIONS = [
   {
@@ -708,6 +744,18 @@ export const PARAM_SECTIONS = [
         ],
         default: true,
         half: true
+      },
+      {
+        name: 'xformers',
+        label: 'XFormers优化',
+        type: 'select',
+        options: [
+          { value: true, label: '启用' },
+          { value: false, label: '禁用' }
+        ],
+        default: true,
+        half: true,
+        depends: 'model_train_type=sd-lora || model_train_type=sdxl-lora'
       }
     ]
   },
@@ -761,8 +809,7 @@ export const PARAM_SECTIONS = [
           { value: false, label: '禁用' }
         ],
         default: true,
-        half: true,
-        depends: 'model_train_type=flux-lora'
+        half: true
       },
       {
         name: 'cache_text_encoder_outputs_to_disk',
@@ -773,8 +820,7 @@ export const PARAM_SECTIONS = [
           { value: false, label: '禁用' }
         ],
         default: true,
-        half: true,
-        depends: 'model_train_type=flux-lora'
+        half: true
       },
       {
         name: 'persistent_data_loader_workers',

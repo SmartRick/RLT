@@ -944,10 +944,14 @@ onMounted(() => {
   padding: 0 12px;
   border-radius: 6px;
   border: 1px solid #E5E7EB;
-  background: #FFFFFF;
-  color: #1C1C1E;
   font-size: 14px;
+  color: #1C1C1E;
+  background-color: white;
   transition: all 0.2s ease;
+  /* 添加悬停提示样式 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mac-input:focus {
@@ -959,6 +963,12 @@ onMounted(() => {
 .mac-input:disabled {
   background: #F3F4F6;
   cursor: not-allowed;
+}
+
+.mac-input:hover {
+  background-color: #F9FAFB;
+  z-index: 5;
+  position: relative;
 }
 
 .mac-textarea {

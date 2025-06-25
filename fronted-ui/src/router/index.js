@@ -3,6 +3,7 @@ import Assets from '../views/Assets.vue'
 import Tasks from '../views/Tasks.vue'
 import TaskDetail from '../views/TaskDetail.vue'
 import Settings from '../views/Settings.vue'
+import Guide from '../views/Guide.vue'
 
 /**
  * @typedef {Object} RouteConfig
@@ -108,7 +109,16 @@ export const routes = [
         }
       }
     ]
-  }
+  },
+  {
+    path: '/guide',
+    name: 'Guide',
+    component: Guide,
+    meta: {
+      title: '使用指南与常见问题',
+      requiresAuth: true
+    }
+  },
 ]
 
 const router = createRouter({

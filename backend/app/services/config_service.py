@@ -501,4 +501,37 @@ class ConfigService:
                 return headers
         except Exception as e:
             logger.error(f"获取资产AI引擎请求头失败, 资产ID: {asset_id}, 错误: {str(e)}")
-            return None 
+            return None
+            
+    @staticmethod
+    def get_translate_config() -> Dict[str, Any]:
+        """
+        获取翻译配置
+        
+        Returns:
+            翻译配置字典
+        """
+        try:
+            with get_db() as db:
+                setting = db.query(Setting).filter(Setting.key == 'baidu_translate_config').first()
+                if setting and setting.type == 'json':
+                    try:
+                        return json.loads(setting.value)
+                    except json.JSONDecodeError:
+                        logger.error("解析baidu_translate_config失败，返回空字典")
+                        return {}
+                return {}
+        except Exception as e:
+            logger.error(f"获取翻译配置失败: {str(e)}")
+            return {}
+            
+    @staticmethod
+    def is_translate_enabled() -> bool:
+        """
+        检查翻译功能是否启用
+        
+        Returns:
+            翻译功能是否启用
+        """
+        translate_config = ConfigService.get_translate_config()
+        return translate_config.get('enabled', False) 

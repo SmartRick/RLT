@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from typing import List, Dict, Any
 from ...services.common_service import CommonService
+from ...services.config_service import ConfigService
 from ...utils.response import error, success, success_json, error_json, exception_handler, response_template
 
 common_bp = Blueprint('common_bp', __name__)
@@ -11,6 +12,10 @@ def translate_text():
     调用百度翻译API翻译文本
     """
     try:
+        # 检查翻译功能是否开启
+        if not ConfigService.is_translate_enabled():
+            return error(msg="翻译功能未开启")
+            
         data = request.get_json()
         if not data or 'text' not in data:
             return error(msg="缺少必要参数: text")
@@ -38,6 +43,10 @@ def batch_translate():
     批量翻译多个文本
     """
     try:
+        # 检查翻译功能是否开启
+        if not ConfigService.is_translate_enabled():
+            return error(msg="翻译功能未开启")
+            
         data = request.get_json()
         if not data or 'texts' not in data:
             return error(msg="缺少必要参数: texts")
@@ -65,6 +74,10 @@ def translate_text_get():
     调用百度翻译API翻译文本(GET方式)
     """
     try:
+        # 检查翻译功能是否开启
+        if not ConfigService.is_translate_enabled():
+            return error(msg="翻译功能未开启")
+            
         text = request.args.get('text')
         to_lang = request.args.get('to_lang')
         from_lang = request.args.get('from_lang')
