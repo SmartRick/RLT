@@ -70,7 +70,7 @@
     },
     "155": {
         "inputs": {
-            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\1_18_mark"
+            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\marked\\2_1_mark"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -168,7 +168,7 @@
     },
     "208": {
         "inputs": {
-            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\uploads\\1"
+            "string": "G:\\project\\project\\python\\lora-automatic-traning\\backend\\data\\uploads\\2"
         },
         "class_type": "Simple String",
         "_meta": {
@@ -194,7 +194,7 @@
     },
     "210": {
         "inputs": {
-            "string": "Moonlight girl"
+            "string": "Marking test"
         },
         "class_type": "Simple String",
         "_meta": {

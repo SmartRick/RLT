@@ -6,6 +6,7 @@
       v-model="localParams"
       :disabled="disabled"
       :showAllParams="showAllParams"
+      ref="assetViewRef"
     />
     
     <LoraParamSettingsView
@@ -13,6 +14,7 @@
       v-model="localParams"
       :disabled="disabled"
       :showAllParams="showAllParams"
+      ref="settingsViewRef"
     />
   </div>
 </template>
@@ -47,6 +49,10 @@ const emit = defineEmits(['update:modelValue']);
 // 创建本地响应式参数
 const localParams = ref({...props.modelValue});
 
+// 引用子组件
+const assetViewRef = ref(null);
+const settingsViewRef = ref(null);
+
 // 单向数据流：只监听props变化更新本地状态
 watch(() => props.modelValue, (newVal) => {
   // 使用JSON序列化进行深比较，避免不必要的更新
@@ -59,6 +65,18 @@ watch(() => props.modelValue, (newVal) => {
 watch(localParams, (newVal) => {
   emit('update:modelValue', toRaw(newVal));
 }, { deep: true });
+
+// 重置修改状态的方法，转发到子组件
+const resetChangedState = () => {
+  if (props.layout === 'settings' && settingsViewRef.value) {
+    settingsViewRef.value.resetChangedState();
+  }
+};
+
+// 暴露方法给父组件
+defineExpose({
+  resetChangedState
+});
 </script>
 
 <style scoped>

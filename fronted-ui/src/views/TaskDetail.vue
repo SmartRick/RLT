@@ -348,38 +348,7 @@ const fetchTask = async () => {
       // 如果任务状态是MARKED或之后，获取打标文本
       if (['MARKED', 'TRAINING', 'COMPLETED'].includes(data.status)) {
         await fetchMarkedTexts()
-
-        // 处理图片URL，将uploads替换为marked
-        if (data.images && data.images.length > 0) {
-          // 检查是否有对应的markedText路径
-          const relativePaths = Object.keys(markedTexts.value);
-
-          data.images.forEach(image => {
-            if (image.preview_url) {
-              // 将图片URL后缀统一替换为png
-              if (!image.preview_url.endsWith('.png')) {
-                const urlWithoutExtension = image.preview_url.substring(0, image.preview_url.lastIndexOf('.'));
-                image.preview_url = `${urlWithoutExtension}.png`;
-              }
-
-              // 对于已标记的图片，直接使用相对路径作为URL
-              if (['MARKED', 'TRAINING', 'COMPLETED'].includes(data.status)) {
-                const matchingPath = relativePaths.find(path => {
-                  // 从路径中提取文件名
-                  const pathFilename = path.split('/').pop();
-                  return pathFilename === image.filename;
-                });
-
-                if (matchingPath) {
-                  // 使用完整的相对路径
-                  image.preview_url = matchingPath.replace('.txt', '.png');
-                }
-              }
-            }
-          });
-        }
       }
-
       // 获取训练设置配置
       await fetchTrainingSettings()
 
@@ -555,9 +524,9 @@ const handleDeleteImage = async (imageId) => {
 }
 
 // 处理图片预览
-const handlePreview = (source, image) => {
+const handlePreview = (source, imageUrl) => {
   previewSource.value = source
-  selectedImage.value = image
+  selectedImage.value = imageUrl
   showPreview.value = true
 }
 
@@ -828,6 +797,33 @@ const updateTrainingModelImages = (images) => {
 // 获取任务图片的URL数组
 const getTaskImagesUrls = () => {
   if (!task.value?.images || task.value.images.length === 0) return []
+  
+  // 如果是已标记状态，使用markedTexts中的key作为图片路径
+  if (['MARKED', 'TRAINING', 'COMPLETED'].includes(task.value?.status) && 
+      markedTexts.value && Object.keys(markedTexts.value).length > 0) {
+    
+    return task.value.images.map(image => {
+      // 查找匹配的相对路径
+      const relativePaths = Object.keys(markedTexts.value);
+      const matchingPath = relativePaths.find(path => {
+        // 从路径中提取文件名
+        const pathFilename = path.split('/').pop();
+        return pathFilename === image.filename;
+      });
+      
+      // 如果找到匹配的路径，直接使用该路径作为图片URL
+      if (matchingPath) {
+        // 确保路径是图片格式，将所有后缀改为.png
+        const pathWithoutExt = matchingPath.substring(0, matchingPath.lastIndexOf('.'));
+        return pathWithoutExt + '.png';
+      }
+      
+      // 如果没有找到匹配的路径，返回原始URL
+      return image.preview_url;
+    });
+  }
+  
+  // 否则使用原始URL
   return task.value.images.map(image => image.preview_url)
 }
 

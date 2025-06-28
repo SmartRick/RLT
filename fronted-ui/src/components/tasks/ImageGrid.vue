@@ -68,9 +68,9 @@
             
             <!-- 图片 -->
             <img 
-              :src="image.preview_url" 
+              :src="getImageUrl(image)" 
               :alt="image.filename"
-              @click="handlePreview(image.preview_url)"
+              @click="handlePreview(getImageUrl(image))"
               @load="handleImageLoad($event, image)"
             >
           </div>
@@ -379,9 +379,9 @@ const handleDrop = (event) => {
 }
 
 // 处理预览
-const handlePreview = (image) => {
-  console.log("显示图片",image)
-  emit('preview','task', image)
+const handlePreview = (imageUrl) => {
+  console.log("显示图片", imageUrl)
+  emit('preview', 'task', imageUrl)
 }
 
 // 处理删除
@@ -449,8 +449,36 @@ const getMarkedTextContent = (filename) => {
   return matchingPath ? props.markedTexts[matchingPath] : '';
 }
 
+// 获取图片URL
+const getImageUrl = (image) => {
+  // 如果没有markedTexts或者状态不是MARKED及之后，使用原始URL
+  if (!props.markedTexts || Object.keys(props.markedTexts).length === 0 || 
+      !['MARKED', 'TRAINING', 'COMPLETED'].includes(props.status)) {
+    return image.preview_url;
+  }
+  
+  // 查找匹配的相对路径
+  const relativePaths = Object.keys(props.markedTexts);
+  const matchingPath = relativePaths.find(path => {
+    // 从路径中提取文件名
+    const pathFilename = path.split('/').pop();
+    return pathFilename === image.filename;
+  });
+  
+  // 如果找到匹配的路径，直接使用该路径作为图片URL
+  if (matchingPath) {
+    // 确保路径是图片格式，将所有后缀改为.png
+    const pathWithoutExt = matchingPath.substring(0, matchingPath.lastIndexOf('.'));
+    return pathWithoutExt + '.png';
+  }
+  
+  // 如果没有找到匹配的路径，返回原始URL
+  return image.preview_url;
+}
+
 // 开始编辑文本
 const startEditText = async (filename) => {
+  console.log("开始编辑文本",filename)
   currentEditingFilename.value = filename
   
   // 获取对应的打标文本内容
@@ -481,23 +509,9 @@ let translationDebounceTimer = null
 
 // 确认编辑
 const handleEditConfirm = () => {
-  if (!currentEditingFilename.value) return
-  
-  // 查找匹配的相对路径
-  let targetFilename = currentEditingFilename.value;
-  const relativePaths = Object.keys(props.markedTexts);
-  const matchingPath = relativePaths.find(path => {
-    const pathFilename = path.split('/').pop();
-    return pathFilename === currentEditingFilename.value;
-  });
-  
-  // 如果找到匹配的路径，使用该路径作为文件名
-  if (matchingPath) {
-    targetFilename = matchingPath;
-  }
-  
+  if (!currentEditingFilename.value) return;
   emit('update:markedText', {
-    filename: targetFilename,
+    filename: currentEditingFilename.value,
     content: editingTextContent.value
   })
   
@@ -742,6 +756,7 @@ defineExpose({
   showBatchEditModal
 })
 
+
 // 清理计时器
 onUnmounted(() => {
   if (translationDebounceTimer) {
@@ -881,7 +896,6 @@ const handleImageLoad = (event, image) => {
 // 监听图片列表变化，恢复分辨率信息
 watch(() => props.images, (newImages) => {
   if (!newImages || newImages.length === 0) return
-  
   // 遍历图片列表，从缓存中恢复分辨率信息
   newImages.forEach(image => {
     // 如果图片已有分辨率信息，则跳过

@@ -629,6 +629,7 @@ const handleSubmit = async () => {
     
     message.success('设置已保存')
   } catch (error) {
+    console.log('保存设置失败',error)
     message.error('保存设置失败')
   } finally {
     isSubmitting.value = false

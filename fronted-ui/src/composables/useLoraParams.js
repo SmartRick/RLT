@@ -271,7 +271,7 @@ export const PARAM_SECTIONS = [
         placeholder: '1',
         default: 1,
         half: true,
-        tooltip: '每次迭代处理的图片数量，提高此值可加快训练但需要更多GPU内存'
+        tooltip: '每次迭代处理的图片数量，提高此值可加快训练但需要更多GPU内存(flux推荐1)'
       },
       {
         name: 'repeat_num',
